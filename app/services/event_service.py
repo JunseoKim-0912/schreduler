@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.child_events.service import create_child_event
 from app.models.event import Event
 from app.models.important_date_range import ImportantDateRange
 from app.models.location import Location
@@ -32,8 +33,13 @@ def create_event(db: Session, data: EventCreate) -> Event:
 
     if event.is_recurring and event.recurrence_rule and event.date_range_id is not None:
         generate_event_instances(db, event)
-        db.commit()
 
+    # event 자신이 child가 아니고(parent_event_id 없음) 장소가 있으면, 이동시간
+    # TRAVEL child를 자동 생성한다 (FR-5).
+    if event.location_id is not None and event.parent_event_id is None:
+        create_child_event(db, event)
+
+    db.commit()
     return event
 
 

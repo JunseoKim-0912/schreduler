@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.db import get_db
 from app.main import app
-from app.models import Base, EventInstance, ImportantDateRange, User
+from app.models import Base, ChildEventKind, Event, EventInstance, ImportantDateRange, Location, User
 
 
 @pytest.fixture
@@ -204,3 +204,93 @@ def test_creating_non_recurring_event_generates_no_instances(
         )
 
     assert instances == []
+
+
+def test_creating_event_with_location_via_api_auto_creates_travel_child(
+    client: TestClient, engine, user_id: int
+) -> None:
+    with Session(engine) as session:
+        location = Location(user_id=user_id, name="학교", default_travel_minutes=25)
+        session.add(location)
+        session.commit()
+        location_id = location.id
+
+    response = client.post("/events", json=_payload(user_id, location_id=location_id))
+    assert response.status_code == 201
+    event_id = response.json()["id"]
+
+    with Session(engine) as session:
+        child = (
+            session.execute(select(Event).where(Event.parent_event_id == event_id))
+            .scalars()
+            .one()
+        )
+
+        assert child.child_kind == ChildEventKind.TRAVEL
+        assert child.location_id == location_id
+        assert child.end_time == datetime.fromisoformat("2026-09-17T09:00:00")
+        assert child.start_time == datetime.fromisoformat("2026-09-17T08:35:00")
+
+        # 자동 생성된 child가 not recurring이면 인스턴스는 안 생겨야 함
+        child_instances = (
+            session.execute(select(EventInstance).where(EventInstance.event_id == child.id))
+            .scalars()
+            .all()
+        )
+        assert child_instances == []
+
+
+def test_creating_recurring_event_with_location_auto_creates_child_and_its_instances(
+    client: TestClient, engine, user_id: int
+) -> None:
+    with Session(engine) as session:
+        location = Location(user_id=user_id, name="학교", default_travel_minutes=25)
+        date_range = ImportantDateRange(
+            user_id=user_id,
+            name="2026 가을학기",
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 30),
+        )
+        session.add_all([location, date_range])
+        session.commit()
+        location_id, date_range_id = location.id, date_range.id
+
+    response = client.post(
+        "/events",
+        json=_payload(
+            user_id,
+            title="월요일 수업",
+            location_id=location_id,
+            is_recurring=True,
+            recurrence_rule="FREQ=WEEKLY;BYDAY=MO",  # 매주 월요일
+            date_range_id=date_range_id,
+        ),
+    )
+    assert response.status_code == 201
+    event_id = response.json()["id"]
+
+    with Session(engine) as session:
+        parent_instance_dates = sorted(
+            session.execute(select(EventInstance.date).where(EventInstance.event_id == event_id))
+            .scalars()
+            .all()
+        )
+        assert len(parent_instance_dates) == 4  # 2026년 9월 매주 월요일: 7, 14, 21, 28
+
+        child = (
+            session.execute(select(Event).where(Event.parent_event_id == event_id))
+            .scalars()
+            .one()
+        )
+        assert child.child_kind == ChildEventKind.TRAVEL
+        assert child.is_recurring is True
+        assert child.recurrence_rule == "FREQ=WEEKLY;BYDAY=MO"
+        assert child.date_range_id == date_range_id
+
+        child_instance_dates = sorted(
+            session.execute(select(EventInstance.date).where(EventInstance.event_id == child.id))
+            .scalars()
+            .all()
+        )
+        # child(이동시간)도 부모와 정확히 같은 날짜들에 EventInstance가 생겨야 함
+        assert child_instance_dates == parent_instance_dates
