@@ -10,6 +10,7 @@ from app.models.base import Base
 from app.models.enums import CompletionMethod, EventInstanceStatus
 
 if TYPE_CHECKING:
+    from app.models.compliance_report import ComplianceReport
     from app.models.event import Event
 
 
@@ -28,3 +29,6 @@ class EventInstance(Base):
     )
 
     event: Mapped["Event"] = relationship(back_populates="instances")
+    compliance_reports: Mapped[list["ComplianceReport"]] = relationship(
+        back_populates="event_instance", cascade="all, delete-orphan"
+    )
