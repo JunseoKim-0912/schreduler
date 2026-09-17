@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.child_events.service import (
@@ -11,7 +11,7 @@ from app.child_events.service import (
     list_child_events,
     reconcile_missed_event,
 )
-from app.models import Base, ChildEventKind, Event, Importance, Location, User
+from app.models import Base, ChildEventKind, Event, EventInstance, ImportantDateRange, Importance, Location, User
 
 
 @pytest.fixture
@@ -217,3 +217,75 @@ def test_reconcile_missed_event_deletes_custom_child_even_without_travel_child(
 
     assert result is None
     assert list_child_events(session, interview.id) == []
+
+
+def test_create_child_event_propagates_recurrence_and_generates_instances(
+    session: Session,
+) -> None:
+    user, location = _make_user_and_location(session, travel_minutes=40)
+    date_range = ImportantDateRange(
+        user_id=user.id,
+        name="2026 가을학기",
+        start_date=date(2026, 9, 1),
+        end_date=date(2026, 9, 30),
+    )
+    session.add(date_range)
+    session.flush()
+
+    parent = Event(
+        user_id=user.id,
+        title="월요일 수업",
+        start_time=datetime(2026, 9, 7, 9, 0),
+        end_time=datetime(2026, 9, 7, 10, 0),
+        location_id=location.id,
+        is_recurring=True,
+        recurrence_rule="FREQ=WEEKLY;BYDAY=MO",  # 매주 월요일
+        date_range_id=date_range.id,
+    )
+    session.add(parent)
+    session.flush()
+
+    child = create_child_event(session, parent)
+
+    assert child is not None
+    assert child.is_recurring is True
+    assert child.recurrence_rule == parent.recurrence_rule
+    assert child.date_range_id == parent.date_range_id
+
+    child_instance_dates = sorted(
+        session.execute(
+            select(EventInstance.date).where(EventInstance.event_id == child.id)
+        )
+        .scalars()
+        .all()
+    )
+    # 2026년 9월의 월요일: 7, 14, 21, 28 -> 부모와 동일한 날짜에 child 인스턴스도 생겨야 함
+    assert child_instance_dates == [date(2026, 9, 7), date(2026, 9, 14), date(2026, 9, 21), date(2026, 9, 28)]
+
+
+def test_create_child_event_does_not_recur_when_parent_is_not_recurring(
+    session: Session,
+) -> None:
+    user, location = _make_user_and_location(session)
+    parent = Event(
+        user_id=user.id,
+        title="일회성 수업",
+        start_time=datetime(2026, 9, 7, 9, 0),
+        end_time=datetime(2026, 9, 7, 10, 0),
+        location_id=location.id,
+    )
+    session.add(parent)
+    session.flush()
+
+    child = create_child_event(session, parent)
+
+    assert child is not None
+    assert child.is_recurring is False
+    assert child.recurrence_rule is None
+    assert child.date_range_id is None
+    assert (
+        session.execute(select(EventInstance).where(EventInstance.event_id == child.id))
+        .scalars()
+        .first()
+        is None
+    )

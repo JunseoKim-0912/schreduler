@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import ChildEventKind, Importance
 from app.models.event import Event
+from app.services.recurrence import generate_event_instances
 
 TRAVEL_CHILD_TITLE_PREFIX = "이동"
 
@@ -50,10 +51,21 @@ def find_next_chained_event(session: Session, event: Event) -> Event | None:
 
 
 def create_child_event(session: Session, parent_event: Event) -> Event | None:
-    """parent_event 시작 전 이동시간만큼의 TRAVEL Child 이벤트를 생성한다 (FR-5)."""
+    """parent_event 시작 전 이동시간만큼의 TRAVEL Child 이벤트를 생성한다 (FR-5).
+
+    parent_event가 반복 이벤트(is_recurring + recurrence_rule + date_range_id를 모두
+    갖춤)면 child도 동일한 recurrence_rule/date_range_id로 반복시키고, 부모와 같은
+    날짜들에 맞춰 child의 EventInstance도 함께 생성한다.
+    """
     location = parent_event.location
     if location is None:
         return None
+
+    should_recur = bool(
+        parent_event.is_recurring
+        and parent_event.recurrence_rule
+        and parent_event.date_range_id is not None
+    )
 
     child = Event(
         user_id=parent_event.user_id,
@@ -64,9 +76,16 @@ def create_child_event(session: Session, parent_event: Event) -> Event | None:
         parent_event_id=parent_event.id,
         child_kind=ChildEventKind.TRAVEL,
         location_id=parent_event.location_id,
+        is_recurring=should_recur,
+        recurrence_rule=parent_event.recurrence_rule if should_recur else None,
+        date_range_id=parent_event.date_range_id if should_recur else None,
     )
     session.add(child)
     session.flush()
+
+    if should_recur:
+        generate_event_instances(session, child)
+
     return child
 
 

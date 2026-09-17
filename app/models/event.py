@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.models.base import Base
 from app.models.enums import ChildEventKind, Importance
@@ -51,3 +51,22 @@ class Event(Base):
         back_populates="event", cascade="all, delete-orphan"
     )
     location: Mapped["Location | None"] = relationship(back_populates="events")
+
+    @validates("importance")
+    def validate_importance(self, key: str, value: object) -> Importance | None:
+        """기획보고서 3절 중요도 체계(없음/1/2/3/4/5/MAX)를 벗어나면 거부한다.
+
+        API 요청은 이미 Pydantic 스키마(EventCreate/EventUpdate)가 Importance enum
+        타입으로 걸러주지만, app/child_events나 스크립트처럼 API를 거치지 않고 직접
+        Event(...)를 만드는 경로도 있어 모델 레벨에서도 한 번 더 막는다.
+        """
+        if value is None:
+            return None
+        try:
+            return Importance(value)
+        except ValueError as exc:
+            valid_values = ", ".join(str(member.value) for member in Importance)
+            raise ValueError(
+                f"invalid importance {value!r}: must be None(없음) or one of "
+                f"{valid_values} (docs/기획보고서.md 3절)"
+            ) from exc
