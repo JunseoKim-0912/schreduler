@@ -13,6 +13,9 @@ env/
 .env.*
 !.env.example
 
+# Secrets (e.g. Firebase service account keys)
+secrets/
+
 # Distribution / packaging
 build/
 dist/

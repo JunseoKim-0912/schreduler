@@ -4,5 +4,9 @@ sqlalchemy
 alembic
 python-dotenv
 python-dateutil
+apscheduler
+firebase-admin
+python-telegram-bot
 pytest
 httpx
+freezegun
