@@ -1,0 +1,43 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checkers
+.mypy_cache/
+.ruff_cache/
+
+# Databases (SQLite dev DB)
+*.db
+*.sqlite3
+
+# Alembic local artifacts
+alembic/versions/__pycache__/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
