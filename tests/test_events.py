@@ -1,12 +1,14 @@
+from datetime import date
+
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.db import get_db
 from app.main import app
-from app.models import Base, User
+from app.models import Base, EventInstance, ImportantDateRange, User
 
 
 @pytest.fixture
@@ -146,3 +148,59 @@ def test_delete_event_not_found_returns_404(client: TestClient) -> None:
     response = client.delete("/events/999")
 
     assert response.status_code == 404
+
+
+def test_creating_recurring_event_generates_instances_within_date_range(
+    client: TestClient, engine, user_id: int
+) -> None:
+    with Session(engine) as session:
+        date_range = ImportantDateRange(
+            user_id=user_id,
+            name="2026 가을학기",
+            start_date=date(2026, 9, 1),
+            end_date=date(2026, 9, 30),
+        )
+        session.add(date_range)
+        session.commit()
+        date_range_id = date_range.id
+
+    response = client.post(
+        "/events",
+        json=_payload(
+            user_id,
+            title="월요일 수업",
+            is_recurring=True,
+            recurrence_rule="FREQ=WEEKLY;BYDAY=MO",  # 매주 월요일
+            date_range_id=date_range_id,
+        ),
+    )
+    assert response.status_code == 201
+    event_id = response.json()["id"]
+
+    with Session(engine) as session:
+        instances = (
+            session.execute(select(EventInstance).where(EventInstance.event_id == event_id))
+            .scalars()
+            .all()
+        )
+
+    # 2026년 9월의 월요일: 7, 14, 21, 28 -> 4개, 전부 date_range 안에 있어야 함
+    assert len(instances) == 4
+    assert all(instance.date.weekday() == 0 for instance in instances)
+    assert all(date(2026, 9, 1) <= instance.date <= date(2026, 9, 30) for instance in instances)
+
+
+def test_creating_non_recurring_event_generates_no_instances(
+    client: TestClient, engine, user_id: int
+) -> None:
+    response = client.post("/events", json=_payload(user_id))
+    event_id = response.json()["id"]
+
+    with Session(engine) as session:
+        instances = (
+            session.execute(select(EventInstance).where(EventInstance.event_id == event_id))
+            .scalars()
+            .all()
+        )
+
+    assert instances == []

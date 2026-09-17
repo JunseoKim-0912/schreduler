@@ -8,6 +8,7 @@ from app.models.important_date_range import ImportantDateRange
 from app.models.location import Location
 from app.models.user import User
 from app.schemas.event import EventCreate, EventUpdate
+from app.services.recurrence import generate_event_instances
 
 
 def _ensure_references_exist(db: Session, data: EventCreate | EventUpdate) -> None:
@@ -28,6 +29,11 @@ def create_event(db: Session, data: EventCreate) -> Event:
     db.add(event)
     db.commit()
     db.refresh(event)
+
+    if event.is_recurring and event.recurrence_rule and event.date_range_id is not None:
+        generate_event_instances(db, event)
+        db.commit()
+
     return event
 
 
