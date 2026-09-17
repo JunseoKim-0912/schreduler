@@ -282,7 +282,7 @@ def fill_event_slots(
     return _parse_response(raw_content)
 
 
-_NON_COMPLIANCE_CATEGORY_LABELS: dict[NonComplianceCategory, str] = {
+NON_COMPLIANCE_CATEGORY_LABELS: dict[NonComplianceCategory, str] = {
     NonComplianceCategory.OVERSLEPT: "늦잠/기상 실패",
     NonComplianceCategory.FATIGUE: "피로/무기력",
     NonComplianceCategory.PRIORITY_SHIFT: "우선순위 변경",
@@ -305,7 +305,7 @@ def generate_compliance_feedback(
     부른다 (버튼 클릭만으로 끝난 경우는 LLM을 아예 호출하지 않는 것이 FR-6의
     "LLM 우회 UI 숏컷"이다).
     """
-    label = _NON_COMPLIANCE_CATEGORY_LABELS[category]
+    label = NON_COMPLIANCE_CATEGORY_LABELS[category]
     user_message = f"미준수 사유 카테고리: {label}"
     if reason_text:
         user_message += f"\n사용자가 직접 적은 이유: {reason_text}"
@@ -322,6 +322,41 @@ def generate_compliance_feedback(
                 ),
             },
             {"role": "user", "content": user_message},
+        ],
+    }
+    content = _call_chat_completion(payload, http_client)
+    return content.strip()
+
+
+def generate_daily_checkin_reply(
+    summary: str,
+    utterance: str,
+    *,
+    http_client: httpx.Client | None = None,
+) -> str:
+    """FR-8 저녁 9시 체크인 대화 한 턴을 생성한다.
+
+    summary는 app.services.context_builder.build_daily_checkin_summary가 만든
+    하루 요약이다 (완료한 일정은 개수만, 놓친 일정은 제목/시간/사유까지 상세히
+    담겨 있다 - "컨텍스트 동적 로딩"). 이 요약을 시스템 프롬프트에 그대로 넣어서,
+    LLM이 그날 놓친 일정 위주로 자연스럽게 대화하도록 한다.
+    """
+    payload = {
+        "model": settings.llm_model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "너는 일정 관리 앱의 다정한 코치 페르소나다. 사용자와 저녁 "
+                    "체크인 대화를 나눈다. 아래는 오늘 하루 요약이다 (완료한 "
+                    "일정은 개수만 적혀 있고, 놓친 일정만 제목·시간·사유가 상세히 "
+                    "적혀 있다). 놓친 일정이 있다면 그것 위주로, 나무라지 말고 "
+                    "부담 주지 않게 다정히 묻고 격려하라. 놓친 일정이 없다면 "
+                    "짧게 칭찬하라. 1~3문장으로 한국어로 답하라.\n\n"
+                    f"오늘 요약:\n{summary}"
+                ),
+            },
+            {"role": "user", "content": utterance},
         ],
     }
     content = _call_chat_completion(payload, http_client)
