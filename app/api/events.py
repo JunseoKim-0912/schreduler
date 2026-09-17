@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.models.event import Event
 from app.schemas.event import EventCreate, EventRead, EventUpdate
-from app.services import event_service
+from app.schemas.event_parse import EventParseRequest, EventParseResponse
+from app.services import event_parse_service, event_service
+from app.services.llm_client import LLMClientError
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -17,6 +19,18 @@ def create_event(data: EventCreate, db: Session = Depends(get_db)) -> Event:
         return event_service.create_event(db, data)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/parse", response_model=EventParseResponse)
+def parse_event(data: EventParseRequest, db: Session = Depends(get_db)) -> EventParseResponse:
+    """FR-2: 자연어 발화 한 턴을 슬롯필링한다. session_id를 생략하면 새 대화를
+    시작하고, 이전 응답의 session_id를 그대로 보내면 대화를 이어간다."""
+    try:
+        return event_parse_service.parse_event_utterance(db, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LLMClientError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.get("", response_model=list[EventRead])
