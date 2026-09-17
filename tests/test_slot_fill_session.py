@@ -60,24 +60,25 @@ def test_update_session_merges_across_multiple_turns() -> None:
         session.session_id,
         EventSlotFillResult(
             title="알고리즘 스터디",
-            missing_slots=["day_of_week", "start_time", "end_time", "importance", "date_range_id"],
+            missing_slots=["frequency", "by_day", "start_time", "end_time", "importance", "date_range_id"],
             clarifying_questions=[
-                ClarifyingQuestion(slot="day_of_week", question="무슨 요일인가요?")
+                ClarifyingQuestion(slot="frequency", question="얼마나 자주 반복하나요?")
             ],
         ),
     )
     after_turn1 = get_session(session.session_id)
     assert after_turn1.title == "알고리즘 스터디"
-    assert after_turn1.day_of_week is None
+    assert after_turn1.frequency is None
     assert after_turn1.is_complete is False
 
-    # 2턴: "월요일 9시부터 10시, 중요도는 딱히 없어" -> importance는 명시적으로 None(없음)
+    # 2턴: "매주 월요일 9시부터 10시, 중요도는 딱히 없어" -> importance는 명시적으로 None(없음)
     # 이전 턴에 알아낸 title은 호출부가 컨텍스트로 다시 넘겨줬다고 가정하고 그대로 반영
     update_session(
         session.session_id,
         EventSlotFillResult(
             title="알고리즘 스터디",
-            day_of_week="MO",
+            frequency="WEEKLY",
+            by_day=["MO"],
             start_time="09:00",
             end_time="10:00",
             importance=None,
@@ -89,7 +90,8 @@ def test_update_session_merges_across_multiple_turns() -> None:
     )
     after_turn2 = get_session(session.session_id)
     assert after_turn2.title == "알고리즘 스터디"
-    assert after_turn2.day_of_week == "MO"
+    assert after_turn2.frequency == "WEEKLY"
+    assert after_turn2.by_day == ["MO"]
     assert after_turn2.start_time == "09:00"
     assert after_turn2.end_time == "10:00"
     assert after_turn2.importance is None  # missing_slots에 없으므로 "없음"이 확정값
@@ -101,7 +103,8 @@ def test_update_session_merges_across_multiple_turns() -> None:
         session.session_id,
         EventSlotFillResult(
             title="알고리즘 스터디",
-            day_of_week="MO",
+            frequency="WEEKLY",
+            by_day=["MO"],
             start_time="09:00",
             end_time="10:00",
             importance=None,
@@ -120,7 +123,7 @@ def test_update_session_leaves_still_missing_slots_untouched() -> None:
         session.session_id,
         EventSlotFillResult(
             importance=Importance.MUST,
-            missing_slots=["title", "day_of_week", "start_time", "end_time", "date_range_id"],
+            missing_slots=["title", "frequency", "by_day", "start_time", "end_time", "date_range_id"],
         ),
     )
 
@@ -128,7 +131,14 @@ def test_update_session_leaves_still_missing_slots_untouched() -> None:
 
     assert result.importance == Importance.MUST
     assert result.title is None
-    assert set(result.missing_slots) == {"title", "day_of_week", "start_time", "end_time", "date_range_id"}
+    assert set(result.missing_slots) == {
+        "title",
+        "frequency",
+        "by_day",
+        "start_time",
+        "end_time",
+        "date_range_id",
+    }
 
 
 def test_update_session_returns_none_for_unknown_session() -> None:

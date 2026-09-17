@@ -16,20 +16,22 @@ from app.models.important_date_range import ImportantDateRange
 CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 
 SlotName = Literal[
-    "title", "day_of_week", "start_time", "end_time", "importance", "date_range_id"
+    "title", "frequency", "by_day", "start_time", "end_time", "importance", "date_range_id"
 ]
 
 SLOT_NAMES: tuple[SlotName, ...] = (
     "title",
-    "day_of_week",
+    "frequency",
+    "by_day",
     "start_time",
     "end_time",
     "importance",
     "date_range_id",
 )
 
-# FR-2 슬롯필링 결과의 JSON 스키마. day_of_week는 RRULE BYDAY 2글자 코드로 통일해
-# app/services/recurrence.py가 기대하는 형식과 바로 이어지게 한다.
+# FR-2 슬롯필링 결과의 JSON 스키마. frequency/by_day는 RRULE FREQ/BYDAY 값과 그대로
+# 이어지게 해서, event_parse_service가 "FREQ=WEEKLY;BYDAY=MO" 같은 recurrence_rule을
+# 바로 조립할 수 있게 한다 (app/services/recurrence.py의 build_recurrence_rule 참고).
 _EVENT_SLOT_JSON_SCHEMA = {
     "name": "event_slot_fill",
     "strict": True,
@@ -37,9 +39,17 @@ _EVENT_SLOT_JSON_SCHEMA = {
         "type": "object",
         "properties": {
             "title": {"type": ["string", "null"]},
-            "day_of_week": {
+            "frequency": {
                 "type": ["string", "null"],
-                "enum": ["MO", "TU", "WE", "TH", "FR", "SA", "SU", None],
+                "enum": ["DAILY", "WEEKLY", "MONTHLY", "YEARLY", None],
+            },
+            "by_day": {
+                "type": ["array", "null"],
+                "items": {
+                    "type": "string",
+                    "enum": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"],
+                },
+                "description": "frequency가 WEEKLY일 때 반복 요일들 (예: ['MO'])",
             },
             "start_time": {
                 "type": ["string", "null"],
@@ -98,7 +108,8 @@ class EventSlotFillResult(BaseModel):
     """
 
     title: str | None = None
-    day_of_week: Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"] | None = None
+    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None = None
+    by_day: list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None = None
     start_time: str | None = None
     end_time: str | None = None
     importance: Importance | None = None
@@ -112,15 +123,37 @@ class EventSlotFillResult(BaseModel):
 
 
 class LLMClientError(RuntimeError):
-    """LLM_API_KEY 미설정, API 호출 실패, 응답 파싱 실패 등을 감싸는 공통 예외."""
+    """LLM 클라이언트 관련 에러의 공통 베이스. 라우터에서는 아래 구체적인 하위
+    클래스를 먼저 잡아서 상황에 맞는 HTTP 상태 코드로 매핑해야 한다."""
+
+
+class LLMConfigError(LLMClientError):
+    """LLM_API_KEY 등 필수 설정이 빠졌을 때. 서버 설정 문제이지 요청 자체의
+    잘못이 아니다."""
+
+
+class LLMRequestError(LLMClientError):
+    """LLM API 호출 자체가 실패했을 때 (네트워크 오류, 4xx/5xx 응답 등). 진짜
+    upstream 문제이므로 502 Bad Gateway가 적절하다."""
+
+
+class LLMResponseParsingError(LLMClientError):
+    """LLM이 응답은 했지만 JSON 파싱에 실패했거나 우리가 기대한 스키마와 다를 때.
+    upstream이 완전히 죽은 게 아니라 우리가 처리 못 할 데이터를 줬다는 뜻이므로
+    502가 아니라 422로 다뤄야 한다."""
 
 
 def _build_system_prompt() -> str:
     return (
-        "너는 일정 관리 앱의 자연어 이벤트 파서다. 사용자의 발화에서 다음 슬롯을 "
-        "추출해 JSON으로만 답한다: title, day_of_week, start_time, end_time, "
-        "importance, date_range_id.\n"
-        "- day_of_week는 요일이 언급된 경우에만 MO/TU/WE/TH/FR/SA/SU 중 하나로 채운다.\n"
+        "너는 일정 관리 앱의 자연어 '반복' 이벤트 파서다. 사용자의 발화에서 다음 "
+        "슬롯을 추출해 JSON으로만 답한다: title, frequency, by_day, start_time, "
+        "end_time, importance, date_range_id. 이 앱에서 자연어로 만드는 이벤트는 "
+        "항상 반복 이벤트다.\n"
+        "- frequency는 DAILY/WEEKLY/MONTHLY/YEARLY 중 하나다. '매일'이면 DAILY, "
+        "'매주'면 WEEKLY다.\n"
+        "- by_day는 frequency가 WEEKLY일 때 반복 요일들을 MO/TU/WE/TH/FR/SA/SU "
+        "코드의 배열로 담는다 (예: '매주 월요일'이면 [\"MO\"], '매주 화, 목'이면 "
+        "[\"TU\", \"TH\"]). DAILY/MONTHLY/YEARLY면 보통 필요 없으니 빈 배열로 둔다.\n"
         "- start_time, end_time은 24시간제 HH:MM 형식이다.\n"
         "- importance는 null(없음/수면), 1(개인 여가), 2(타인 연관 약속), "
         "3(의무이지만 출석 체크 없음), 4(공식적 의무/평가), 5(반드시 지켜야 함), "
@@ -184,12 +217,12 @@ def _parse_response(raw_content: str) -> EventSlotFillResult:
     try:
         data = json.loads(raw_content)
     except json.JSONDecodeError as exc:
-        raise LLMClientError(f"LLM 응답이 유효한 JSON이 아닙니다: {raw_content!r}") from exc
+        raise LLMResponseParsingError(f"LLM 응답이 유효한 JSON이 아닙니다: {raw_content!r}") from exc
 
     try:
         return EventSlotFillResult.model_validate(data)
     except Exception as exc:  # pydantic ValidationError 등
-        raise LLMClientError(f"LLM 응답이 예상한 스키마와 다릅니다: {data!r}") from exc
+        raise LLMResponseParsingError(f"LLM 응답이 예상한 스키마와 다릅니다: {data!r}") from exc
 
 
 def fill_event_slots(
@@ -200,8 +233,9 @@ def fill_event_slots(
     known_slots: dict[str, object] | None = None,
     http_client: httpx.Client | None = None,
 ) -> EventSlotFillResult:
-    """자연어 발화에서 title/day_of_week/start_time/end_time/importance/date_range_id를
-    채운다 (FR-2). 확정 못한 슬롯은 결과의 missing_slots/clarifying_questions로 온다.
+    """자연어 발화에서 title/frequency/by_day/start_time/end_time/importance/
+    date_range_id를 채운다 (FR-2). 확정 못한 슬롯은 결과의
+    missing_slots/clarifying_questions로 온다.
 
     available_date_ranges: 사용자가 이미 등록해둔 ImportantDateRange 후보 목록.
         LLM은 이 목록에 있는 id만 date_range_id로 쓸 수 있다.
@@ -212,7 +246,7 @@ def fill_event_slots(
         settings.llm_api_key로 인증한 기본 클라이언트를 새로 만든다.
     """
     if not settings.llm_api_key:
-        raise LLMClientError("LLM_API_KEY가 설정되지 않았습니다 (.env 확인)")
+        raise LLMConfigError("LLM_API_KEY가 설정되지 않았습니다 (.env 확인)")
 
     payload = _build_request_payload(
         utterance, available_date_ranges or [], reference_date or date.today(), known_slots
@@ -224,18 +258,18 @@ def fill_event_slots(
     try:
         response = client.post(CHAT_COMPLETIONS_URL, json=payload, headers=headers, timeout=30)
     except httpx.HTTPError as exc:
-        raise LLMClientError(f"LLM API 호출에 실패했습니다: {exc}") from exc
+        raise LLMRequestError(f"LLM API 호출에 실패했습니다: {exc}") from exc
     finally:
         if owns_client:
             client.close()
 
     if response.status_code >= 400:
-        raise LLMClientError(f"LLM API가 오류를 반환했습니다 ({response.status_code}): {response.text}")
+        raise LLMRequestError(f"LLM API가 오류를 반환했습니다 ({response.status_code}): {response.text}")
 
     try:
         raw_content = response.json()["choices"][0]["message"]["content"]
     except (KeyError, IndexError, json.JSONDecodeError) as exc:
-        raise LLMClientError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}") from exc
+        raise LLMResponseParsingError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}") from exc
 
     return _parse_response(raw_content)
 

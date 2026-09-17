@@ -93,14 +93,16 @@ def test_parse_event_returns_next_question_when_slots_are_missing(
         return _chat_response(
             {
                 "title": "알고리즘 스터디",
-                "day_of_week": None,
+                "frequency": None,
+                "by_day": None,
                 "start_time": None,
                 "end_time": None,
                 "importance": None,
                 "date_range_id": None,
-                "missing_slots": ["day_of_week", "start_time", "end_time"],
+                "missing_slots": ["frequency", "by_day", "start_time", "end_time"],
                 "clarifying_questions": [
-                    {"slot": "day_of_week", "question": "무슨 요일에 하나요?"},
+                    {"slot": "frequency", "question": "얼마나 자주 반복하나요?"},
+                    {"slot": "by_day", "question": "무슨 요일에 하나요?"},
                     {"slot": "start_time", "question": "몇 시에 시작하나요?"},
                     {"slot": "end_time", "question": "몇 시에 끝나나요?"},
                 ],
@@ -116,15 +118,26 @@ def test_parse_event_returns_next_question_when_slots_are_missing(
     assert response.status_code == 200
     body = response.json()
     assert body["is_complete"] is False
-    assert body["next_question"] == {"slot": "day_of_week", "question": "무슨 요일에 하나요?"}
-    assert set(body["missing_slots"]) == {"day_of_week", "start_time", "end_time"}
+    assert body["next_question"] == {"slot": "frequency", "question": "얼마나 자주 반복하나요?"}
+    assert set(body["missing_slots"]) == {"frequency", "by_day", "start_time", "end_time"}
     assert body["draft"] is None
     assert "session_id" in body
 
 
 def test_parse_event_multiturn_completes_with_draft(
-    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    with Session(engine) as session:
+        date_range = ImportantDateRange(
+            user_id=user_id,
+            name="2026 가을학기",
+            start_date=date(2026, 9, 7),  # 월요일
+            end_date=date(2026, 12, 20),
+        )
+        session.add(date_range)
+        session.commit()
+        date_range_id = date_range.id
+
     captured_bodies: list[dict] = []
 
     def turn1(request: httpx.Request) -> httpx.Response:
@@ -132,14 +145,15 @@ def test_parse_event_multiturn_completes_with_draft(
         return _chat_response(
             {
                 "title": "알고리즘 스터디",
-                "day_of_week": None,
+                "frequency": None,
+                "by_day": None,
                 "start_time": None,
                 "end_time": None,
                 "importance": None,
                 "date_range_id": None,
-                "missing_slots": ["day_of_week", "start_time", "end_time"],
+                "missing_slots": ["frequency", "by_day", "start_time", "end_time", "date_range_id"],
                 "clarifying_questions": [
-                    {"slot": "day_of_week", "question": "무슨 요일에 하나요?"}
+                    {"slot": "frequency", "question": "얼마나 자주 반복하나요?"}
                 ],
             }
         )
@@ -149,11 +163,12 @@ def test_parse_event_multiturn_completes_with_draft(
         return _chat_response(
             {
                 "title": "알고리즘 스터디",
-                "day_of_week": "MO",
+                "frequency": "WEEKLY",
+                "by_day": ["MO"],
                 "start_time": "09:00",
                 "end_time": "10:00",
                 "importance": None,
-                "date_range_id": None,
+                "date_range_id": date_range_id,
                 "missing_slots": [],
                 "clarifying_questions": [],
             }
@@ -174,7 +189,7 @@ def test_parse_event_multiturn_completes_with_draft(
         json={
             "user_id": user_id,
             "session_id": session_id,
-            "utterance": "월요일 9시부터 10시",
+            "utterance": "매주 월요일 9시부터 10시, 2026 가을학기 기준으로",
         },
     )
     assert second.status_code == 200
@@ -182,15 +197,17 @@ def test_parse_event_multiturn_completes_with_draft(
 
     assert second_body["session_id"] == session_id
     assert second_body["is_complete"] is True
-    assert second_body["draft"] == {
-        "title": "알고리즘 스터디",
-        "day_of_week": "MO",
-        "start_time": "09:00",
-        "end_time": "10:00",
-        "importance": None,
-        "date_range_id": None,
-    }
     assert second_body["next_question"] is None
+    assert second_body["draft"] == {
+        "user_id": user_id,
+        "title": "알고리즘 스터디",
+        "start_time": "2026-09-07T09:00:00",
+        "end_time": "2026-09-07T10:00:00",
+        "importance": None,
+        "is_recurring": True,
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO",
+        "date_range_id": date_range_id,
+    }
 
     # 2턴째 요청에 1턴에서 알아낸 title이 "이미 확정된 슬롯"으로 같이 넘어갔는지 확인
     second_user_message = captured_bodies[1]["messages"][1]["content"]
@@ -222,8 +239,8 @@ def test_parse_event_rejects_session_from_a_different_user(
         return _chat_response(
             {
                 "title": "이벤트",
-                "missing_slots": ["day_of_week", "start_time", "end_time", "importance", "date_range_id"],
-                "clarifying_questions": [{"slot": "day_of_week", "question": "요일은요?"}],
+                "missing_slots": ["frequency", "by_day", "start_time", "end_time", "importance", "date_range_id"],
+                "clarifying_questions": [{"slot": "frequency", "question": "얼마나 자주 반복하나요?"}],
             }
         )
 
@@ -261,7 +278,8 @@ def test_parse_event_passes_registered_date_ranges_as_candidates(
         return _chat_response(
             {
                 "title": "헬스",
-                "day_of_week": "TU",
+                "frequency": "WEEKLY",
+                "by_day": ["TU"],
                 "start_time": "19:00",
                 "end_time": "20:00",
                 "importance": 1,
@@ -281,9 +299,50 @@ def test_parse_event_passes_registered_date_ranges_as_candidates(
     assert response.status_code == 200
     body = response.json()
     assert body["draft"]["date_range_id"] == date_range_id
+    assert body["draft"]["recurrence_rule"] == "FREQ=WEEKLY;BYDAY=TU"
+    # 반복 시작일(date_range.start_date=2026-09-01) 기준 전체 datetime이어야 함
+    assert body["draft"]["start_time"] == "2026-09-01T19:00:00"
+    assert body["draft"]["end_time"] == "2026-09-01T20:00:00"
+    assert body["draft"]["is_recurring"] is True
+    assert body["draft"]["user_id"] == user_id
 
     user_message = captured["messages"][1]["content"]
     assert "2026 가을학기" in user_message
+
+
+def test_parse_event_without_date_range_uses_today_as_anchor(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """date_range_id가 끝까지 null로 확정되면(등록된 기간 없이 반복) 오늘 날짜를
+    반복 시작일로 anchor 삼는다."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _chat_response(
+            {
+                "title": "아침 운동",
+                "frequency": "DAILY",
+                "by_day": None,
+                "start_time": "07:00",
+                "end_time": "07:30",
+                "importance": 1,
+                "date_range_id": None,
+                "missing_slots": [],
+                "clarifying_questions": [],
+            }
+        )
+
+    _mock_llm(monkeypatch, [handler])
+
+    response = client.post(
+        "/events/parse", json={"user_id": user_id, "utterance": "매일 아침 7시부터 7시반까지 운동"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["draft"]["recurrence_rule"] == "FREQ=DAILY"
+    assert body["draft"]["date_range_id"] is None
+    assert body["draft"]["start_time"] == f"{date.today().isoformat()}T07:00:00"
+    assert body["draft"]["end_time"] == f"{date.today().isoformat()}T07:30:00"
 
 
 def test_parse_event_session_state_is_persisted_between_requests(
@@ -293,8 +352,8 @@ def test_parse_event_session_state_is_persisted_between_requests(
         return _chat_response(
             {
                 "title": "발표 준비",
-                "missing_slots": ["day_of_week", "start_time", "end_time", "importance", "date_range_id"],
-                "clarifying_questions": [{"slot": "day_of_week", "question": "요일은요?"}],
+                "missing_slots": ["frequency", "by_day", "start_time", "end_time", "importance", "date_range_id"],
+                "clarifying_questions": [{"slot": "frequency", "question": "얼마나 자주 반복하나요?"}],
             }
         )
 
@@ -307,3 +366,51 @@ def test_parse_event_session_state_is_persisted_between_requests(
     assert stored is not None
     assert stored.title == "발표 준비"
     assert stored.user_id == user_id
+
+
+def test_parse_event_returns_422_when_llm_response_schema_is_invalid(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "이건 JSON이 아님"}}]},
+        )
+
+    _mock_llm(monkeypatch, [handler])
+
+    response = client.post(
+        "/events/parse", json={"user_id": user_id, "utterance": "아무 발화"}
+    )
+
+    assert response.status_code == 422
+    assert "detail" in response.json()
+
+
+def test_parse_event_returns_502_when_llm_http_call_fails(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="upstream is down")
+
+    _mock_llm(monkeypatch, [handler])
+
+    response = client.post(
+        "/events/parse", json={"user_id": user_id, "utterance": "아무 발화"}
+    )
+
+    assert response.status_code == 502
+    assert "detail" in response.json()
+
+
+def test_parse_event_returns_500_when_api_key_missing(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "llm_api_key", None)
+
+    response = client.post(
+        "/events/parse", json={"user_id": user_id, "utterance": "아무 발화"}
+    )
+
+    assert response.status_code == 500
+    assert "detail" in response.json()

@@ -1,23 +1,63 @@
 from __future__ import annotations
 
+from datetime import date, datetime, time
+
 import httpx
 from sqlalchemy.orm import Session
 
+from app.models.important_date_range import ImportantDateRange
 from app.schemas.event_parse import EventDraft, EventParseRequest, EventParseResponse
-from app.services.llm_client import fill_event_slots_for_user
+from app.services.llm_client import LLMResponseParsingError, fill_event_slots_for_user
+from app.services.recurrence import build_recurrence_rule
 from app.services.slot_fill_session import SlotFillSession, create_session, get_session
 
 
-def _to_response(session: SlotFillSession) -> EventParseResponse:
-    if session.is_complete:
-        draft = EventDraft(
-            title=session.title,
-            day_of_week=session.day_of_week,
-            start_time=session.start_time,
-            end_time=session.end_time,
-            importance=session.importance,
-            date_range_id=session.date_range_id,
+def _parse_hhmm(value: str) -> time:
+    try:
+        return datetime.strptime(value, "%H:%M").time()
+    except ValueError as exc:
+        raise LLMResponseParsingError(
+            f"LLM이 채운 시각 슬롯이 HH:MM 형식이 아닙니다: {value!r}"
+        ) from exc
+
+
+def _resolve_anchor_date(db: Session, date_range_id: int | None) -> date:
+    """이벤트의 반복 시작일로 쓸 날짜. date_range_id가 있으면 그 기간의
+    start_date를, 없으면(또는 이미 지워졌으면) 오늘을 anchor로 쓴다."""
+    if date_range_id is not None:
+        date_range = db.get(ImportantDateRange, date_range_id)
+        if date_range is not None:
+            return date_range.start_date
+    return date.today()
+
+
+def _build_event_draft(db: Session, session: SlotFillSession) -> EventDraft:
+    if not session.title or not session.start_time or not session.end_time or not session.frequency:
+        raise LLMResponseParsingError(
+            "세션이 is_complete인데 필수 슬롯(title/start_time/end_time/frequency) 중 "
+            f"일부가 비어 있습니다: {session!r}"
         )
+
+    anchor_date = _resolve_anchor_date(db, session.date_range_id)
+    start_time = datetime.combine(anchor_date, _parse_hhmm(session.start_time))
+    end_time = datetime.combine(anchor_date, _parse_hhmm(session.end_time))
+    recurrence_rule = build_recurrence_rule(session.frequency, session.by_day)
+
+    return EventDraft(
+        user_id=session.user_id,
+        title=session.title,
+        start_time=start_time,
+        end_time=end_time,
+        importance=session.importance,
+        is_recurring=True,
+        recurrence_rule=recurrence_rule,
+        date_range_id=session.date_range_id,
+    )
+
+
+def _to_response(db: Session, session: SlotFillSession) -> EventParseResponse:
+    if session.is_complete:
+        draft = _build_event_draft(db, session)
         return EventParseResponse(session_id=session.session_id, is_complete=True, draft=draft)
 
     next_question = session.clarifying_questions[0] if session.clarifying_questions else None
@@ -56,4 +96,4 @@ def parse_event_utterance(
     )
     session.apply(result)
 
-    return _to_response(session)
+    return _to_response(db, session)

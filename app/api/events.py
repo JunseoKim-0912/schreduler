@@ -8,7 +8,12 @@ from app.models.event import Event
 from app.schemas.event import EventCreate, EventRead, EventUpdate
 from app.schemas.event_parse import EventParseRequest, EventParseResponse
 from app.services import event_parse_service, event_service
-from app.services.llm_client import LLMClientError
+from app.services.llm_client import (
+    LLMClientError,
+    LLMConfigError,
+    LLMRequestError,
+    LLMResponseParsingError,
+)
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -29,7 +34,18 @@ def parse_event(data: EventParseRequest, db: Session = Depends(get_db)) -> Event
         return event_parse_service.parse_event_utterance(db, data)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LLMConfigError as exc:
+        # 서버 설정(.env의 LLM_API_KEY 등) 문제 — 요청 자체의 잘못이 아니다.
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+    except LLMResponseParsingError as exc:
+        # LLM이 응답은 했지만 우리가 기대한 스키마와 다름 — upstream이 죽은 게
+        # 아니므로 502가 아니라 422로 다룬다.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except LLMRequestError as exc:
+        # LLM API 호출 자체(네트워크/4xx/5xx)가 실패함 — 진짜 upstream 문제.
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     except LLMClientError as exc:
+        # 위에서 못 잡은 나머지 LLMClientError에 대한 안전망.
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 

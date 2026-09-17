@@ -59,3 +59,15 @@ def generate_event_instances(session: Session, event: Event) -> list[EventInstan
 
     session.flush()
     return created
+
+
+def build_recurrence_rule(frequency: str, by_day: list[str] | None) -> str:
+    """frequency("WEEKLY" 등)와 by_day(["MO"] 등)로 RRULE 문자열을 조립한다.
+
+    예: build_recurrence_rule("WEEKLY", ["MO"]) -> "FREQ=WEEKLY;BYDAY=MO".
+    generate_event_instances가 파싱하는 포맷과 그대로 짝을 이룬다.
+    """
+    parts = [f"FREQ={frequency}"]
+    if by_day:
+        parts.append(f"BYDAY={','.join(by_day)}")
+    return ";".join(parts)

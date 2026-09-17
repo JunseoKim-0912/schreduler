@@ -51,7 +51,8 @@ def test_fill_event_slots_parses_complete_response() -> None:
         return _chat_response(
             {
                 "title": "알고리즘 스터디",
-                "day_of_week": "MO",
+                "frequency": "WEEKLY",
+                "by_day": ["MO"],
                 "start_time": "09:00",
                 "end_time": "10:00",
                 "importance": 3,
@@ -67,7 +68,8 @@ def test_fill_event_slots_parses_complete_response() -> None:
     )
 
     assert result.title == "알고리즘 스터디"
-    assert result.day_of_week == "MO"
+    assert result.frequency == "WEEKLY"
+    assert result.by_day == ["MO"]
     assert result.start_time == "09:00"
     assert result.end_time == "10:00"
     assert result.importance == Importance.OBLIGATION_NO_CHECK
@@ -80,14 +82,15 @@ def test_fill_event_slots_reports_missing_slots_and_questions() -> None:
         return _chat_response(
             {
                 "title": "발표 준비",
-                "day_of_week": None,
+                "frequency": None,
+                "by_day": None,
                 "start_time": None,
                 "end_time": None,
                 "importance": None,
                 "date_range_id": None,
-                "missing_slots": ["day_of_week", "start_time", "end_time"],
+                "missing_slots": ["frequency", "start_time", "end_time"],
                 "clarifying_questions": [
-                    {"slot": "day_of_week", "question": "무슨 요일인가요?"},
+                    {"slot": "frequency", "question": "얼마나 자주 반복하나요?"},
                     {"slot": "start_time", "question": "몇 시에 시작하나요?"},
                     {"slot": "end_time", "question": "몇 시에 끝나나요?"},
                 ],
@@ -97,8 +100,8 @@ def test_fill_event_slots_reports_missing_slots_and_questions() -> None:
     result = fill_event_slots("발표 준비 해야 돼", http_client=_mock_client(handler))
 
     assert result.is_complete is False
-    assert set(result.missing_slots) == {"day_of_week", "start_time", "end_time"}
-    assert [q.slot for q in result.clarifying_questions] == ["day_of_week", "start_time", "end_time"]
+    assert set(result.missing_slots) == {"frequency", "start_time", "end_time"}
+    assert [q.slot for q in result.clarifying_questions] == ["frequency", "start_time", "end_time"]
     assert result.start_time is None
 
 
@@ -110,7 +113,8 @@ def test_fill_event_slots_leaves_importance_none_when_not_missing() -> None:
         return _chat_response(
             {
                 "title": "수면",
-                "day_of_week": None,
+                "frequency": "DAILY",
+                "by_day": None,
                 "start_time": "23:00",
                 "end_time": "07:00",
                 "importance": None,
@@ -233,7 +237,8 @@ def test_fill_event_slots_for_user_passes_users_date_ranges_as_candidates(
         return _chat_response(
             {
                 "title": "헬스",
-                "day_of_week": "TU",
+                "frequency": "WEEKLY",
+                "by_day": ["TU"],
                 "start_time": "19:00",
                 "end_time": "20:00",
                 "importance": 1,
@@ -270,7 +275,7 @@ def test_fill_event_slots_for_user_with_no_registered_ranges_sends_empty_candida
         return _chat_response(
             {
                 "title": "헬스",
-                "missing_slots": ["day_of_week", "start_time", "end_time", "importance", "date_range_id"],
+                "missing_slots": ["frequency", "start_time", "end_time", "importance", "date_range_id"],
                 "clarifying_questions": [
                     {"slot": "date_range_id", "question": "언제까지 반복할까요?"}
                 ],

@@ -19,7 +19,8 @@ class SlotFillSession:
     session_id: str
     user_id: int
     title: str | None = None
-    day_of_week: str | None = None
+    frequency: str | None = None
+    by_day: list[str] | None = None
     start_time: str | None = None
     end_time: str | None = None
     importance: Importance | None = None
