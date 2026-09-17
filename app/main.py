@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.compliance_reports import router as compliance_reports_router
 from app.api.date_ranges import router as date_ranges_router
 from app.api.events import router as events_router
 from app.api.health import router as health_router
@@ -26,3 +27,4 @@ app.include_router(health_router)
 app.include_router(events_router)
 app.include_router(date_ranges_router)
 app.include_router(locations_router)
+app.include_router(compliance_reports_router)

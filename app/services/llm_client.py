@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.enums import Importance
+from app.models.enums import Importance, NonComplianceCategory
 from app.models.important_date_range import ImportantDateRange
 
 CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
@@ -225,6 +225,36 @@ def _parse_response(raw_content: str) -> EventSlotFillResult:
         raise LLMResponseParsingError(f"LLM 응답이 예상한 스키마와 다릅니다: {data!r}") from exc
 
 
+def _call_chat_completion(payload: dict[str, object], http_client: httpx.Client | None) -> str:
+    """OpenAI Chat Completions를 호출해 message.content 문자열을 그대로 반환한다.
+
+    구조화 출력(JSON schema)을 요청했다면 그 JSON 문자열이, 아니면 자유 텍스트가
+    온다 — 파싱은 호출부의 책임이다.
+    """
+    if not settings.llm_api_key:
+        raise LLMConfigError("LLM_API_KEY가 설정되지 않았습니다 (.env 확인)")
+
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+
+    owns_client = http_client is None
+    client = http_client or httpx.Client()
+    try:
+        response = client.post(CHAT_COMPLETIONS_URL, json=payload, headers=headers, timeout=30)
+    except httpx.HTTPError as exc:
+        raise LLMRequestError(f"LLM API 호출에 실패했습니다: {exc}") from exc
+    finally:
+        if owns_client:
+            client.close()
+
+    if response.status_code >= 400:
+        raise LLMRequestError(f"LLM API가 오류를 반환했습니다 ({response.status_code}): {response.text}")
+
+    try:
+        return response.json()["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, json.JSONDecodeError) as exc:
+        raise LLMResponseParsingError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}") from exc
+
+
 def fill_event_slots(
     utterance: str,
     *,
@@ -245,33 +275,57 @@ def fill_event_slots(
     http_client: 테스트에서 httpx.MockTransport로 응답을 주입하기 위한 훅. 생략하면
         settings.llm_api_key로 인증한 기본 클라이언트를 새로 만든다.
     """
-    if not settings.llm_api_key:
-        raise LLMConfigError("LLM_API_KEY가 설정되지 않았습니다 (.env 확인)")
-
     payload = _build_request_payload(
         utterance, available_date_ranges or [], reference_date or date.today(), known_slots
     )
-    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
-
-    owns_client = http_client is None
-    client = http_client or httpx.Client()
-    try:
-        response = client.post(CHAT_COMPLETIONS_URL, json=payload, headers=headers, timeout=30)
-    except httpx.HTTPError as exc:
-        raise LLMRequestError(f"LLM API 호출에 실패했습니다: {exc}") from exc
-    finally:
-        if owns_client:
-            client.close()
-
-    if response.status_code >= 400:
-        raise LLMRequestError(f"LLM API가 오류를 반환했습니다 ({response.status_code}): {response.text}")
-
-    try:
-        raw_content = response.json()["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, json.JSONDecodeError) as exc:
-        raise LLMResponseParsingError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}") from exc
-
+    raw_content = _call_chat_completion(payload, http_client)
     return _parse_response(raw_content)
+
+
+_NON_COMPLIANCE_CATEGORY_LABELS: dict[NonComplianceCategory, str] = {
+    NonComplianceCategory.OVERSLEPT: "늦잠/기상 실패",
+    NonComplianceCategory.FATIGUE: "피로/무기력",
+    NonComplianceCategory.PRIORITY_SHIFT: "우선순위 변경",
+    NonComplianceCategory.SCHEDULE_CONFLICT: "일정 충돌",
+    NonComplianceCategory.FORGOT: "깜빡함",
+    NonComplianceCategory.TRANSIT_ISSUE: "이동/교통 문제",
+    NonComplianceCategory.OTHER: "기타",
+}
+
+
+def generate_compliance_feedback(
+    category: NonComplianceCategory,
+    reason_text: str | None,
+    *,
+    http_client: httpx.Client | None = None,
+) -> str:
+    """FR-6: 미준수 사유에 대한 공감형 피드백 한두 문장을 생성한다.
+
+    category가 OTHER이거나 reason_text가 채워진 경우에만 호출부가 이 함수를
+    부른다 (버튼 클릭만으로 끝난 경우는 LLM을 아예 호출하지 않는 것이 FR-6의
+    "LLM 우회 UI 숏컷"이다).
+    """
+    label = _NON_COMPLIANCE_CATEGORY_LABELS[category]
+    user_message = f"미준수 사유 카테고리: {label}"
+    if reason_text:
+        user_message += f"\n사용자가 직접 적은 이유: {reason_text}"
+
+    payload = {
+        "model": settings.llm_model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "너는 일정 관리 앱의 다정한 코치 페르소나다. 사용자가 계획한 "
+                    "일정을 지키지 못한 이유를 말했다. 나무라지 말고, 짧게(1~2문장) "
+                    "공감하며 다음에는 잘할 수 있다는 격려를 한국어로 건네라."
+                ),
+            },
+            {"role": "user", "content": user_message},
+        ],
+    }
+    content = _call_chat_completion(payload, http_client)
+    return content.strip()
 
 
 def get_date_range_options(db: Session, user_id: int) -> list[DateRangeOption]:
