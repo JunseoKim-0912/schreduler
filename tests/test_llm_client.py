@@ -167,6 +167,13 @@ def test_build_request_payload_includes_date_range_candidates() -> None:
     assert payload["response_format"]["json_schema"]["name"] == "event_slot_fill"
 
 
+def test_build_request_payload_omits_temperature() -> None:
+    """이 모델은 temperature 커스텀 값을 지원하지 않아 키 자체를 안 보내야 한다."""
+    payload = _build_request_payload("아무 발화", [], date(2026, 9, 17))
+
+    assert "temperature" not in payload
+
+
 def test_parse_response_raises_on_invalid_json() -> None:
     with pytest.raises(LLMClientError):
         _parse_response("이건 JSON이 아님")

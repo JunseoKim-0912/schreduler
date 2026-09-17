@@ -167,7 +167,6 @@ def _build_request_payload(
 ) -> dict[str, object]:
     return {
         "model": settings.llm_model,
-        "temperature": 0,
         "messages": [
             {"role": "system", "content": _build_system_prompt()},
             {
