@@ -1,6 +1,6 @@
 """테스트용 사용자 1명을 DB에 넣는 seed 스크립트.
 
-실행 (프로젝트 루트에서): python -m scripts.seed
+실행 (프로젝트 루트에서): python -m app.scripts.seed
 """
 
 from app.core.db import SessionLocal
