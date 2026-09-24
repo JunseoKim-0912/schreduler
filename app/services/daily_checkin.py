@@ -11,13 +11,16 @@ from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
 from app.models.user import User
 from app.schemas.daily_checkin import DailyCheckinMessageResponse
+from app.schemas.persona import PersonaRead
 from app.services.context_builder import build_daily_checkin_summary
 from app.services.llm_client import generate_daily_checkin_reply
+from app.services.persona_conversation_service import record_turn, resolve_conversation
 from app.services.notification import send_push_notification
 
 logger = logging.getLogger(__name__)
 
 DAILY_CHECKIN_JOB_ID = "daily_evening_checkin"
+DAILY_CHECKIN_CONTEXT_TYPE = "daily_checkin"
 DAILY_CHECKIN_HOUR = 21
 DAILY_CHECKIN_MINUTE = 0
 
@@ -53,6 +56,7 @@ def handle_daily_checkin_message(
     user_id: int,
     utterance: str,
     target_date: dt_date | None = None,
+    conversation_id: int | None = None,
     *,
     http_client: httpx.Client | None = None,
 ) -> DailyCheckinMessageResponse:
@@ -62,12 +66,22 @@ def handle_daily_checkin_message(
     놓친 일정은 상세히)을 시스템 프롬프트에 넣어서, LLM이 그날 놓친 일정 위주로
     대화하게 한다.
     """
-    if db.get(User, user_id) is None:
+    user = db.get(User, user_id)
+    if user is None:
         raise ValueError(f"user_id {user_id} does not exist")
 
+    conversation = resolve_conversation(db, user, DAILY_CHECKIN_CONTEXT_TYPE, conversation_id)
     summary = build_daily_checkin_summary(db, user_id, target_date or dt_date.today())
-    reply = generate_daily_checkin_reply(summary, utterance, http_client=http_client)
-    return DailyCheckinMessageResponse(reply=reply, summary=summary)
+    persona = PersonaRead.model_validate(user.selected_persona) if user.selected_persona else None
+    reply = generate_daily_checkin_reply(
+        summary, utterance, persona=persona, language=user.preferred_language, http_client=http_client
+    )
+    conversation = record_turn(db, user, DAILY_CHECKIN_CONTEXT_TYPE, utterance, reply, conversation)
+    return DailyCheckinMessageResponse(
+        reply=reply,
+        summary=summary,
+        conversation_id=conversation.id if conversation else None,
+    )
 
 
 def register_daily_checkin_job() -> None:

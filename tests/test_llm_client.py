@@ -165,9 +165,9 @@ def test_build_request_payload_includes_date_range_candidates() -> None:
 
     payload = _build_request_payload("공강까지 매주 화요일 헬스", candidates, date(2026, 9, 17))
 
-    user_message = payload["messages"][1]["content"]
-    assert "2026 가을학기" in user_message
-    assert '"id": 5' in user_message
+    system_message = payload["messages"][0]["content"]
+    assert "2026 가을학기" in system_message
+    assert '"id": 5' in system_message
     assert payload["response_format"]["json_schema"]["name"] == "event_slot_fill"
 
 
@@ -255,9 +255,9 @@ def test_fill_event_slots_for_user_passes_users_date_ranges_as_candidates(
         http_client=_mock_client(handler),
     )
 
-    user_message = captured_payload["messages"][1]["content"]
-    assert "2026 가을학기" in user_message
-    assert f'"id": {date_range.id}' in user_message
+    system_message = captured_payload["messages"][0]["content"]
+    assert "2026 가을학기" in system_message
+    assert f'"id": {date_range.id}' in system_message
     assert result.date_range_id == date_range.id
 
 
@@ -286,6 +286,6 @@ def test_fill_event_slots_for_user_with_no_registered_ranges_sends_empty_candida
         db_session, user.id, "매주 화요일 헬스", http_client=_mock_client(handler)
     )
 
-    user_message = captured_payload["messages"][1]["content"]
-    assert "등록된 기간(date_range) 후보: []" in user_message
+    system_message = captured_payload["messages"][0]["content"]
+    assert "등록된 기간(date_range) 후보: []" in system_message
     assert "date_range_id" in result.missing_slots

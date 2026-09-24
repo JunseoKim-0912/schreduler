@@ -20,7 +20,7 @@ class PersonaConversation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    persona_id: Mapped[str] = mapped_column(ForeignKey("personas.persona_id"))
+    persona_id: Mapped[str] = mapped_column(ForeignKey("personas.name"))
     context_type: Mapped[str] = mapped_column(String(50))
     messages: Mapped[list[Any]] = mapped_column(JSON)
 

@@ -306,8 +306,8 @@ def test_parse_event_passes_registered_date_ranges_as_candidates(
     assert body["draft"]["is_recurring"] is True
     assert body["draft"]["user_id"] == user_id
 
-    user_message = captured["messages"][1]["content"]
-    assert "2026 가을학기" in user_message
+    system_message = captured["messages"][0]["content"]
+    assert "2026 가을학기" in system_message
 
 
 def test_parse_event_without_date_range_uses_today_as_anchor(

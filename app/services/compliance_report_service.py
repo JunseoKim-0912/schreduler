@@ -15,6 +15,7 @@ from app.schemas.compliance_report import (
     ComplianceReportCreate,
     ComplianceReportStatsResponse,
 )
+from app.schemas.persona import PersonaRead
 from app.services.llm_client import generate_compliance_feedback
 
 
@@ -37,15 +38,22 @@ def create_compliance_report(
     """ComplianceReport를 저장하고, LLM이 트리거된 경우 그 공감 피드백 문장을
     함께 반환한다 (피드백 자체는 DB에 저장하지 않는다).
     """
-    if db.get(EventInstance, data.event_instance_id) is None:
+    event_instance = db.get(EventInstance, data.event_instance_id)
+    if event_instance is None:
         raise ValueError(f"event_instance_id {data.event_instance_id} does not exist")
 
     llm_triggered = _should_trigger_llm(data)
 
     feedback: str | None = None
     if llm_triggered:
+        user = event_instance.event.user
+        persona = PersonaRead.model_validate(user.selected_persona) if user.selected_persona else None
         feedback = generate_compliance_feedback(
-            data.reason_category, data.reason_text, http_client=http_client
+            data.reason_category,
+            data.reason_text,
+            persona=persona,
+            language=user.preferred_language,
+            http_client=http_client,
         )
 
     report = ComplianceReport(

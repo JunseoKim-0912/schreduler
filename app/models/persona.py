@@ -13,15 +13,16 @@ if TYPE_CHECKING:
 
 
 class Persona(Base):
-    """가상 AI 캐릭터 페르소나 (FR-9). display_name/tone_description/sample_lines는
+    """가상 AI 캐릭터 페르소나 (FR-9). name이 식별자(PK)이고, 나머지 필드는
     언어별({"ko": ..., "en": ...}) JSON으로 저장한다 (FR-11)."""
 
     __tablename__ = "personas"
 
-    persona_id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), primary_key=True)
     display_name: Mapped[dict[str, Any]] = mapped_column(JSON)
-    tone_description: Mapped[dict[str, Any]] = mapped_column(JSON)
-    sample_lines: Mapped[dict[str, Any]] = mapped_column(JSON)
+    description: Mapped[dict[str, Any]] = mapped_column(JSON)
+    example_lines: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    backstory: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     users: Mapped[list["User"]] = relationship(back_populates="selected_persona")
     conversations: Mapped[list["PersonaConversation"]] = relationship(back_populates="persona")

@@ -9,7 +9,9 @@ from app.api.date_ranges import router as date_ranges_router
 from app.api.events import router as events_router
 from app.api.health import router as health_router
 from app.api.locations import router as locations_router
+from app.api.personas import router as personas_router
 from app.api.sleep import router as sleep_router
+from app.api.users import router as users_router
 from app.core.config import settings
 from app.core.scheduler import shutdown_scheduler, start_scheduler
 from app.services.daily_checkin import register_daily_checkin_job
@@ -36,3 +38,5 @@ app.include_router(locations_router)
 app.include_router(compliance_reports_router)
 app.include_router(sleep_router)
 app.include_router(daily_actual_logs_router)
+app.include_router(personas_router)
+app.include_router(users_router)

@@ -41,7 +41,9 @@ def post_daily_checkin_message(
 ) -> DailyCheckinMessageResponse:
     """FR-8 저녁 9시 체크인 대화 한 턴. 그날 놓친 일정 위주로 LLM이 대화한다."""
     try:
-        return handle_daily_checkin_message(db, data.user_id, data.utterance, data.date)
+        return handle_daily_checkin_message(
+            db, data.user_id, data.utterance, data.date, data.conversation_id
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except LLMConfigError as exc:

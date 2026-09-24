@@ -28,7 +28,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(100))
     selected_persona_id: Mapped[str | None] = mapped_column(
-        ForeignKey("personas.persona_id"), nullable=True
+        ForeignKey("personas.name"), nullable=True
     )
     preferred_language: Mapped[str] = mapped_column(String(2), default="ko")
     telegram_chat_id: Mapped[str | None] = mapped_column(String(50), nullable=True)

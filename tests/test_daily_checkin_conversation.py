@@ -76,7 +76,7 @@ def _mock_llm(monkeypatch: pytest.MonkeyPatch, reply_text: str) -> dict:
     return captured
 
 
-def test_checkin_message_includes_daily_summary_in_system_prompt(
+def test_checkin_message_includes_daily_summary_in_user_message(
     client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with Session(engine) as session:
@@ -128,9 +128,12 @@ def test_checkin_message_includes_daily_summary_in_system_prompt(
     assert "알고리즘 스터디" in body["summary"]
     assert "아침 운동" not in body["summary"]  # done은 상세 내용 없음
 
+    # 요약은 매일 바뀌므로 캐시 프리픽스(system)가 아니라 user 메시지에 발화와 함께 들어간다
     system_message = captured["messages"][0]["content"]
-    assert body["summary"] in system_message  # 시스템 프롬프트에 요약이 그대로 들어갔는지
-    assert captured["messages"][1]["content"] == "오늘 하루 어땠는지 알려줘"
+    user_message = captured["messages"][1]["content"]
+    assert body["summary"] not in system_message
+    assert body["summary"] in user_message
+    assert user_message.endswith("사용자 발화: 오늘 하루 어땠는지 알려줘")
 
 
 def test_checkin_message_defaults_to_today_when_date_omitted(
