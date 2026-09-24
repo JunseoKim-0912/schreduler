@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
+from app.i18n import render_notification
 from app.models.user import User
 from app.services.notification import send_push_notification
 
@@ -15,9 +16,6 @@ SLEEP_CHECKIN_JOB_ID = "daily_sleep_checkin"
 SLEEP_CHECKIN_HOUR = 8
 SLEEP_CHECKIN_MINUTE = 0
 
-SLEEP_CHECKIN_TITLE = "[Schreduler] 수면 체크인"
-SLEEP_CHECKIN_BODY = "어제 몇 시에 주무셨고 오늘 몇 시에 일어나셨나요?"
-
 
 def _send_sleep_checkin_to_user(user: User) -> None:
     # User에 아직 fcm_token 필드가 없어서(디바이스 등록 전) 항상 None이다.
@@ -26,7 +24,11 @@ def _send_sleep_checkin_to_user(user: User) -> None:
     if not device_token:
         logger.info("[수면 체크인] device_token 없음 - 발송 생략. user_id=%s", user.id)
         return
-    send_push_notification(device_token, SLEEP_CHECKIN_TITLE, SLEEP_CHECKIN_BODY)
+    send_push_notification(
+        device_token,
+        render_notification("sleep_checkin.title", user.preferred_language),
+        render_notification("sleep_checkin.body", user.preferred_language),
+    )
 
 
 def send_daily_sleep_checkin_reminders() -> None:

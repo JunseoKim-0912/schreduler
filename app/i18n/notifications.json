@@ -1,0 +1,42 @@
+{
+  "event_start.title": {
+    "ko": "[Schreduler] {title}",
+    "en": "[Schreduler] {title}"
+  },
+  "event_start.body": {
+    "ko": "지금 시작할 시간이에요.",
+    "en": "It's time to start."
+  },
+  "event_end.title": {
+    "ko": "[Schreduler] {title}",
+    "en": "[Schreduler] {title}"
+  },
+  "event_end.body": {
+    "ko": "종료 시각이에요, 완료 체크 해주세요.",
+    "en": "Time's up. Please check it off as done."
+  },
+  "escalation.subject_event": {
+    "ko": "'{title}' 일정",
+    "en": "your \"{title}\" event"
+  },
+  "escalation.subject_app": {
+    "ko": "앱 사용",
+    "en": "using the app"
+  },
+  "escalation.week_1": {
+    "ko": "[Schreduler] {subject}에 대해 1주째 응답이 없어요. 잘 지내고 계신가요?",
+    "en": "[Schreduler] We haven't heard from you about {subject} for a week. How are you doing?"
+  },
+  "escalation.week_3": {
+    "ko": "[Schreduler] {subject}에 대해 3주째 응답이 없어 더 이상 알림을 보내지 않습니다. 다시 시작하고 싶으면 앱에서 아무 일정이나 완료 체크해주세요.",
+    "en": "[Schreduler] We haven't heard from you about {subject} for 3 weeks, so we'll stop sending notifications. To start again, check off any event as done in the app."
+  },
+  "sleep_checkin.title": {
+    "ko": "[Schreduler] 수면 체크인",
+    "en": "[Schreduler] Sleep check-in"
+  },
+  "sleep_checkin.body": {
+    "ko": "어제 몇 시에 주무셨고 오늘 몇 시에 일어나셨나요?",
+    "en": "What time did you go to bed last night, and when did you wake up today?"
+  }
+}

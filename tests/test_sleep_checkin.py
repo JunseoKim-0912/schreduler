@@ -6,9 +6,7 @@ from app.core.scheduler import scheduler, shutdown_scheduler, start_scheduler
 from app.models import Base, User
 from app.services import sleep_checkin as sleep_checkin_module
 from app.services.sleep_checkin import (
-    SLEEP_CHECKIN_BODY,
     SLEEP_CHECKIN_JOB_ID,
-    SLEEP_CHECKIN_TITLE,
     register_sleep_checkin_job,
     send_daily_sleep_checkin_reminders,
 )
@@ -103,4 +101,6 @@ def test_send_sleep_checkin_to_user_sends_when_device_token_present(
 
     sleep_checkin_module._send_sleep_checkin_to_user(user)
 
-    assert sent == [("fake-device-token", SLEEP_CHECKIN_TITLE, SLEEP_CHECKIN_BODY)]
+    assert sent == [
+        ("fake-device-token", "[Schreduler] 수면 체크인", "어제 몇 시에 주무셨고 오늘 몇 시에 일어나셨나요?")
+    ]

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
+from app.i18n import render_notification
 from app.models.engagement_state import EngagementState
 from app.models.enums import EngagementScope, EscalationStage
 from app.services.telegram_bot import send_telegram_message
@@ -28,10 +29,10 @@ def _target_stage_for_elapsed(elapsed: timedelta) -> EscalationStage:
     return EscalationStage.NORMAL
 
 
-def _describe_state(state: EngagementState) -> str:
+def _describe_state(state: EngagementState, language: str) -> str:
     if state.scope == EngagementScope.EVENT and state.ref_event is not None:
-        return f"'{state.ref_event.title}' 일정"
-    return "앱 사용"
+        return render_notification("escalation.subject_event", language, title=state.ref_event.title)
+    return render_notification("escalation.subject_app", language)
 
 
 def get_or_create_engagement_state(
@@ -106,18 +107,20 @@ def evaluate_escalation(
     state.stage_updated_at = now
     db.commit()
 
+    language = state.user.preferred_language
     if target_stage == EscalationStage.WEEK_1_TELEGRAM:
         send_telegram_message(
             state.user,
-            f"[Schreduler] {_describe_state(state)}에 대해 1주째 응답이 없어요. "
-            "잘 지내고 계신가요?",
+            render_notification(
+                "escalation.week_1", language, subject=_describe_state(state, language)
+            ),
         )
     elif target_stage == EscalationStage.WEEK_3_FINAL:
         send_telegram_message(
             state.user,
-            f"[Schreduler] {_describe_state(state)}에 대해 3주째 응답이 없어 "
-            "더 이상 알림을 보내지 않습니다. 다시 시작하고 싶으면 앱에서 아무 "
-            "일정이나 완료 체크해주세요.",
+            render_notification(
+                "escalation.week_3", language, subject=_describe_state(state, language)
+            ),
         )
     # WEEK_2_MUTED: 모든 알림 중단 -> 보낼 메시지 없음.
 

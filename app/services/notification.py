@@ -9,6 +9,7 @@ from firebase_admin import credentials, messaging
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
+from app.i18n import render_notification
 from app.models.event_instance import EventInstance
 
 logger = logging.getLogger(__name__)
@@ -83,8 +84,13 @@ def _send_notification(event_instance_id: int, kind: str) -> None:
             return
 
         event = instance.event
-        title = f"[Schreduler] {event.title}"
-        body = "지금 시작할 시간이에요." if kind == "start" else "종료 시각이에요, 완료 체크 해주세요."
+        language = event.user.preferred_language
+        if kind == "start":
+            title = render_notification("event_start.title", language, title=event.title)
+            body = render_notification("event_start.body", language)
+        else:
+            title = render_notification("event_end.title", language, title=event.title)
+            body = render_notification("event_end.body", language)
 
         # User에 아직 fcm_token 필드가 없어서(디바이스 등록 전) 항상 None이다.
         # 필드가 추가되면 이 한 줄만 바뀌면 된다.
