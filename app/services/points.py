@@ -131,6 +131,28 @@ def record_daily_points(db: Session, user_id: int, target_date: dt_date) -> Poin
     return entry
 
 
+def recalculate_points_since(
+    db: Session, user_id: int, start_date: dt_date, today: dt_date | None = None
+) -> list[PointsLedger]:
+    """start_date부터 어제까지의 PointsLedger를 다시 계산해 upsert한다.
+
+    지난 날짜의 인스턴스 상태가 바뀌면(뒤늦은 완료 등) 그날 점수뿐 아니라 이후 날짜들의 streak 배율도
+    달라지므로 어제까지 전부 다시 계산한다. 오늘 이후는 get_points_summary가 실시간으로 계산하고
+    자정 잡이 확정하므로 여기서는 쓰지 않는다.
+    """
+    today = today or dt_date.today()
+    entries: list[PointsLedger] = []
+    day = start_date
+    while day < today:
+        entries.append(record_daily_points(db, user_id, day))
+        day += timedelta(days=1)
+    if entries:
+        logger.info(
+            "[포인트] 재계산 user_id=%s %s~%s (%d일)", user_id, start_date, today - timedelta(days=1), len(entries)
+        )
+    return entries
+
+
 def run_daily_points_job(target_date: dt_date | None = None) -> None:
     """모든 사용자의 전날(target_date 기본값) 포인트를 계산해 PointsLedger에 기록한다.
 

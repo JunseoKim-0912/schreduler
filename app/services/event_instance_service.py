@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import CompletionMethod, EventInstanceStatus
 from app.models.event_instance import EventInstance
+from app.services.points import recalculate_points_since
 
 
 def complete_event_instance(
@@ -11,12 +12,13 @@ def complete_event_instance(
 ) -> EventInstance:
     """EventInstance를 완료(DONE) 처리한다. 이미 완료된 인스턴스는 그대로 둔다.
 
-    포인트는 이 상태를 기준으로 계산되므로(app/services/points.py) 별도 적립 호출은 없다 —
-    /points/summary에는 즉시, PointsLedger에는 자정 잡에서 반영된다.
+    지난 날짜의 인스턴스를 뒤늦게 완료하면 자정 잡이 이미 그날 포인트를 기록했으므로, 그 날짜부터
+    어제까지의 PointsLedger를 즉시 다시 계산한다. 오늘 날짜분은 /points/summary가 실시간으로 반영한다.
     """
     if instance.status != EventInstanceStatus.DONE:
         instance.status = EventInstanceStatus.DONE
         instance.completion_method = method
         db.commit()
         db.refresh(instance)
+        recalculate_points_since(db, instance.event.user_id, instance.date)
     return instance
