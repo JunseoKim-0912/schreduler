@@ -38,7 +38,7 @@ python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# .env 파일 작성 (아래 "환경변수" 참고). 최소한 LLM_API_KEY가 있어야 LLM 기능이 동작한다.
+cp .env.example .env              # 값 채우기 (아래 "환경변수" 참고). 최소한 LLM_API_KEY가 있어야 LLM 기능이 동작한다
 
 alembic upgrade head               # DB 스키마 생성/최신화 (기본: ./schreduler.db)
 python -m app.scripts.seed         # 테스트 사용자 생성 (생성된 id가 출력된다)
@@ -61,7 +61,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build  
 
 ## 환경변수
 
-`.env` 파일 또는 환경변수로 설정합니다. `.env`는 저장소에 커밋하지 않습니다.
+`.env` 파일 또는 환경변수로 설정합니다. 항목별 설명과 예시는 [`.env.example`](.env.example)에 있습니다. `.env`는 저장소에 커밋하지 않습니다.
 
 | 이름 | 기본값 | 설명 |
 |---|---|---|
@@ -116,3 +116,7 @@ docs/                    # 기획서, API 안내, Postman 컬렉션
 
 개발 중인 MVP입니다. 정식 인증 대신 `X-User-Id` 헤더를 쓰고, 일반 일정의 완료 처리·회차 조회, 사용자 관리,
 FCM 디바이스 토큰 등록 API는 아직 없습니다. 자세한 목록은 [`docs/api_overview.md`의 "알려진 제약"](docs/api_overview.md#7-알려진-제약-클라이언트-설계-시-주의)을 참고하세요.
+
+## 라이선스
+
+[MIT](LICENSE) © 2026 Junseo Kim
