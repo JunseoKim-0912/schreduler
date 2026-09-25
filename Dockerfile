@@ -17,6 +17,7 @@ RUN pip install -r requirements.txt
 COPY alembic.ini .
 COPY alembic ./alembic
 COPY app ./app
+COPY frontend ./frontend
 
 USER app
 

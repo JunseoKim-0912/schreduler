@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Schreduler</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-row">
+        <h1 class="brand">Schreduler</h1>
+        <div class="user-id">
+          <label for="user-id">사용자 ID</label>
+          <input id="user-id" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 1" aria-describedby="user-id-help user-id-status" />
+          <span id="user-id-status" class="hint" role="status"></span>
+        </div>
+      </div>
+      <p id="user-id-help" class="container hint">
+        입력한 ID는 모든 요청의 <code>X-User-Id</code> 헤더로 쓰이고, 이 브라우저에 저장돼요.
+      </p>
+    </header>
+
+    <main class="container">
+      <div id="error-banner" class="error-banner" role="alert" hidden>
+        <div>
+          <p id="error-message" class="error-message"></p>
+          <p id="error-status" class="error-status"></p>
+        </div>
+        <button id="error-close" type="button" class="button button-ghost" aria-label="에러 메시지 닫기">닫기</button>
+      </div>
+
+      <nav class="tabs" role="tablist" aria-label="기능">
+        <button type="button" role="tab" id="tab-events" aria-controls="panel-events" data-tab="events">이벤트</button>
+        <button type="button" role="tab" id="tab-tasks" aria-controls="panel-tasks" data-tab="tasks">할 일(Task)</button>
+        <button type="button" role="tab" id="tab-points" aria-controls="panel-points" data-tab="points">포인트</button>
+        <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat" data-tab="chat">페르소나 대화</button>
+      </nav>
+
+      <section id="panel-events" class="panel" role="tabpanel" aria-labelledby="tab-events">
+        <h2>자연어로 일정 추가</h2>
+        <p class="hint">하고 싶은 일정을 말하듯 적으면 AI가 부족한 정보를 되물어요.</p>
+        <ol id="chat-log" class="chat-log" aria-live="polite" hidden></ol>
+
+        <div id="draft-confirm" class="draft" hidden>
+          <dl id="draft-fields" class="draft-fields"></dl>
+          <div class="actions">
+            <button id="draft-create" type="button" class="button">이 내용으로 만들기</button>
+            <button id="draft-cancel" type="button" class="button button-secondary">취소</button>
+          </div>
+        </div>
+
+        <form id="parse-form" class="inline-form">
+          <label for="parse-input" class="visually-hidden">일정 설명</label>
+          <input id="parse-input" type="text" autocomplete="off" maxlength="300" />
+          <button id="parse-send" type="submit" class="button">전송</button>
+          <button id="parse-reset" type="button" class="button button-secondary">새 대화</button>
+        </form>
+        <p id="chat-status" class="hint" role="status" hidden></p>
+
+        <div class="section-header">
+          <h2>이벤트 목록</h2>
+          <button id="events-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+        </div>
+        <p id="events-status" class="hint" role="status" hidden></p>
+        <ul id="event-list" class="list"></ul>
+      </section>
+
+      <section id="panel-tasks" class="panel" role="tabpanel" aria-labelledby="tab-tasks" hidden>
+        <h2>새 할 일</h2>
+        <form id="task-form" class="task-form">
+          <label>
+            <span>제목</span>
+            <input id="task-title" type="text" required maxlength="200" autocomplete="off" placeholder="예: 과제 제출" />
+          </label>
+          <label>
+            <span>마감일시</span>
+            <input id="task-due" type="datetime-local" required />
+          </label>
+          <label>
+            <span>중요도</span>
+            <select id="task-importance">
+              <option value="">선택 안 함</option>
+            </select>
+          </label>
+          <button id="task-submit" type="submit" class="button">추가</button>
+        </form>
+        <p id="task-form-status" class="hint" role="status" hidden></p>
+
+        <div class="section-header">
+          <h2>할 일 목록</h2>
+          <button id="tasks-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+        </div>
+        <p id="tasks-status" class="hint" role="status" hidden></p>
+        <ul id="task-list" class="list"></ul>
+      </section>
+
+      <section id="panel-points" class="panel" role="tabpanel" aria-labelledby="tab-points" hidden>
+        <div class="section-header section-header-first">
+          <h2>포인트</h2>
+          <button id="points-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+        </div>
+        <p id="points-status" class="hint" role="status" hidden></p>
+        <div id="points-cards" class="stat-grid"></div>
+        <p class="hint">
+          완료한 일정의 중요도만큼 점수를 받아요(MAX는 10점). 하루 일정을 전부 완료한 날이 이어지면
+          3일 ×1.1, 7일 ×1.25, 14일 ×1.5 보너스가 붙어요.
+        </p>
+      </section>
+
+      <section id="panel-chat" class="panel" role="tabpanel" aria-labelledby="tab-chat" hidden>
+        <h2>페르소나 선택</h2>
+        <p id="personas-status" class="hint" role="status" hidden></p>
+        <ul id="persona-list" class="persona-grid"></ul>
+
+        <div class="section-header">
+          <h2 id="checkin-title">저녁 체크인</h2>
+          <button id="checkin-new" type="button" class="button button-secondary button-small">새 대화</button>
+        </div>
+        <p class="hint">오늘 하루를 페르소나와 이야기해요. 놓친 일정이 있으면 그 이야기부터 물어봐요.</p>
+        <p id="checkin-summary" class="summary" hidden></p>
+        <ol id="checkin-log" class="chat-log" aria-live="polite" hidden></ol>
+        <form id="checkin-form" class="inline-form">
+          <label for="checkin-input" class="visually-hidden">메시지</label>
+          <input id="checkin-input" type="text" autocomplete="off" maxlength="500" />
+          <button id="checkin-send" type="submit" class="button">보내기</button>
+        </form>
+        <p id="checkin-status" class="hint" role="status" hidden></p>
+      </section>
+    </main>
+
+    <footer class="container site-footer">
+      <button id="health-check" type="button" class="button">서버 연결 확인</button>
+      <span id="health-status" class="hint" role="status"></span>
+      <a class="hint" href="/docs">API 문서</a>
+    </footer>
+  </body>
+</html>

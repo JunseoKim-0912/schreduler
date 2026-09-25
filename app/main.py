@@ -1,7 +1,9 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.compliance_reports import router as compliance_reports_router
 from app.api.daily_actual_logs import router as daily_actual_logs_router
@@ -25,6 +27,8 @@ from app.services.points import register_daily_points_job
 from app.services.sleep_checkin import register_sleep_checkin_job
 
 setup_logging()
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 
 @asynccontextmanager
@@ -58,3 +62,6 @@ app.include_router(personas_router)
 app.include_router(points_router)
 app.include_router(tasks_router)
 app.include_router(users_router)
+
+# API와 같은 서버·같은 origin에서 정적 프론트엔드를 서빙한다 (CORS 불필요). html=True라 /app/에서 index.html이 열린다.
+app.mount("/app", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

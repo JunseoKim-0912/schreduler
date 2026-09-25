@@ -47,8 +47,21 @@ python -m app.scripts.seed_personas  # 기본 페르소나 넣기 (app/scripts/p
 uvicorn app.main:app --reload
 ```
 
+- 웹 화면(개발용 프론트엔드): http://localhost:8000/app/
 - API 문서(Swagger UI): http://localhost:8000/docs
 - 상태 확인: http://localhost:8000/health
+
+### 로컬에서 프론트엔드 실행하기
+
+별도 빌드나 서버 없이, 백엔드가 `frontend/` 폴더를 같은 서버에서 함께 서빙합니다 (CORS 설정 불필요).
+
+1. 위 순서대로 `uvicorn app.main:app --reload`로 서버를 실행합니다.
+2. 브라우저에서 http://localhost:8000/app/ 에 접속합니다.
+3. 상단 **사용자 ID**에 `python -m app.scripts.seed`가 출력한 id를 입력합니다 (브라우저에 저장됨).
+
+이벤트(자연어 일정 추가)·할 일·포인트·페르소나 대화 탭을 쓸 수 있습니다. 자연어 일정 추가와 페르소나 대화는
+`.env`의 `LLM_API_KEY`가 있어야 동작합니다. 프론트엔드 JS 테스트는 `node --test tests/frontend/*.test.mjs`
+(또는 `python -m pytest`가 Node가 있으면 함께 실행)로 돌립니다.
 
 ### Docker
 
@@ -98,6 +111,7 @@ app/
 ├── core/                # 설정, DB, 스케줄러, 인증, 예외 처리, 로깅, OpenAPI 메타데이터
 ├── i18n/                # 언어별 알림 문구·카테고리 라벨 (ko/en)
 └── scripts/             # 시드, Postman 컬렉션 생성, 프롬프트 캐싱 비교
+frontend/                # 빌드 도구 없는 정적 웹 화면 (HTML/CSS/JS), 같은 서버의 /app에서 서빙
 alembic/                 # DB 마이그레이션
 tests/                   # pytest
 docs/                    # 기획서, API 안내, Postman 컬렉션
