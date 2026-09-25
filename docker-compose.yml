@@ -1,0 +1,27 @@
+# 기본: SQLite (named volume에 DB 파일 저장)
+#   docker compose up --build
+# Postgres로 실행:
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build
+
+services:
+  api:
+    build: .
+    image: schreduler-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      # LLM_API_KEY, TELEGRAM_BOT_TOKEN 등 비밀값. 파일이 없어도 실행된다.
+      - path: .env
+        required: false
+    environment:
+      # .env의 DATABASE_URL은 로컬 개발용(상대 경로)이라 컨테이너에서는 쓰지 않는다.
+      # 컨테이너 DB는 DOCKER_DATABASE_URL로 바꾼다.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-sqlite:////app/data/schreduler.db}
+      # .env의 로컬 경로는 컨테이너에 없으므로 비운다 (비어 있으면 FCM 발송은 로그만 남기고 건너뛴다).
+      FIREBASE_CREDENTIALS_PATH: ${DOCKER_FIREBASE_CREDENTIALS_PATH:-}
+    volumes:
+      - sqlite-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  sqlite-data:

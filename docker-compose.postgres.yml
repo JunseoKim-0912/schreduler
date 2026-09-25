@@ -1,0 +1,29 @@
+# docker-compose.yml 위에 겹쳐서 DB만 Postgres로 바꾼다.
+#   docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build
+# 계정/DB 이름은 POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB 환경변수(.env 가능)로 바꿀 수 있다.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-schreduler}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schreduler}
+      POSTGRES_DB: ${POSTGRES_DB:-schreduler}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-schreduler} -d ${POSTGRES_DB:-schreduler}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-schreduler}:${POSTGRES_PASSWORD:-schreduler}@db:5432/${POSTGRES_DB:-schreduler}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
