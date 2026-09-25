@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 sqlalchemy
+psycopg[binary]
 alembic
 python-dotenv
 python-dateutil
@@ -8,5 +9,6 @@ apscheduler
 firebase-admin
 python-telegram-bot
 pytest
+pytest-cov
 httpx
 freezegun

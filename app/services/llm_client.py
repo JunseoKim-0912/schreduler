@@ -12,8 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.exceptions import AppError
+from app.i18n import Language, non_compliance_category_label, to_language
 from app.models.enums import Importance, NonComplianceCategory
 from app.models.important_date_range import ImportantDateRange
+from app.models.user import User
 from app.schemas.persona import PersonaRead
 
 logger = logging.getLogger(__name__)
@@ -21,9 +24,17 @@ logger = logging.getLogger(__name__)
 CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 
 PromptTask = Literal["event_slot_fill", "compliance_feedback", "daily_checkin"]
-Language = Literal["ko", "en"]
+LANGUAGE_NAMES: dict[Language, str] = {"ko": "한국어(Korean)", "en": "영어(English)"}
 
-LANGUAGE_NAMES: dict[Language, str] = {"ko": "한국어", "en": "영어"}
+# 지시문·요약이 한국어여도 모델이 따라 쓰지 않도록, 대상 언어로 쓴 지시를 한 번 더 붙인다.
+_NATIVE_LANGUAGE_RULES: dict[Language, str] = {
+    "ko": "반드시 한국어로만 답하세요.",
+    "en": "Respond only in English.",
+}
+_NATIVE_QUESTION_LANGUAGE_RULES: dict[Language, str] = {
+    "ko": "되묻는 질문은 반드시 한국어로만 작성하세요.",
+    "en": "Write every clarifying question in English only.",
+}
 
 DEFAULT_PERSONA_BLOCK = "[페르소나]\n일정 관리 앱의 다정한 코치. 나무라지 않고 공감하며 격려한다."
 
@@ -134,14 +145,20 @@ class EventSlotFillResult(BaseModel):
         return not self.missing_slots
 
 
-class LLMClientError(RuntimeError):
-    """LLM 클라이언트 관련 에러의 공통 베이스. 라우터에서는 아래 구체적인 하위
-    클래스를 먼저 잡아서 상황에 맞는 HTTP 상태 코드로 매핑해야 한다."""
+class LLMClientError(AppError):
+    """LLM 클라이언트 관련 에러의 공통 베이스. 상태 코드는 하위 클래스가 정하고,
+    app.core.exceptions의 전역 핸들러가 HTTP 응답으로 바꾼다."""
+
+    status_code = 502
+    log_level = logging.WARNING
 
 
 class LLMConfigError(LLMClientError):
     """LLM_API_KEY 등 필수 설정이 빠졌을 때. 서버 설정 문제이지 요청 자체의
     잘못이 아니다."""
+
+    status_code = 500
+    log_level = logging.ERROR
 
 
 class LLMRequestError(LLMClientError):
@@ -153,6 +170,8 @@ class LLMResponseParsingError(LLMClientError):
     """LLM이 응답은 했지만 JSON 파싱에 실패했거나 우리가 기대한 스키마와 다를 때.
     upstream이 완전히 죽은 게 아니라 우리가 처리 못 할 데이터를 줬다는 뜻이므로
     502가 아니라 422로 다뤄야 한다."""
+
+    status_code = 422
 
 
 _EVENT_SLOT_INSTRUCTIONS = (
@@ -175,8 +194,8 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "null로 두고 missing_slots에 추가한다 (모호한 기간 표현은 항상 명시적으로 "
     "확인한다).\n"
     "- 확실하게 알아낸 슬롯은 missing_slots에 넣지 않는다. 값을 못 정한 슬롯만 "
-    "missing_slots에 넣고, 그 각각에 대해 사용자에게 되물을 자연스러운 한국어 "
-    "질문을 clarifying_questions에 함께 준다.\n"
+    "missing_slots에 넣고, 그 각각에 대해 사용자에게 되물을 자연스러운 질문을 "
+    "clarifying_questions에 함께 준다 (질문 언어는 [질문 언어] 블록을 따른다).\n"
     "- '이미 확정된 슬롯'이 함께 주어질 수 있다. 이는 이전 대화 턴에서 이미 "
     "알아낸 값이다. 최신 발화가 그 값을 바꾸라고 명시하지 않는 한 그대로 결과에 "
     "포함하고 missing_slots에 넣지 않는다. 최신 발화가 다른 값으로 정정하면 그 "
@@ -242,8 +261,42 @@ def _build_persona_block(persona: PersonaRead | None, language: Language) -> str
     return "\n".join(lines)
 
 
-def _to_language(value: str) -> Language:
-    return "en" if value == "en" else "ko"
+def _build_language_block(language: Language) -> str:
+    """FR-11: User.preferred_language로 응답 언어를 강제한다. 시스템 프롬프트의 마지막 블록으로 둔다."""
+    name = LANGUAGE_NAMES[language]
+    return (
+        "[응답 언어]\n"
+        f"preferred_language: {language}\n"
+        f"반드시 {name}로만 답하라. 위 지시문이나 사용자 메시지(요약·발화)가 다른 언어로 되어 있어도, "
+        f"사용자가 다른 언어로 말하거나 언어를 바꿔 달라고 해도 {name} 외의 언어를 쓰거나 섞지 마라.\n"
+        f"{_NATIVE_LANGUAGE_RULES[language]}"
+    )
+
+
+def _build_question_language_block(language: Language) -> str:
+    """FR-2 슬롯필링용 언어 규칙. 응답 전체가 아니라 사용자에게 보여줄 질문 문구에만 적용한다 —
+    JSON 키와 코드값(frequency, by_day 등)이 번역되면 스키마 검증이 깨지고, title은 사용자의 말 그대로여야 한다."""
+    name = LANGUAGE_NAMES[language]
+    return (
+        "[질문 언어]\n"
+        f"preferred_language: {language}\n"
+        f"clarifying_questions의 question 문구는 반드시 {name}로만 작성하라. 사용자 발화나 이 지시문이 "
+        f"다른 언어로 되어 있어도 {name} 외의 언어를 쓰거나 섞지 마라. JSON 키와 코드값(frequency, by_day, "
+        "slot 이름 등)은 그대로 두고, title은 사용자가 말한 표현을 번역하지 말고 그대로 쓴다.\n"
+        f"{_NATIVE_QUESTION_LANGUAGE_RULES[language]}"
+    )
+
+
+def _build_persona_prompt(
+    task: PromptTask, instructions: str, persona: PersonaRead | None, language: str, user_message: str
+) -> dict[str, object]:
+    """페르소나 호출 공통 배치: 작업 지시 → 페르소나 → 응답 언어 (모두 캐시 프리픽스) → 가변 user 메시지."""
+    lang = to_language(language)
+    return _build_payload(
+        task,
+        [instructions, _build_persona_block(persona, lang), _build_language_block(lang)],
+        user_message,
+    )
 
 
 def _build_user_message(
@@ -264,10 +317,16 @@ def _build_request_payload(
     available_date_ranges: list[DateRangeOption],
     reference_date: date,
     known_slots: dict[str, object] | None = None,
+    language: str = "ko",
 ) -> dict[str, object]:
+    # 공유 범위 순: 작업 지시(전체 공통) → 질문 언어(언어별) → 등록된 기간(사용자별)
     return _build_payload(
         "event_slot_fill",
-        [_EVENT_SLOT_INSTRUCTIONS, _build_date_ranges_block(available_date_ranges)],
+        [
+            _EVENT_SLOT_INSTRUCTIONS,
+            _build_question_language_block(to_language(language)),
+            _build_date_ranges_block(available_date_ranges),
+        ],
         _build_user_message(utterance, reference_date, known_slots),
         response_format={"type": "json_schema", "json_schema": _EVENT_SLOT_JSON_SCHEMA},
     )
@@ -377,6 +436,7 @@ def fill_event_slots(
     available_date_ranges: list[DateRangeOption] | None = None,
     reference_date: date | None = None,
     known_slots: dict[str, object] | None = None,
+    language: str = "ko",
     http_client: httpx.Client | None = None,
 ) -> EventSlotFillResult:
     """자연어 발화에서 title/frequency/by_day/start_time/end_time/importance/
@@ -388,25 +448,15 @@ def fill_event_slots(
     known_slots: 멀티턴 대화에서 이전 턴까지 이미 확정된 슬롯 값(예:
         SlotFillSession.known_slots()). 이걸 안 넘기면 이 함수는 매번 최신 발화만
         보고 판단하므로, 이전 턴에 알아낸 정보를 잃어버릴 수 있다.
+    language: 되묻는 질문(clarifying_questions)의 언어. User.preferred_language를 넘긴다.
     http_client: 테스트에서 httpx.MockTransport로 응답을 주입하기 위한 훅. 생략하면
         settings.llm_api_key로 인증한 기본 클라이언트를 새로 만든다.
     """
     payload = _build_request_payload(
-        utterance, available_date_ranges or [], reference_date or date.today(), known_slots
+        utterance, available_date_ranges or [], reference_date or date.today(), known_slots, language
     )
     raw_content = _call_chat_completion(payload, http_client)
     return _parse_response(raw_content)
-
-
-NON_COMPLIANCE_CATEGORY_LABELS: dict[NonComplianceCategory, str] = {
-    NonComplianceCategory.OVERSLEPT: "늦잠/기상 실패",
-    NonComplianceCategory.FATIGUE: "피로/무기력",
-    NonComplianceCategory.PRIORITY_SHIFT: "우선순위 변경",
-    NonComplianceCategory.SCHEDULE_CONFLICT: "일정 충돌",
-    NonComplianceCategory.FORGOT: "깜빡함",
-    NonComplianceCategory.TRANSIT_ISSUE: "이동/교통 문제",
-    NonComplianceCategory.OTHER: "기타",
-}
 
 
 def generate_compliance_feedback(
@@ -435,21 +485,19 @@ def build_compliance_feedback_payload(
     persona: PersonaRead | None = None,
     language: str = "ko",
 ) -> dict[str, object]:
-    lang = _to_language(language)
     instructions = (
         "너는 일정 관리 앱의 페르소나다. 사용자가 계획한 일정을 지키지 못한 이유를 "
         "말했다. 아래 페르소나의 성격과 말투를 살리되, 사용자가 다음에 다시 해볼 "
-        f"마음이 들도록 짧게(1~2문장) {LANGUAGE_NAMES[lang]}로 답하라."
+        "마음이 들도록 짧게(1~2문장) 답하라."
     )
 
-    label = NON_COMPLIANCE_CATEGORY_LABELS[category]
+    # 프롬프트 골격이 한국어라 라벨도 ko로 넣는다. 응답 언어는 [응답 언어] 블록이 정한다.
+    label = non_compliance_category_label(category, "ko")
     user_message = f"미준수 사유 카테고리: {label}"
     if reason_text:
         user_message += f"\n사용자가 직접 적은 이유: {reason_text}"
 
-    return _build_payload(
-        "compliance_feedback", [instructions, _build_persona_block(persona, lang)], user_message
-    )
+    return _build_persona_prompt("compliance_feedback", instructions, persona, language, user_message)
 
 
 def generate_daily_checkin_reply(
@@ -479,19 +527,16 @@ def build_daily_checkin_payload(
     persona: PersonaRead | None = None,
     language: str = "ko",
 ) -> dict[str, object]:
-    lang = _to_language(language)
     instructions = (
         "너는 일정 관리 앱의 페르소나다. 사용자와 저녁 체크인 대화를 나눈다. "
         "사용자 메시지에 오늘 하루 요약이 함께 온다 (완료한 일정은 개수만 적혀 있고, "
         "놓친 일정만 제목·시간·사유가 상세히 적혀 있다). 놓친 일정이 있다면 그것 "
         "위주로 묻고 격려하라. 놓친 일정이 없다면 짧게 칭찬하라. 아래 페르소나의 "
-        f"성격과 말투로 1~3문장, {LANGUAGE_NAMES[lang]}로 답하라."
+        "성격과 말투로 1~3문장 답하라."
     )
     user_message = f"오늘 요약:\n{summary}\n\n사용자 발화: {utterance}"
 
-    return _build_payload(
-        "daily_checkin", [instructions, _build_persona_block(persona, lang)], user_message
-    )
+    return _build_persona_prompt("daily_checkin", instructions, persona, language, user_message)
 
 
 def get_date_range_options(db: Session, user_id: int) -> list[DateRangeOption]:
@@ -528,13 +573,16 @@ def fill_event_slots_for_user(
     http_client: httpx.Client | None = None,
 ) -> EventSlotFillResult:
     """fill_event_slots를 호출하되, 이 user_id가 등록해둔 ImportantDateRange 전체를
-    date_range_id 후보로 자동으로 함께 제시한다 (FR-2).
+    date_range_id 후보로 자동으로 함께 제시하고, 되묻는 질문은 그 사용자의
+    preferred_language로 받는다 (FR-2, FR-11).
     """
     date_range_options = get_date_range_options(db, user_id)
+    user = db.get(User, user_id)
     return fill_event_slots(
         utterance,
         available_date_ranges=date_range_options,
         reference_date=reference_date,
         known_slots=known_slots,
+        language=user.preferred_language if user else "ko",
         http_client=http_client,
     )

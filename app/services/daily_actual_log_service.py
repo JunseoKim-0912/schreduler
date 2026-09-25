@@ -6,16 +6,11 @@ from sqlalchemy.orm import Session
 from app.models.daily_actual_log import DailyActualLog
 from app.models.user import User
 from app.schemas.daily_actual_log import DailyActualLogCreate, DailyActualLogUpdate
-
-
-def _ensure_user_exists(db: Session, data: DailyActualLogCreate | DailyActualLogUpdate) -> None:
-    user_id = getattr(data, "user_id", None)
-    if user_id is not None and db.get(User, user_id) is None:
-        raise ValueError(f"user_id {user_id} does not exist")
+from app.services.common import require
 
 
 def create_daily_actual_log(db: Session, data: DailyActualLogCreate) -> DailyActualLog:
-    _ensure_user_exists(db, data)
+    require(db, User, data.user_id, "user_id")
     daily_log = DailyActualLog(**data.model_dump())
     db.add(daily_log)
     db.commit()
@@ -41,7 +36,6 @@ def update_daily_actual_log(
     if daily_log is None:
         return None
 
-    _ensure_user_exists(db, data)
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(daily_log, field, value)
 

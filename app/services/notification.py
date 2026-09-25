@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Literal
 
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -10,9 +11,14 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
 from app.i18n import render_notification
+from app.models.enums import EventType
 from app.models.event_instance import EventInstance
 
 logger = logging.getLogger(__name__)
+
+NotificationKind = Literal["start", "end", "deadline_reminder"]
+
+DEADLINE_REMINDER_OFFSET = timedelta(minutes=1440)
 
 
 def _get_firebase_app() -> firebase_admin.App | None:
@@ -69,7 +75,7 @@ def send_push_notification(device_token: str, title: str, body: str) -> None:
     logger.info("[FCM 발송 성공] token=%s message_id=%s", device_token, message_id)
 
 
-def _send_notification(event_instance_id: int, kind: str) -> None:
+def _send_notification(event_instance_id: int, kind: NotificationKind) -> None:
     """스케줄된 job이 실제로 실행될 때 호출된다.
 
     job이 실행되는 시점에 DB에서 다시 조회한다 — 스케줄을 등록한 시점과 실제
@@ -88,6 +94,9 @@ def _send_notification(event_instance_id: int, kind: str) -> None:
         if kind == "start":
             title = render_notification("event_start.title", language, title=event.title)
             body = render_notification("event_start.body", language)
+        elif kind == "deadline_reminder":
+            title = render_notification("deadline_reminder.title", language, title=event.title)
+            body = render_notification("deadline_reminder.body", language)
         else:
             title = render_notification("event_end.title", language, title=event.title)
             body = render_notification("event_end.body", language)
@@ -109,29 +118,30 @@ def _send_notification(event_instance_id: int, kind: str) -> None:
 
 
 def schedule_event_instance_notifications(instance: EventInstance) -> None:
-    """EventInstance의 시작 시각과 종료 시각에 각각 알림 job을 등록한다 (FR-4).
+    """EventInstance의 알림 job을 등록한다 (FR-4).
 
-    instance.event.start_time/end_time의 시각(time-of-day)을 instance.date와
-    합쳐 실제 발송 시각을 계산한다. 같은 instance로 다시 호출해도 job id가
+    SCHEDULED는 시작/종료 알림, DEADLINE은 마감 1일 전 리마인더와 마감 시각 완료 확인
+    알림을 등록한다. 이벤트의 시각(time-of-day)을 instance.date와 합쳐 실제 발송 시각을
+    계산한다. 같은 instance로 다시 호출해도 job id가
     같아서(replace_existing=True) 중복 등록되지 않는다.
     """
     event = instance.event
-    start_at = datetime.combine(instance.date, event.start_time.time())
     end_at = datetime.combine(instance.date, event.end_time.time())
 
+    if event.event_type == EventType.DEADLINE:
+        # 마감 이벤트는 시작 시각이 없으므로 시작 알림 대신 마감 하루 전 리마인더를 보낸다.
+        _add_notification_job(instance.id, "deadline_reminder", end_at - DEADLINE_REMINDER_OFFSET)
+    else:
+        _add_notification_job(instance.id, "start", datetime.combine(instance.date, event.start_time.time()))
+    _add_notification_job(instance.id, "end", end_at)
+
+
+def _add_notification_job(event_instance_id: int, kind: NotificationKind, run_date: datetime) -> None:
     scheduler.add_job(
         _send_notification,
         trigger="date",
-        run_date=start_at,
-        args=[instance.id, "start"],
-        id=f"event_instance_{instance.id}_start",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        _send_notification,
-        trigger="date",
-        run_date=end_at,
-        args=[instance.id, "end"],
-        id=f"event_instance_{instance.id}_end",
+        run_date=run_date,
+        args=[event_instance_id, kind],
+        id=f"event_instance_{event_instance_id}_{kind}",
         replace_existing=True,
     )

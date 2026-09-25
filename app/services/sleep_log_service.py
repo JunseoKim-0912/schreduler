@@ -3,19 +3,15 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import InvalidInputError
 from app.models.sleep_log import SleepLog
 from app.models.user import User
 from app.schemas.sleep_log import SleepLogCreate, SleepLogUpdate
-
-
-def _ensure_user_exists(db: Session, data: SleepLogCreate | SleepLogUpdate) -> None:
-    user_id = getattr(data, "user_id", None)
-    if user_id is not None and db.get(User, user_id) is None:
-        raise ValueError(f"user_id {user_id} does not exist")
+from app.services.common import require
 
 
 def create_sleep_log(db: Session, data: SleepLogCreate) -> SleepLog:
-    _ensure_user_exists(db, data)
+    require(db, User, data.user_id, "user_id")
     sleep_log = SleepLog(**data.model_dump())
     db.add(sleep_log)
     db.commit()
@@ -39,8 +35,12 @@ def update_sleep_log(db: Session, sleep_log_id: int, data: SleepLogUpdate) -> Sl
     if sleep_log is None:
         return None
 
-    _ensure_user_exists(db, data)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    bedtime = changes.get("actual_bedtime", sleep_log.actual_bedtime)
+    wake_time = changes.get("actual_wake_time", sleep_log.actual_wake_time)
+    if wake_time <= bedtime:
+        raise InvalidInputError("actual_wake_time must be after actual_bedtime")
+    for field, value in changes.items():
         setattr(sleep_log, field, value)
 
     db.commit()

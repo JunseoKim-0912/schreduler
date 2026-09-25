@@ -6,9 +6,7 @@ from app.core.scheduler import scheduler, shutdown_scheduler, start_scheduler
 from app.models import Base, User
 from app.services import daily_checkin as daily_checkin_module
 from app.services.daily_checkin import (
-    DAILY_CHECKIN_BODY,
     DAILY_CHECKIN_JOB_ID,
-    DAILY_CHECKIN_TITLE,
     register_daily_checkin_job,
     send_daily_checkin_reminders,
 )
@@ -99,4 +97,4 @@ def test_send_daily_checkin_to_user_sends_when_device_token_present(
 
     daily_checkin_module._send_daily_checkin_to_user(user)
 
-    assert sent == [("fake-device-token", DAILY_CHECKIN_TITLE, DAILY_CHECKIN_BODY)]
+    assert sent == [("fake-device-token", "[Schreduler] 오늘 하루 체크인", "오늘 하루 어떻게 보내셨나요?")]

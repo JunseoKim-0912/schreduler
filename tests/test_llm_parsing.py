@@ -414,3 +414,106 @@ def test_parse_event_returns_500_when_api_key_missing(
 
     assert response.status_code == 500
     assert "detail" in response.json()
+
+
+# --- 되묻는 질문 언어 (FR-2 + FR-11) ---
+
+
+def _add_user(engine, language: str) -> int:
+    with Session(engine) as session:
+        user = User(name="Alex", preferred_language=language)
+        session.add(user)
+        session.commit()
+        return user.id
+
+
+def _question_turn(question: dict, captured: list[dict]):
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(json.loads(request.content))
+        return _chat_response(
+            {
+                "title": "Algorithms study",
+                "frequency": None,
+                "by_day": None,
+                "start_time": None,
+                "end_time": None,
+                "importance": None,
+                "date_range_id": None,
+                "missing_slots": [question["slot"]],
+                "clarifying_questions": [question],
+            }
+        )
+
+    return handler
+
+
+def test_english_user_gets_clarifying_question_in_english(
+    client: TestClient, engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    en_user_id = _add_user(engine, "en")
+    captured: list[dict] = []
+    english_question = {"slot": "frequency", "question": "How often do you want to repeat it?"}
+    _mock_llm(monkeypatch, [_question_turn(english_question, captured)])
+
+    response = client.post("/events/parse", json={"user_id": en_user_id, "utterance": "I need to study algorithms"})
+
+    assert response.status_code == 200
+    assert response.json()["next_question"] == english_question
+
+    system_message = captured[0]["messages"][0]["content"]
+    assert "[질문 언어]" in system_message
+    assert "preferred_language: en" in system_message
+    assert "반드시 영어(English)로만 작성하라" in system_message
+    assert "Write every clarifying question in English only." in system_message
+    assert "한국어" not in system_message  # 지시문 어디에도 언어가 하드코딩돼 있지 않다
+    assert "[질문 언어]" not in captured[0]["messages"][1]["content"]
+
+
+def test_korean_user_gets_korean_question_rule(client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[dict] = []
+    _mock_llm(monkeypatch, [_question_turn({"slot": "frequency", "question": "얼마나 자주 반복하나요?"}, captured)])
+
+    client.post("/events/parse", json={"user_id": user_id, "utterance": "알고리즘 스터디 해야 돼"})
+
+    system_message = captured[0]["messages"][0]["content"]
+    assert "preferred_language: ko" in system_message
+    assert "되묻는 질문은 반드시 한국어로만 작성하세요." in system_message
+    assert "Write every clarifying question in English only." not in system_message
+
+
+def test_question_language_follows_latest_preference_between_turns(
+    client: TestClient, engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = _add_user(engine, "ko")
+    captured: list[dict] = []
+    _mock_llm(
+        monkeypatch,
+        [
+            _question_turn({"slot": "frequency", "question": "얼마나 자주 반복하나요?"}, captured),
+            _question_turn({"slot": "frequency", "question": "How often do you want to repeat it?"}, captured),
+        ],
+    )
+
+    session_id = client.post("/events/parse", json={"user_id": user_id, "utterance": "알고리즘 스터디"}).json()[
+        "session_id"
+    ]
+    with Session(engine) as session:
+        session.get(User, user_id).preferred_language = "en"
+        session.commit()
+    client.post("/events/parse", json={"user_id": user_id, "utterance": "weekly", "session_id": session_id})
+
+    assert "preferred_language: ko" in captured[0]["messages"][0]["content"]
+    assert "preferred_language: en" in captured[1]["messages"][0]["content"]
+
+
+def test_question_language_changes_cache_key_but_not_task_instructions() -> None:
+    ko = llm_client_module._build_request_payload("헬스", [], date(2026, 9, 17), language="ko")
+    en = llm_client_module._build_request_payload("gym", [], date(2026, 9, 17), language="en")
+
+    assert ko["prompt_cache_key"] != en["prompt_cache_key"]
+    ko_blocks = ko["messages"][0]["content"].split("\n\n")
+    en_blocks = en["messages"][0]["content"].split("\n\n")
+    assert ko_blocks[0] == en_blocks[0]  # 작업 지시문은 언어와 무관하게 동일
+    assert len(en_blocks) == 3
+    assert en_blocks[1].startswith("[질문 언어]\npreferred_language: en")
+    assert en_blocks[2] == "등록된 기간(date_range) 후보: []"

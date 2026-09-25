@@ -8,7 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
+from app.core.exceptions import NotFoundError
 from app.core.scheduler import scheduler
+from app.i18n import render_notification
 from app.models.user import User
 from app.schemas.daily_checkin import DailyCheckinMessageResponse
 from app.schemas.persona import PersonaRead
@@ -24,9 +26,6 @@ DAILY_CHECKIN_CONTEXT_TYPE = "daily_checkin"
 DAILY_CHECKIN_HOUR = 21
 DAILY_CHECKIN_MINUTE = 0
 
-DAILY_CHECKIN_TITLE = "[Schreduler] 오늘 하루 체크인"
-DAILY_CHECKIN_BODY = "오늘 하루 어떻게 보내셨나요?"
-
 
 def _send_daily_checkin_to_user(user: User) -> None:
     # User에 아직 fcm_token 필드가 없어서(디바이스 등록 전) 항상 None이다.
@@ -35,7 +34,11 @@ def _send_daily_checkin_to_user(user: User) -> None:
     if not device_token:
         logger.info("[하루 체크인] device_token 없음 - 발송 생략. user_id=%s", user.id)
         return
-    send_push_notification(device_token, DAILY_CHECKIN_TITLE, DAILY_CHECKIN_BODY)
+    send_push_notification(
+        device_token,
+        render_notification("daily_checkin.title", user.preferred_language),
+        render_notification("daily_checkin.body", user.preferred_language),
+    )
 
 
 def send_daily_checkin_reminders() -> None:
@@ -68,7 +71,7 @@ def handle_daily_checkin_message(
     """
     user = db.get(User, user_id)
     if user is None:
-        raise ValueError(f"user_id {user_id} does not exist")
+        raise NotFoundError(f"user_id {user_id} does not exist")
 
     conversation = resolve_conversation(db, user, DAILY_CHECKIN_CONTEXT_TYPE, conversation_id)
     summary = build_daily_checkin_summary(db, user_id, target_date or dt_date.today())

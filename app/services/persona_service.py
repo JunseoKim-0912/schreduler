@@ -3,17 +3,18 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.persona import Persona
 from app.models.persona_conversation import PersonaConversation
 from app.models.user import User
 from app.schemas.persona import PersonaCreate, PersonaUpdate
 
 
-class PersonaAlreadyExistsError(Exception):
+class PersonaAlreadyExistsError(ConflictError):
     pass
 
 
-class PersonaInUseError(Exception):
+class PersonaInUseError(ConflictError):
     pass
 
 
@@ -71,7 +72,7 @@ def delete_persona(db: Session, name: str) -> bool:
 
 def select_persona_for_user(db: Session, user: User, persona_name: str | None) -> User:
     if persona_name is not None and db.get(Persona, persona_name) is None:
-        raise ValueError(f"persona '{persona_name}' does not exist")
+        raise NotFoundError(f"persona '{persona_name}' does not exist")
 
     user.selected_persona_id = persona_name
     db.commit()

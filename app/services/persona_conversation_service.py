@@ -5,12 +5,13 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import NotFoundError
 from app.models.persona_conversation import PersonaConversation
 from app.models.user import User
 from app.schemas.persona import ConversationMessage
 
 
-class ConversationNotFoundError(ValueError):
+class ConversationNotFoundError(NotFoundError):
     pass
 
 

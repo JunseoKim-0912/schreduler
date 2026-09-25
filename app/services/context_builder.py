@@ -2,20 +2,20 @@ from __future__ import annotations
 
 from datetime import date as dt_date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.i18n import non_compliance_category_label
 from app.models.enums import EventInstanceStatus
 from app.models.event import Event
 from app.models.event_instance import EventInstance
-from app.services.llm_client import NON_COMPLIANCE_CATEGORY_LABELS
 
 
 def _describe_missed_reason(instance: EventInstance) -> str | None:
     if not instance.compliance_reports:
         return None
     report = instance.compliance_reports[-1]  # 가장 최근에 기록된 사유
-    label = NON_COMPLIANCE_CATEGORY_LABELS[report.reason_category]
+    label = non_compliance_category_label(report.reason_category, "ko")  # LLM 프롬프트용 요약이라 한국어
     if report.reason_text:
         return f"{label} ({report.reason_text})"
     return label
@@ -23,7 +23,10 @@ def _describe_missed_reason(instance: EventInstance) -> str | None:
 
 def _describe_missed_instance(instance: EventInstance) -> str:
     event = instance.event
-    time_range = f"{event.start_time.strftime('%H:%M')}~{event.end_time.strftime('%H:%M')}"
+    if event.start_time is None:
+        time_range = f"{event.end_time.strftime('%H:%M')} 마감"
+    else:
+        time_range = f"{event.start_time.strftime('%H:%M')}~{event.end_time.strftime('%H:%M')}"
     reason = _describe_missed_reason(instance)
     detail = f"사유: {reason}" if reason else "사유 미기록"
     return f"{event.title} ({time_range}) - {detail}"
@@ -41,7 +44,7 @@ def build_daily_checkin_summary(db: Session, user_id: int, target_date: dt_date)
         select(EventInstance)
         .join(Event, EventInstance.event_id == Event.id)
         .where(Event.user_id == user_id, EventInstance.date == target_date)
-        .order_by(Event.start_time)
+        .order_by(func.coalesce(Event.start_time, Event.end_time))
     )
     instances = db.execute(stmt).scalars().all()
 

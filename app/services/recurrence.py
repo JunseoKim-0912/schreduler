@@ -28,8 +28,10 @@ def generate_event_instances(session: Session, event: Event) -> list[EventInstan
     if date_range is None:
         raise ValueError("event.date_range_id가 가리키는 ImportantDateRange가 없습니다")
 
-    dtstart = datetime.combine(date_range.start_date, event.start_time.time())
-    until = datetime.combine(date_range.end_date, event.start_time.time())
+    # DEADLINE 이벤트는 start_time이 없으므로 마감 시각(end_time)을 기준으로 반복 날짜를 계산한다.
+    anchor = event.anchor_time.time()
+    dtstart = datetime.combine(date_range.start_date, anchor)
+    until = datetime.combine(date_range.end_date, anchor)
 
     rule = rrulestr(event.recurrence_rule, dtstart=dtstart)
     occurrence_dates = {occurrence.date() for occurrence in rule.between(dtstart, until, inc=True)}

@@ -4,10 +4,25 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.schemas.common import NonEmptyStr, PartialUpdate
+
 
 class DateRangeCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "user_id": 1,
+                    "name": "2026 가을학기",
+                    "start_date": "2026-09-01",
+                    "end_date": "2026-12-20"
+                }
+            ]
+        },
+    )
+
     user_id: int
-    name: str
+    name: NonEmptyStr
     start_date: date
     end_date: date
 
@@ -18,8 +33,18 @@ class DateRangeCreate(BaseModel):
         return self
 
 
-class DateRangeUpdate(BaseModel):
-    name: str | None = None
+class DateRangeUpdate(PartialUpdate):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "end_date": "2026-12-22"
+                }
+            ]
+        },
+    )
+
+    name: NonEmptyStr | None = None
     start_date: date | None = None
     end_date: date | None = None
 

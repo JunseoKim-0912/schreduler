@@ -10,6 +10,7 @@ from app.models import (
     Event,
     EventInstance,
     EventInstanceStatus,
+    EventType,
     NonComplianceCategory,
     User,
 )
@@ -182,3 +183,26 @@ def test_build_daily_checkin_summary_only_includes_that_users_instances(
     summary = build_daily_checkin_summary(session, user1.id, date(2026, 9, 17))
 
     assert summary == "오늘 계획한 0개 중 0개 완료."
+
+
+def test_missed_deadline_is_described_by_due_time_and_sorted_with_scheduled(session: Session) -> None:
+    user = _make_user(session)
+    day = date(2026, 9, 17)
+    deadline = Event(
+        user_id=user.id, title="과제 제출", event_type=EventType.DEADLINE, start_time=None, end_time=datetime(2026, 9, 17, 8, 0)
+    )
+    session.add(deadline)
+    session.flush()
+    session.add(EventInstance(event_id=deadline.id, date=day, status=EventInstanceStatus.MISSED))
+    _make_instance(
+        session, user, title="수업", start=datetime(2026, 9, 17, 9, 0), end=datetime(2026, 9, 17, 10, 0),
+        status=EventInstanceStatus.MISSED, instance_date=day,
+    )
+    session.flush()
+
+    summary = build_daily_checkin_summary(session, user.id, day)
+
+    assert summary.splitlines()[2:] == [
+        "- 과제 제출 (08:00 마감) - 사유 미기록",
+        "- 수업 (09:00~10:00) - 사유 미기록",
+    ]

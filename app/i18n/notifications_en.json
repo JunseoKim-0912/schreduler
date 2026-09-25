@@ -1,0 +1,16 @@
+{
+  "event_start.title": "[Schreduler] {title}",
+  "event_start.body": "It's time to start.",
+  "event_end.title": "[Schreduler] {title}",
+  "event_end.body": "Time's up. Please check it off as done.",
+  "deadline_reminder.title": "[Schreduler] {title}",
+  "deadline_reminder.body": "One day left until the deadline. Make sure you're on track.",
+  "escalation.subject_event": "your \"{title}\" event",
+  "escalation.subject_app": "using the app",
+  "escalation.week_1": "[Schreduler] We haven't heard from you about {subject} for a week. How are you doing?",
+  "escalation.week_3": "[Schreduler] We haven't heard from you about {subject} for 3 weeks, so we'll stop sending notifications. To start again, check off any event as done in the app.",
+  "sleep_checkin.title": "[Schreduler] Sleep check-in",
+  "sleep_checkin.body": "What time did you go to bed last night, and when did you wake up today?",
+  "daily_checkin.title": "[Schreduler] Daily check-in",
+  "daily_checkin.body": "How did your day go?"
+}

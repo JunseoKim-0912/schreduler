@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Enum, ForeignKey, String
+from sqlalchemy import Boolean, CheckConstraint, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.models.base import Base
-from app.models.enums import ChildEventKind, Importance
+from app.models.enums import ChildEventKind, EventType, Importance
 
 if TYPE_CHECKING:
     from app.models.event_instance import EventInstance
@@ -18,11 +18,24 @@ if TYPE_CHECKING:
 
 class Event(Base):
     __tablename__ = "events"
+    __table_args__ = (
+        CheckConstraint(
+            "(event_type = 'SCHEDULED' AND start_time IS NOT NULL) "
+            "OR (event_type = 'DEADLINE' AND start_time IS NULL)",
+            name="ck_events_event_type_start_time",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     title: Mapped[str] = mapped_column(String(200))
-    start_time: Mapped[datetime]
+    event_type: Mapped[EventType] = mapped_column(
+        Enum(EventType, native_enum=False, name="event_type"),
+        default=EventType.SCHEDULED,
+        server_default=EventType.SCHEDULED.name,
+    )
+    # DEADLINE이면 NULL이고 end_time이 마감 일시다.
+    start_time: Mapped[datetime | None] = mapped_column(nullable=True)
     end_time: Mapped[datetime]
     # NULL == "없음" (수면), 그 외에는 3절 중요도 체계(1~5, MAX)를 따른다.
     importance: Mapped[Importance | None] = mapped_column(
@@ -51,6 +64,13 @@ class Event(Base):
         back_populates="event", cascade="all, delete-orphan"
     )
     location: Mapped["Location | None"] = relationship(back_populates="events")
+
+    @property
+    def anchor_time(self) -> datetime:
+        """반복 날짜 계산과 정렬의 기준 시각. SCHEDULED는 시작 시각, DEADLINE은 마감 시각이다."""
+        if self.event_type == EventType.DEADLINE or self.start_time is None:
+            return self.end_time
+        return self.start_time
 
     @validates("importance")
     def validate_importance(self, key: str, value: object) -> Importance | None:

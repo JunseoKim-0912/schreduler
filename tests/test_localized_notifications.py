@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import Base, EngagementScope, Event, EventInstance, EventInstanceStatus, User
+from app.services import daily_checkin as daily_checkin_module
 from app.services import engagement_service
 from app.services import notification as notification_module
 from app.services import sleep_checkin as sleep_checkin_module
@@ -186,3 +187,22 @@ def test_escalation_message_uses_user_language(
     _escalate(session, language, scope, weeks)
 
     assert sent_telegrams == [expected]
+
+
+# --- FR-8 저녁 체크인 ---
+
+
+def test_daily_checkin_is_sent_in_each_users_language(
+    engine, session: Session, sent_pushes: list, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(daily_checkin_module, "send_push_notification", lambda t, title, body: sent_pushes.append((t, title, body)))
+    monkeypatch.setattr(daily_checkin_module, "SessionLocal", sessionmaker(bind=engine))
+    session.add_all([User(name="June", preferred_language="ko"), User(name="Alex", preferred_language="en")])
+    session.commit()
+
+    daily_checkin_module.send_daily_checkin_reminders()
+
+    assert sent_pushes == [
+        ("device-token", "[Schreduler] 오늘 하루 체크인", "오늘 하루 어떻게 보내셨나요?"),
+        ("device-token", "[Schreduler] Daily check-in", "How did your day go?"),
+    ]

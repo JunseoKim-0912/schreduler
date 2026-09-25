@@ -5,8 +5,23 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
+from app.schemas.common import PartialUpdate
+
 
 class SleepLogCreate(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "user_id": 1,
+                    "date": "2026-09-24",
+                    "actual_bedtime": "2026-09-23T23:40:00",
+                    "actual_wake_time": "2026-09-24T07:10:00"
+                }
+            ]
+        },
+    )
+
     user_id: int
     date: dt_date
     actual_bedtime: datetime
@@ -19,7 +34,17 @@ class SleepLogCreate(BaseModel):
         return self
 
 
-class SleepLogUpdate(BaseModel):
+class SleepLogUpdate(PartialUpdate):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "actual_wake_time": "2026-09-24T07:30:00"
+                }
+            ]
+        },
+    )
+
     date: dt_date | None = None
     actual_bedtime: datetime | None = None
     actual_wake_time: datetime | None = None

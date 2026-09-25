@@ -1,21 +1,18 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import ConflictError
+from app.models.event import Event
 from app.models.location import Location
 from app.models.user import User
 from app.schemas.location import LocationCreate, LocationUpdate
-
-
-def _ensure_user_exists(db: Session, data: LocationCreate | LocationUpdate) -> None:
-    user_id = getattr(data, "user_id", None)
-    if user_id is not None and db.get(User, user_id) is None:
-        raise ValueError(f"user_id {user_id} does not exist")
+from app.services.common import require
 
 
 def create_location(db: Session, data: LocationCreate) -> Location:
-    _ensure_user_exists(db, data)
+    require(db, User, data.user_id, "user_id")
     location = Location(**data.model_dump())
     db.add(location)
     db.commit()
@@ -39,7 +36,6 @@ def update_location(db: Session, location_id: int, data: LocationUpdate) -> Loca
     if location is None:
         return None
 
-    _ensure_user_exists(db, data)
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(location, field, value)
 
@@ -52,6 +48,10 @@ def delete_location(db: Session, location_id: int) -> bool:
     location = db.get(Location, location_id)
     if location is None:
         return False
+
+    in_use = db.scalar(select(func.count()).select_from(Event).where(Event.location_id == location_id))
+    if in_use:
+        raise ConflictError(f"location {location_id} is used by {in_use} events")
 
     db.delete(location)
     db.commit()

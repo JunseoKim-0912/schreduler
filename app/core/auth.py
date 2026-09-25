@@ -8,7 +8,8 @@ from app.models.user import User
 
 
 def get_current_user(
-    x_user_id: int | None = Header(default=None), db: Session = Depends(get_db)
+    x_user_id: int | None = Header(default=None, description="현재 사용자 id (정식 인증 도입 전 임시 방식)", examples=[1]),
+    db: Session = Depends(get_db),
 ) -> User:
     # 인증이 아직 없어서 X-User-Id 헤더를 현재 사용자로 신뢰한다. 인증 도입 시 이 함수만 교체한다.
     if x_user_id is None:

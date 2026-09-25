@@ -12,6 +12,13 @@ class Importance(enum.IntEnum):
     MAX = 6
 
 
+class EventType(enum.Enum):
+    """SCHEDULED는 start_time~end_time 구간 일정, DEADLINE은 start_time 없이 end_time(마감 일시)만 갖는다."""
+
+    SCHEDULED = "scheduled"
+    DEADLINE = "deadline"
+
+
 class EventInstanceStatus(enum.Enum):
     PENDING = "pending"
     DONE = "done"

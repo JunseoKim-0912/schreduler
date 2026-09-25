@@ -175,7 +175,8 @@ def test_selected_persona_and_language_reach_llm_prompt(
     system_message = llm_requests[0]["messages"][0]["content"]
     assert "Rordon Gamsay" in system_message
     assert "Rordon Gamsay description" in system_message
-    assert "영어로 답하라" in system_message
+    assert "preferred_language: en" in system_message
+    assert system_message.endswith("Respond only in English.")
     assert "I skipped the gym" not in system_message
 
 

@@ -5,6 +5,7 @@ from datetime import date, datetime, time
 import httpx
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import NotFoundError
 from app.models.important_date_range import ImportantDateRange
 from app.schemas.event_parse import EventDraft, EventParseRequest, EventParseResponse
 from app.services.llm_client import LLMResponseParsingError, fill_event_slots_for_user
@@ -83,9 +84,9 @@ def parse_event_utterance(
     else:
         session = get_session(data.session_id)
         if session is None:
-            raise ValueError(f"session_id {data.session_id} does not exist")
+            raise NotFoundError(f"session_id {data.session_id} does not exist")
         if session.user_id != data.user_id:
-            raise ValueError(f"session_id {data.session_id} belongs to a different user")
+            raise NotFoundError(f"session_id {data.session_id} belongs to a different user")
 
     result = fill_event_slots_for_user(
         db,

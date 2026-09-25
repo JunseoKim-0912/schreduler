@@ -2,15 +2,27 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.enums import Importance
+from app.schemas.common import NonEmptyStr
 from app.services.llm_client import ClarifyingQuestion, SlotName
 
 
 class EventParseRequest(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "user_id": 1,
+                    "utterance": "매주 화요일 저녁 7시에 알고리즘 스터디"
+                }
+            ]
+        },
+    )
+
     user_id: int
-    utterance: str
+    utterance: NonEmptyStr
     session_id: str | None = None
 
 

@@ -6,7 +6,7 @@ import pytest
 
 from app.core.config import settings
 from app.scripts.compare_prompt_cache import build_payload_factory, bust_prompt_cache, run_mode, summarize
-from app.services.llm_client import TokenUsage, post_chat_completion
+from app.services.llm_client import LLMRequestError, LLMResponseParsingError, TokenUsage, post_chat_completion
 
 
 @pytest.fixture(autouse=True)
@@ -107,3 +107,18 @@ def test_summarize_warns_when_prompt_too_short(caplog: pytest.LogCaptureFixture)
         summarize({"uncached": short, "cached": short})
 
     assert "OpenAI 캐시 최소 길이(1024)" in caplog.text
+
+
+def test_network_error_becomes_llm_request_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused")
+
+    with pytest.raises(LLMRequestError, match="호출에 실패"):
+        post_chat_completion(build_payload_factory("daily_checkin", None, "ko")(), httpx.Client(transport=httpx.MockTransport(handler)))
+
+
+def test_malformed_body_becomes_parsing_error() -> None:
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"choices": []})))
+
+    with pytest.raises(LLMResponseParsingError, match="형식이 예상과 다릅니다"):
+        post_chat_completion(build_payload_factory("daily_checkin", None, "ko")(), client)

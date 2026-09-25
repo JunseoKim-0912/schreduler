@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.schemas.common import PartialUpdate
 
 
 class LocalizedText(BaseModel):
@@ -28,7 +30,39 @@ class LocalizedExampleLines(BaseModel):
 
 
 class PersonaCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "name": "Hana",
+                    "display_name": {
+                        "ko": "하나",
+                        "en": "Hana"
+                    },
+                    "description": {
+                        "ko": "상냥하고 친절한 대학생",
+                        "en": "Kind and friendly college student"
+                    },
+                    "example_lines": {
+                        "ko": [
+                            {
+                                "situation": "칭찬",
+                                "line": "정말 잘했어요!"
+                            }
+                        ],
+                        "en": [
+                            {
+                                "situation": "praise",
+                                "line": "You did great!"
+                            }
+                        ]
+                    },
+                    "backstory": None
+                }
+            ]
+        },
+    )
 
     name: str = Field(min_length=1, max_length=50)
     display_name: LocalizedText
@@ -37,20 +71,27 @@ class PersonaCreate(BaseModel):
     backstory: LocalizedText | None = None
 
 
-class PersonaUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class PersonaUpdate(PartialUpdate):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "backstory": {
+                        "ko": "심리학과 3학년",
+                        "en": "Third-year psychology student"
+                    }
+                }
+            ]
+        },
+    )
+
+    NULLABLE_FIELDS = frozenset({"example_lines", "backstory"})
 
     display_name: LocalizedText | None = None
     description: LocalizedText | None = None
     example_lines: LocalizedExampleLines | None = None
     backstory: LocalizedText | None = None
-
-    @model_validator(mode="after")
-    def check_required_fields_not_null(self) -> "PersonaUpdate":
-        for field in ("display_name", "description"):
-            if field in self.model_fields_set and getattr(self, field) is None:
-                raise ValueError(f"{field} cannot be null")
-        return self
 
 
 class PersonaRead(BaseModel):
@@ -64,6 +105,16 @@ class PersonaRead(BaseModel):
 
 
 class UserPersonaSelect(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "persona_name": "Hana"
+                }
+            ]
+        },
+    )
+
     persona_name: str | None  # null이면 선택 해제
 
 

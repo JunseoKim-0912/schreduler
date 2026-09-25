@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.enums import ChildEventKind, Importance
+from app.models.enums import ChildEventKind, EventType, Importance
 from app.models.event import Event
 from app.services.recurrence import generate_event_instances
 
@@ -58,7 +58,8 @@ def create_child_event(session: Session, parent_event: Event) -> Event | None:
     날짜들에 맞춰 child의 EventInstance도 함께 생성한다.
     """
     location = parent_event.location
-    if location is None:
+    # 마감(DEADLINE) 이벤트는 "그 장소에 가야 하는 시작 시각"이 없어 이동시간을 붙일 수 없다.
+    if location is None or parent_event.event_type == EventType.DEADLINE:
         return None
 
     should_recur = bool(

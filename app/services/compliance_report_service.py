@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import NotFoundError
 from app.models.compliance_report import ComplianceReport
 from app.models.enums import NonComplianceCategory
 from app.models.event import Event
@@ -14,8 +15,11 @@ from app.schemas.compliance_report import (
     ComplianceReportCategoryStat,
     ComplianceReportCreate,
     ComplianceReportStatsResponse,
+    NonComplianceCategoryRead,
 )
 from app.schemas.persona import PersonaRead
+from app.i18n import non_compliance_category_label
+from app.models.user import User
 from app.services.llm_client import generate_compliance_feedback
 
 
@@ -40,7 +44,7 @@ def create_compliance_report(
     """
     event_instance = db.get(EventInstance, data.event_instance_id)
     if event_instance is None:
-        raise ValueError(f"event_instance_id {data.event_instance_id} does not exist")
+        raise NotFoundError(f"event_instance_id {data.event_instance_id} does not exist")
 
     llm_triggered = _should_trigger_llm(data)
 
@@ -100,8 +104,13 @@ def get_compliance_report_stats(
     for category, count in db.execute(stmt).all():
         counts[category] = count
 
+    language = _stats_language(db, user_id)
     by_category = [
-        ComplianceReportCategoryStat(reason_category=category, count=count)
+        ComplianceReportCategoryStat(
+            reason_category=category,
+            label=non_compliance_category_label(category, language),
+            count=count,
+        )
         for category, count in counts.items()
     ]
     return ComplianceReportStatsResponse(
@@ -110,3 +119,19 @@ def get_compliance_report_stats(
         total=sum(counts.values()),
         by_category=by_category,
     )
+
+
+def _stats_language(db: Session, user_id: int | None) -> str | None:
+    """사용자 지정 통계는 그 사용자의 언어로, 전체 통계는 기본 언어(ko)로 라벨을 붙인다."""
+    if user_id is None:
+        return None
+    user = db.get(User, user_id)
+    return user.preferred_language if user else None
+
+
+def list_non_compliance_categories(language: str) -> list[NonComplianceCategoryRead]:
+    """FR-6 UI 숏컷 버튼용 카테고리 목록 (enum 선언 순서)."""
+    return [
+        NonComplianceCategoryRead(code=category, label=non_compliance_category_label(category, language))
+        for category in NonComplianceCategory
+    ]

@@ -8,6 +8,7 @@ from app.models.enums import (
     EngagementScope,
     EscalationStage,
     EventInstanceStatus,
+    EventType,
     Importance,
     NonComplianceCategory,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "Event",
     "EventInstance",
     "EventInstanceStatus",
+    "EventType",
     "ImportantDateRange",
     "Importance",
     "Location",

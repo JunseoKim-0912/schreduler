@@ -1,0 +1,11 @@
+{
+  "non_compliance_category": {
+    "overslept": { "ko": "늦잠/기상 실패", "en": "Overslept" },
+    "fatigue": { "ko": "피로/무기력", "en": "Fatigue / low energy" },
+    "priority_shift": { "ko": "우선순위 변경", "en": "Priorities changed" },
+    "schedule_conflict": { "ko": "일정 충돌", "en": "Schedule conflict" },
+    "forgot": { "ko": "깜빡함", "en": "Forgot" },
+    "transit_issue": { "ko": "이동/교통 문제", "en": "Transit issue" },
+    "other": { "ko": "기타", "en": "Other" }
+  }
+}

@@ -14,7 +14,10 @@ from app.services.notification import schedule_event_instance_notifications
 def running_scheduler():
     # APScheduler는 스케줄러가 실제로 돌고 있어야 같은 id로 add_job했을 때
     # replace_existing이 제대로 동작한다 (멈춰 있으면 pending 큐에 계속 쌓임).
+    # 다만 테스트 일정은 이미 지난 시각이라, 돌고 있는 스케줄러가 "놓친 잡"으로 처리해
+    # get_job 전에 지워버릴 수 있다 — 시작 직후 pause해서 잡은 저장만 되고 실행되지 않게 한다.
     start_scheduler()
+    scheduler.pause()
     yield
     scheduler.remove_all_jobs()
     shutdown_scheduler()

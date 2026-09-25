@@ -1,0 +1,16 @@
+{
+  "event_start.title": "[Schreduler] {title}",
+  "event_start.body": "지금 시작할 시간이에요.",
+  "event_end.title": "[Schreduler] {title}",
+  "event_end.body": "종료 시각이에요, 완료 체크 해주세요.",
+  "deadline_reminder.title": "[Schreduler] {title}",
+  "deadline_reminder.body": "마감까지 하루 남았어요. 미리 준비해두세요.",
+  "escalation.subject_event": "'{title}' 일정",
+  "escalation.subject_app": "앱 사용",
+  "escalation.week_1": "[Schreduler] {subject}에 대해 1주째 응답이 없어요. 잘 지내고 계신가요?",
+  "escalation.week_3": "[Schreduler] {subject}에 대해 3주째 응답이 없어 더 이상 알림을 보내지 않습니다. 다시 시작하고 싶으면 앱에서 아무 일정이나 완료 체크해주세요.",
+  "sleep_checkin.title": "[Schreduler] 수면 체크인",
+  "sleep_checkin.body": "어제 몇 시에 주무셨고 오늘 몇 시에 일어나셨나요?",
+  "daily_checkin.title": "[Schreduler] 오늘 하루 체크인",
+  "daily_checkin.body": "오늘 하루 어떻게 보내셨나요?"
+}
