@@ -141,15 +141,21 @@ def recalculate_points_since(
     자정 잡이 확정하므로 여기서는 쓰지 않는다.
     """
     today = today or dt_date.today()
-    entries: list[PointsLedger] = []
-    day = start_date
-    while day < today:
-        entries.append(record_daily_points(db, user_id, day))
-        day += timedelta(days=1)
-    if entries:
-        logger.info(
-            "[포인트] 재계산 user_id=%s %s~%s (%d일)", user_id, start_date, today - timedelta(days=1), len(entries)
+    # 일정이 없는 날은 점수가 항상 0이고 배율도 붙지 않으므로, 일정 회차가 있거나 이미 원장 행이 있는 날만
+    # 다시 계산한다. 몇 년 전 할 일을 완료해도 그 사이의 빈 날짜를 전부 쓰지 않는다.
+    in_range = (EventInstance.date >= start_date, EventInstance.date < today)
+    instance_dates = db.execute(
+        select(EventInstance.date).join(Event, EventInstance.event_id == Event.id).where(Event.user_id == user_id, *in_range)
+    ).scalars()
+    ledger_dates = db.execute(
+        select(PointsLedger.date).where(
+            PointsLedger.user_id == user_id, PointsLedger.date >= start_date, PointsLedger.date < today
         )
+    ).scalars()
+
+    entries = [record_daily_points(db, user_id, day) for day in sorted(set(instance_dates) | set(ledger_dates))]
+    if entries:
+        logger.info("[포인트] 재계산 user_id=%s %s 이후 %d일", user_id, start_date, len(entries))
     return entries
 
 

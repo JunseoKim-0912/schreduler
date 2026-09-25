@@ -151,10 +151,24 @@ def test_completing_again_does_not_change_points(client: TestClient, engine) -> 
 
 @freeze_time(TODAY)
 def test_late_completion_fills_days_the_midnight_job_missed(client: TestClient, engine) -> None:
-    """서버가 꺼져 자정 잡이 못 돈 날이 있어도, 뒤늦은 완료가 그 날부터 어제까지 원장을 채운다."""
+    """서버가 꺼져 자정 잡이 못 돈 날이 있어도, 뒤늦은 완료가 일정이 있던 날의 원장을 채운다.
+    일정이 없는 날(9/23)은 점수가 항상 0이라 쓰지 않는다."""
     late = _task(client, "2026-09-22", importance=2)
 
     _complete(client, late)
 
-    assert set(_ledger(engine)) == {date(2026, 9, 22), date(2026, 9, 23)}
+    assert set(_ledger(engine)) == {date(2026, 9, 22)}
     assert _summary(client)["total_points"] == 2
+
+
+@freeze_time(TODAY)
+def test_completing_a_very_old_task_only_recalculates_days_with_events(client: TestClient, engine) -> None:
+    """몇 년 전 할 일을 완료해도 그 사이 빈 날짜 수천 개를 원장에 쓰지 않는다."""
+    old = _task(client, "2020-01-01", importance=3)
+    _complete(client, _task(client, "2026-09-23", importance=1))
+    _run_midnight_job(engine, date(2026, 9, 23))
+
+    _complete(client, old)
+
+    assert set(_ledger(engine)) == {date(2020, 1, 1), date(2026, 9, 23)}
+    assert _summary(client)["total_points"] == 4

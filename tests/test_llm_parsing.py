@@ -517,3 +517,17 @@ def test_question_language_changes_cache_key_but_not_task_instructions() -> None
     assert len(en_blocks) == 3
     assert en_blocks[1].startswith("[질문 언어]\npreferred_language: en")
     assert en_blocks[2] == "등록된 기간(date_range) 후보: []"
+
+
+def test_parse_event_with_unknown_user_is_404_without_calling_llm(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("없는 사용자에 대해 LLM을 호출하면 안 된다")
+
+    _mock_llm(monkeypatch, [handler])
+
+    response = client.post("/events/parse", json={"user_id": 999, "utterance": "스터디"})
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "user_id 999 does not exist"

@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
 from app.models.important_date_range import ImportantDateRange
+from app.models.user import User
 from app.schemas.event_parse import EventDraft, EventParseRequest, EventParseResponse
 from app.services.llm_client import LLMResponseParsingError, fill_event_slots_for_user
+from app.services.common import require
 from app.services.recurrence import build_recurrence_rule
 from app.services.slot_fill_session import SlotFillSession, create_session, get_session
 
@@ -79,6 +81,8 @@ def parse_event_utterance(
     """FR-2 슬롯필링 한 턴을 처리한다: 세션을 찾거나 만들고, LLM을 호출해 슬롯을
     채운 뒤, 아직 부족하면 다음 질문을, 다 채워졌으면 이벤트 초안을 반환한다.
     """
+    # 없는 사용자면 세션을 만들거나 LLM을 부르기 전에 404로 끝낸다.
+    require(db, User, data.user_id, "user_id")
     if data.session_id is None:
         session = create_session(data.user_id)
     else:
