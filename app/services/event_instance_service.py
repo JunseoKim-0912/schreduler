@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import ConflictError, InvalidInputError
 from app.models.enums import CompletionMethod, EventInstanceStatus
 from app.models.event import Event
 from app.models.event_instance import EventInstance
+from app.schemas.event_instance import EventInstanceRead
 from app.services.points import recalculate_points_since
 
 
@@ -73,3 +74,87 @@ def set_instance_times(db: Session, instance: EventInstance, start: datetime | N
             child.end_time_override = child.effective_end + delta
             child.start_time_override = child_start + delta if child_start is not None else None
     return [instance, *children]
+
+
+MAX_RANGE_DAYS = 62
+
+
+def to_event_instance_read(instance: EventInstance) -> EventInstanceRead:
+    return _instance_read(instance.event, instance)
+
+
+def _instance_read(event: Event, instance: EventInstance) -> EventInstanceRead:
+    return EventInstanceRead(
+        event_instance_id=instance.id,
+        event_id=event.id,
+        date=instance.date,
+        status=instance.status,
+        completion_method=instance.completion_method,
+        title=event.title,
+        event_type=event.event_type,
+        importance=event.importance,
+        is_recurring=event.is_recurring,
+        recurrence_rule=event.recurrence_rule,
+        parent_event_id=event.parent_event_id,
+        child_kind=event.child_kind,
+        start_time=instance.effective_start,
+        end_time=instance.effective_end,
+        time_overridden=instance.start_time_override is not None or instance.end_time_override is not None,
+    )
+
+
+def _single_event_read(event: Event) -> EventInstanceRead:
+    return EventInstanceRead(
+        event_instance_id=None,
+        event_id=event.id,
+        date=event.anchor_time.date(),
+        status=EventInstanceStatus.PENDING,
+        completion_method=None,
+        title=event.title,
+        event_type=event.event_type,
+        importance=event.importance,
+        is_recurring=False,
+        recurrence_rule=None,
+        parent_event_id=event.parent_event_id,
+        child_kind=event.child_kind,
+        start_time=event.start_time,
+        end_time=event.end_time,
+        time_overridden=False,
+    )
+
+
+def list_instances_in_range(db: Session, user_id: int, start: date, end: date) -> list[EventInstanceRead]:
+    """start~end(양 끝 포함) 날짜의 회차를 이벤트 정보와 함께 시간순으로. 취소된 회차는 뺀다.
+
+    /events로 만든 비반복 일정은 회차가 생성되지 않으므로, 날짜가 범위 안이면 회차 없이(event_instance_id=null) 넣는다.
+    """
+    if end < start:
+        raise InvalidInputError("end must be on or after start")
+    if (end - start) > timedelta(days=MAX_RANGE_DAYS):
+        raise InvalidInputError(f"the range must be at most {MAX_RANGE_DAYS} days")
+
+    rows = db.execute(
+        select(EventInstance, Event)
+        .join(Event, EventInstance.event_id == Event.id)
+        .where(
+            Event.user_id == user_id,
+            EventInstance.date >= start,
+            EventInstance.date <= end,
+            EventInstance.status != EventInstanceStatus.CANCELLED,
+        )
+    ).all()
+    items = [_instance_read(event, instance) for instance, event in rows]
+
+    has_instances = select(EventInstance.id).where(EventInstance.event_id == Event.id).exists()
+    singles = db.execute(
+        select(Event).where(
+            Event.user_id == user_id,
+            Event.is_recurring.is_(False),
+            ~has_instances,
+            func.coalesce(Event.start_time, Event.end_time) >= datetime.combine(start, datetime.min.time()),
+            func.coalesce(Event.start_time, Event.end_time) < datetime.combine(end + timedelta(days=1), datetime.min.time()),
+        )
+    ).scalars()
+    items.extend(_single_event_read(event) for event in singles)
+
+    return sorted(items, key=lambda item: (item.start_time or item.end_time, item.event_id))

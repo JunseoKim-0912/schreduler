@@ -8,7 +8,7 @@ APP_DESCRIPTION = """
 **Schreduler** — 계획을 "기록"이 아니라 "지키게" 만드는 엄격한 스케쥴 관리 백엔드.
 
 ### 인증
-정식 인증은 아직 없다. `/users/me/*`, `/tasks`, `/points/summary`,
+정식 인증은 아직 없다. `/users/me/*`, `/tasks`, `/event-instances`, `/actions`, `/points/summary`,
 `/compliance-reports/categories`는 **`X-User-Id` 헤더**의 사용자를 현재 사용자로 본다.
 그 밖의 엔드포인트는 요청 본문/쿼리의 `user_id`를 쓴다.
 
@@ -26,6 +26,10 @@ TAGS_METADATA: list[dict[str, Any]] = [
         "name": "events",
         "description": "일정 CRUD와 자연어 일정 관리 (FR-1, FR-2). 자연어로 추가·삭제·수정할 수 있다. "
         "`scheduled`(시작~종료)와 `deadline`(마감만) 두 종류.",
+    },
+    {
+        "name": "event-instances",
+        "description": "일정 회차(EventInstance) — 캘린더용 기간 조회, 회차 완료, 회차 하나 삭제(되돌리기 가능).",
     },
     {"name": "tasks", "description": "`deadline` 일정을 할 일 목록처럼 다루는 편의 API. 별도 테이블 없이 Event/EventInstance를 재사용한다."},
     {"name": "date-ranges", "description": "'2026 가을학기' 같은 중요 기간. 반복 일정의 종료 기준으로 재사용한다 (FR-2)."},

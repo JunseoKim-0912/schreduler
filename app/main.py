@@ -9,6 +9,7 @@ from app.api.actions import router as actions_router
 from app.api.compliance_reports import router as compliance_reports_router
 from app.api.daily_actual_logs import router as daily_actual_logs_router
 from app.api.date_ranges import router as date_ranges_router
+from app.api.event_instances import router as event_instances_router
 from app.api.events import router as events_router
 from app.api.health import router as health_router
 from app.api.locations import router as locations_router
@@ -54,6 +55,7 @@ register_exception_handlers(app)
 
 app.include_router(health_router)
 app.include_router(events_router)
+app.include_router(event_instances_router)
 app.include_router(date_ranges_router)
 app.include_router(locations_router)
 app.include_router(compliance_reports_router)

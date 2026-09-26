@@ -373,6 +373,16 @@ def delete_event_from_ui(db: Session, event: Event) -> ActionHistory:
     return execute(db, user, CommandDescription(intent="delete", title=event.title), [Target(event)], ActionSource.UI).action
 
 
+def delete_instance_from_ui(db: Session, instance: EventInstance) -> ActionHistory:
+    """캘린더에서 반복 일정의 한 회차만 삭제(취소)한다. 자연어 "이번만 삭제"와 같은 경로라 되돌리기 기록이 남는다."""
+    if instance.status == _CANCELLED:
+        raise ConflictError(f"event instance {instance.id} is already cancelled")
+    event = instance.event
+    user = db.get(User, event.user_id)
+    desc = CommandDescription(intent="delete", title=event.title, date=instance.date, scope="instance")
+    return execute(db, user, desc, [Target(event, instance)], ActionSource.UI).action
+
+
 def create_event_from_nl(db: Session, user: User, data: EventCreate) -> ExecutionResult:
     """자연어로 만든 초안을 확정한다. 되돌리기는 만든 이벤트(와 하위 일정)를 지운다."""
     event = build_event(db, data)

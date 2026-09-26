@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Schreduler API",
-    "description": "**Schreduler** — 계획을 \"기록\"이 아니라 \"지키게\" 만드는 엄격한 스케쥴 관리 백엔드.\n\n### 인증\n정식 인증은 아직 없다. `/users/me/*`, `/tasks`, `/points/summary`,\n`/compliance-reports/categories`는 **`X-User-Id` 헤더**의 사용자를 현재 사용자로 본다.\n그 밖의 엔드포인트는 요청 본문/쿼리의 `user_id`를 쓴다.\n\n### 다국어 (FR-11)\n라벨·알림·LLM 응답은 사용자의 `preferred_language`(`ko`/`en`)를 따른다.\n코드값(예: `overslept`, `deadline`)은 언어와 무관하게 그대로다.\n\n### LLM을 호출하는 엔드포인트\n`POST /events/parse`, `POST /daily-actual-logs/checkin`, 그리고 `other` 또는 자유 텍스트가 있는\n`POST /compliance-reports`. LLM 오류는 500(키 미설정) / 502(호출 실패) / 422(응답 형식 오류)로 돌려준다.",
+    "description": "**Schreduler** — 계획을 \"기록\"이 아니라 \"지키게\" 만드는 엄격한 스케쥴 관리 백엔드.\n\n### 인증\n정식 인증은 아직 없다. `/users/me/*`, `/tasks`, `/event-instances`, `/actions`, `/points/summary`,\n`/compliance-reports/categories`는 **`X-User-Id` 헤더**의 사용자를 현재 사용자로 본다.\n그 밖의 엔드포인트는 요청 본문/쿼리의 `user_id`를 쓴다.\n\n### 다국어 (FR-11)\n라벨·알림·LLM 응답은 사용자의 `preferred_language`(`ko`/`en`)를 따른다.\n코드값(예: `overslept`, `deadline`)은 언어와 무관하게 그대로다.\n\n### LLM을 호출하는 엔드포인트\n`POST /events/parse`, `POST /daily-actual-logs/checkin`, 그리고 `other` 또는 자유 텍스트가 있는\n`POST /compliance-reports`. LLM 오류는 500(키 미설정) / 502(호출 실패) / 422(응답 형식 오류)로 돌려준다.",
     "version": "0.1.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -265,6 +265,110 @@
               ]
             },
             "description": "이벤트와 그 반복 인스턴스, 하위 일정(이동시간·준비)을 함께 삭제한다.\n\n삭제 전 상태가 변경 기록(source=ui)으로 남아 `POST /actions/{id}/undo`로 되돌릴 수 있다.\n기록 id는 응답 헤더 `X-Action-Id`로 돌려준다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "event-instances",
+      "description": "일정 회차(EventInstance) — 캘린더용 기간 조회, 회차 완료, 회차 하나 삭제(되돌리기 가능).",
+      "item": [
+        {
+          "name": "기간의 일정 회차 (캘린더)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/event-instances?start=&end=",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "event-instances"
+              ],
+              "query": [
+                {
+                  "key": "start",
+                  "value": "",
+                  "description": "시작 날짜 (포함)",
+                  "disabled": false
+                },
+                {
+                  "key": "end",
+                  "value": "",
+                  "description": "끝 날짜 (포함). start부터 최대 62일",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "start~end 날짜의 일정 회차를 이벤트 정보(제목·종류·중요도·반복 여부)와 함께 시간순으로 돌려준다.\n\n- 취소된(`cancelled`) 회차는 빠진다.\n- `start_time`/`end_time`은 회차별 시간 변경을 반영한 실제 시각이다(타임존 없는 로컬 시각). `deadline`은 `start_time`이 null.\n- 회차가 없는 단발성 일정(`POST /events`로 만든 비반복 일정)은 `event_instance_id: null`로 포함된다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+          },
+          "response": []
+        },
+        {
+          "name": "일정 회차 완료 처리",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/event-instances/:event_instance_id/complete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "event-instances",
+                ":event_instance_id",
+                "complete"
+              ],
+              "variable": [
+                {
+                  "key": "event_instance_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "`scheduled`·`deadline` 모두 가능(`PUT /tasks/{id}/complete`와 같은 처리). 다시 호출해도 결과가 같고,\n지난 날짜면 포인트를 다시 계산한다. 취소된 회차는 409.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
+          },
+          "response": []
+        },
+        {
+          "name": "일정 회차 하나 삭제",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/event-instances/:event_instance_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "event-instances",
+                ":event_instance_id"
+              ],
+              "variable": [
+                {
+                  "key": "event_instance_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "반복 일정의 이 회차만 취소(`cancelled`)한다. 같은 날짜의 하위 일정(이동시간·준비)도 함께 취소된다.\n\n변경 기록(source=ui)이 남아 `POST /actions/{id}/undo`로 되돌릴 수 있고, 기록 id는 응답 헤더 `X-Action-Id`로 준다.\n일정 전체를 지우려면 `DELETE /events/{event_id}`.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
           },
           "response": []
         }

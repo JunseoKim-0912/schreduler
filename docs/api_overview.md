@@ -27,7 +27,7 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 
 | 방식 | 해당 엔드포인트 |
 |---|---|
-| **`X-User-Id: <user id>` 헤더** | `/users/me/*`, `/tasks*`, `/points/summary`, `/compliance-reports/categories`, `/actions*` |
+| **`X-User-Id: <user id>` 헤더** | `/users/me/*`, `/tasks*`, `/event-instances*`, `/points/summary`, `/compliance-reports/categories`, `/actions*` |
 | 요청 본문/쿼리의 `user_id` | 그 밖의 전부 (`/events`, `/date-ranges`, `/locations`, `/sleep-logs`, `/daily-actual-logs` 등) |
 
 헤더가 없으면 `401`, 없는 사용자면 `404`. 정식 인증이 들어오면 헤더 방식이 토큰으로 바뀔 예정이므로,
@@ -254,6 +254,20 @@ GET /points/summary
 
 > `scheduled` → `deadline`으로 바꿀 때는 `{"event_type": "deadline", "start_time": null}`을 함께 보낸다(하나만 보내면 422).
 
+### event-instances — 일정 회차 (캘린더) 🔑
+
+| 메서드 · 경로 | 설명 | 요청 | 응답 |
+|---|---|---|---|
+| `GET /event-instances` | 기간의 회차 (`?start=YYYY-MM-DD&end=YYYY-MM-DD`, 양 끝 포함, 최대 62일). 취소된 회차 제외 | | `EventInstanceRead[]` |
+| `PUT /event-instances/{event_instance_id}/complete` | 회차 완료 처리 (`scheduled`·`deadline` 모두) | | `EventInstanceRead` |
+| `DELETE /event-instances/{event_instance_id}` | 이 회차만 삭제(취소). 헤더 `X-Action-Id`로 되돌리기 id | | `204` |
+
+`EventInstanceRead`: `event_instance_id`, `event_id`, `date`, `status`, `completion_method?`, `title`, `event_type`, `importance`,
+`is_recurring`, `recurrence_rule?`, `parent_event_id?`, `child_kind?`, `start_time?`, `end_time`, `time_overridden`
+
+- `start_time`/`end_time`은 회차별 시간 변경을 반영한 실제 시각(타임존 없는 로컬 시각, 1.3). `deadline`은 `start_time`이 `null`.
+- `POST /events`로 만든 **비반복 일정은 회차가 없어** `event_instance_id: null`로 온다. 이 항목은 완료 처리할 수 없고, 삭제는 `DELETE /events/{event_id}`.
+
 ### tasks — 할 일 (마감형) 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
@@ -393,8 +407,7 @@ GET /points/summary
 | 제약 | 영향 |
 |---|---|
 | 사용자 생성·조회·수정 API 없음 | 사용자는 스크립트로만 만든다. `preferred_language`를 앱에서 바꿀 수도 없다 |
-| 일반(`scheduled`) 일정의 **회차(EventInstance) 조회 API 없음** | 오늘 일정 목록·회차 ID를 가져올 방법이 없어, 미준수 사유(`event_instance_id` 필요)를 일반 일정에 붙이기 어렵다. 할 일(`/tasks`)은 가능 |
-| 일반 일정 **완료 처리 API 없음** | 완료 처리는 `PUT /tasks/{id}/complete`(마감형)만 가능. 일반 일정은 완료할 수 없어 포인트가 쌓이지 않는다 |
+| `POST /events`로 만든 **비반복 일정에는 회차(EventInstance)가 없음** | 캘린더(`GET /event-instances`)에는 `event_instance_id: null`로 보이지만 완료 처리·미준수 사유 기록을 할 수 없고 포인트도 쌓이지 않는다. 반복 일정과 할 일(`/tasks`)은 회차가 있어 가능 |
 | FCM 디바이스 토큰 등록 API 없음 | 서버가 푸시를 보낼 대상 토큰이 없어, 현재 푸시는 실제로 발송되지 않고 서버 로그에만 남는다 |
 | 일정별 알림(시작·종료·마감 리마인더)이 예약되지 않음 | 알림 로직은 있지만 일정 생성 시 예약하는 코드가 연결돼 있지 않다 |
 | 정식 인증 없음 (`X-User-Id` 신뢰) | 개발용. 운영 전에 토큰 인증으로 바뀐다 |
