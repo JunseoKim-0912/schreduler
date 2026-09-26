@@ -39,32 +39,49 @@
       </nav>
 
       <section id="panel-events" class="panel" role="tabpanel" aria-labelledby="tab-events">
-        <h2>자연어로 일정 추가</h2>
-        <p class="hint">하고 싶은 일정을 말하듯 적으면 AI가 부족한 정보를 되물어요.</p>
-        <ol id="chat-log" class="chat-log" aria-live="polite" hidden></ol>
+        <div class="events-layout">
+          <div class="events-main">
+            <h2>자연어로 일정 관리</h2>
+            <p class="hint">
+              일정을 추가·삭제·수정하는 말을 적으면 AI가 처리하고, 부족한 정보는 되물어요.<br />
+              예: “매주 월요일 9시 물리 강의 추가해줘” / “물리 퀴즈 없애줘” / “오늘 물리 퀴즈 6시로 옮겨줘”
+            </p>
+            <ol id="chat-log" class="chat-log" aria-live="polite" hidden></ol>
 
-        <div id="draft-confirm" class="draft" hidden>
-          <dl id="draft-fields" class="draft-fields"></dl>
-          <div class="actions">
-            <button id="draft-create" type="button" class="button">이 내용으로 만들기</button>
-            <button id="draft-cancel" type="button" class="button button-secondary">취소</button>
+            <div id="draft-confirm" class="draft" hidden>
+              <dl id="draft-fields" class="draft-fields"></dl>
+              <div class="actions">
+                <button id="draft-create" type="button" class="button">이 내용으로 만들기</button>
+                <button id="draft-cancel" type="button" class="button button-secondary">취소</button>
+              </div>
+            </div>
+
+            <form id="parse-form" class="inline-form">
+              <label for="parse-input" class="visually-hidden">일정 요청</label>
+              <input id="parse-input" type="text" autocomplete="off" maxlength="300" />
+              <button id="parse-send" type="submit" class="button">전송</button>
+              <button id="parse-reset" type="button" class="button button-secondary">새 대화</button>
+            </form>
+            <p id="chat-status" class="hint" role="status" hidden></p>
+
+            <div class="section-header">
+              <h2>이벤트 목록</h2>
+              <button id="events-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+            </div>
+            <p id="events-status" class="hint" role="status" hidden></p>
+            <ul id="event-list" class="list"></ul>
           </div>
-        </div>
 
-        <form id="parse-form" class="inline-form">
-          <label for="parse-input" class="visually-hidden">일정 설명</label>
-          <input id="parse-input" type="text" autocomplete="off" maxlength="300" />
-          <button id="parse-send" type="submit" class="button">전송</button>
-          <button id="parse-reset" type="button" class="button button-secondary">새 대화</button>
-        </form>
-        <p id="chat-status" class="hint" role="status" hidden></p>
-
-        <div class="section-header">
-          <h2>이벤트 목록</h2>
-          <button id="events-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+          <aside class="events-aside" aria-labelledby="actions-title">
+            <div class="section-header section-header-first">
+              <h2 id="actions-title">최근 변경</h2>
+              <button id="actions-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+            </div>
+            <p class="hint">자연어로 한 추가·삭제·수정은 여기서 되돌릴 수 있어요.</p>
+            <p id="actions-status" class="hint" role="status" hidden></p>
+            <ul id="action-list" class="list action-list"></ul>
+          </aside>
         </div>
-        <p id="events-status" class="hint" role="status" hidden></p>
-        <ul id="event-list" class="list"></ul>
       </section>
 
       <section id="panel-tasks" class="panel" role="tabpanel" aria-labelledby="tab-tasks" hidden>

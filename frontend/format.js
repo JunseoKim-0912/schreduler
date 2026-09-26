@@ -113,3 +113,35 @@ export function describeStreakBonus(streakDays) {
   const nextText = `${next.days - streakDays}일 더 이어가면 ×${next.multiplier}`;
   return current ? `×${current.multiplier} 적용 중 · ${nextText}` : nextText;
 }
+
+// --- 자연어 일정 관리 (POST /events/parse의 command, GET /actions) ---
+
+const hasInstance = (target) => target.event_instance_id !== null && target.event_instance_id !== undefined;
+
+// CommandTarget: event_instance_id가 null이면 이벤트 전체(반복이면 시리즈), 아니면 그 회차 하나.
+// 반복 시리즈의 date는 반복 기간의 시작일이라 실제 요일과 다를 수 있어 보여주지 않는다.
+export function describeCommandTarget(target) {
+  if (hasInstance(target)) return [target.title, formatDate(target.date), "이 회차만"].join(" · ");
+  if (target.is_recurring) return `${target.title} · 반복 전체`;
+  return [target.title, target.date ? formatDate(target.date) : ""].filter(Boolean).join(" · ");
+}
+
+// 되묻기 후보 버튼의 라벨
+export function describeCandidate(target) {
+  if (target.is_recurring && !hasInstance(target)) return `${target.title} · 반복 일정`;
+  return [target.title, target.date ? formatDate(target.date) : ""].filter(Boolean).join(" · ");
+}
+
+// 후보 버튼을 눌렀을 때 보낼 답. 단발성은 날짜까지 말해 같은 제목끼리도 구분되게 하고,
+// 반복 일정은 날짜를 붙이면 그 회차 하나로 좁혀지므로 제목만 보낸다.
+export function candidateReply(target) {
+  const match = /^\d{4}-(\d{2})-(\d{2})/.exec(target.date ?? "");
+  if (target.is_recurring || !match) return `'${target.title}'`;
+  return `'${target.title}' ${Number(match[1])}월 ${Number(match[2])}일`;
+}
+
+const ACTION_SOURCE_LABELS = { nl: "자연어", ui: "목록에서 삭제" };
+
+export function describeAction(action) {
+  return [ACTION_SOURCE_LABELS[action.source] ?? action.source, formatDateTime(action.created_at)].filter(Boolean).join(" · ");
+}

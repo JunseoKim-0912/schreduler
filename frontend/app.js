@@ -60,8 +60,11 @@ userIdInput.addEventListener("keydown", (event) => {
 // --- 탭별 기능 ---------------------------------------------------------------
 
 // 탭을 열 때마다 해당 탭의 데이터를 새로 불러온다. 키는 탭 버튼의 data-tab 값이다.
+// 이벤트 탭에서 실행·되돌리기를 하면 할 일(마감 일정)과 포인트(지난 회차 재계산)도 바뀌므로 함께 다시 불러온다.
 const panels = {
-  events: initEventsPanel(),
+  events: initEventsPanel({
+    onDataChanged: () => Promise.all([panels.tasks.refresh(), panels.points.refresh()]),
+  }),
   tasks: initTasksPanel(),
   points: initPointsPanel(),
   chat: initPersonasPanel(),

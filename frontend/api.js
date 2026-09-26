@@ -109,7 +109,8 @@ async function readBody(response) {
  * - X-User-Id(저장된 사용자 ID)와 Content-Type: application/json을 자동으로 붙인다.
  * - body에 객체를 넘기면 JSON 문자열로 바꾼다.
  * - 2xx면 파싱한 JSON(204면 null)을 돌려주고, 실패하면 ApiError를 던지면서 등록된 에러 핸들러에 알린다.
- *   화면에 띄우지 않고 직접 처리하려면 { showError: false }.
+ *   화면에 띄우지 않고 직접 처리하려면 { showError: false }. 함수를 넘기면 그 함수가 true를 돌려준 에러만 알린다
+ *   (예: 409는 화면 안에서 직접 보여주고 나머지는 배너로).
  */
 export async function apiFetch(path, { method = "GET", body, headers, showError = true, ...rest } = {}) {
   const requestHeaders = new Headers(headers);
@@ -119,7 +120,7 @@ export async function apiFetch(path, { method = "GET", body, headers, showError 
   if (userId) requestHeaders.set("X-User-Id", userId);
 
   const fail = (error) => {
-    if (showError) report(error);
+    if (typeof showError === "function" ? showError(error) : showError) report(error);
     return error;
   };
 

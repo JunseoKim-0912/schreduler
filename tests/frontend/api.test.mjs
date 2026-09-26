@@ -121,6 +121,21 @@ describe("apiFetch 에러", () => {
     assert.equal(seen.length, 0);
   });
 
+  test("showError에 함수를 넘기면 true인 에러만 알린다", async () => {
+    const seen = [];
+    const off = onApiError((error) => seen.push(error));
+    const notConflict = (error) => error.status !== 409;
+
+    mockFetch(() => jsonResponse(409, { detail: "더 최근 변경을 먼저 되돌려야 해요." }));
+    const conflict = await apiFetch("/actions/1/undo", { method: "POST", showError: notConflict }).catch((e) => e);
+    mockFetch(() => jsonResponse(404, { detail: "action 9 does not exist" }));
+    await assert.rejects(apiFetch("/actions/9/undo", { method: "POST", showError: notConflict }), ApiError);
+    off();
+
+    assert.equal(conflict.detail, "더 최근 변경을 먼저 되돌려야 해요.");
+    assert.deepEqual(seen.map((e) => e.status), [404]);
+  });
+
   test("네트워크 오류는 status 0으로 알린다", async () => {
     globalThis.fetch = async () => {
       throw new TypeError("Failed to fetch");

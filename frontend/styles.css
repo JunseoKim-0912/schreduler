@@ -589,3 +589,107 @@ select:focus-visible {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* --- 이벤트 탭: 자연어 일정 관리 + 최근 변경 --- */
+
+.events-layout {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 820px) {
+  .events-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+
+  .events-aside {
+    padding-left: 20px;
+    border-left: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 819px) {
+  .events-aside {
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+}
+
+.bubble-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border-color: #aceebb;
+  background: #f0fff4;
+}
+
+.bubble-error {
+  align-self: flex-start;
+  background: var(--error-bg);
+  border: 1px solid var(--error-border);
+  color: var(--error-text);
+}
+
+.quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.command-card {
+  align-self: stretch;
+  padding: 12px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: #f5f8ff;
+}
+
+.command-card-title {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.command-targets {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.command-card .hint {
+  margin: 8px 0 0;
+}
+
+.command-card.is-closed {
+  border-color: var(--border);
+  background: var(--background);
+}
+
+.action-list .list-item {
+  align-items: flex-start;
+}
+
+.action-list .list-title {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.list-item.is-undone .list-title span:last-child {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* 좁은 칸(최근 변경)에서도 버튼 글자가 한 줄로 유지되게 */
+.list-item > .button,
+.bubble-result .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+#actions-status[data-state="error"] {
+  padding: 6px 10px;
+  border: 1px solid var(--error-border);
+  border-radius: var(--radius);
+  background: var(--error-bg);
+  color: var(--error-text);
+}
