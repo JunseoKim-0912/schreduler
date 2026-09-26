@@ -6,18 +6,26 @@ from datetime import date, datetime, time, timedelta
 import httpx
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import InvalidInputError, NotFoundError
 from app.i18n import render_message
 from app.models.enums import ActionSource
 from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
 from app.schemas.event_command import CommandResult, CommandTarget
-from app.schemas.event_parse import EventDraft, EventParseRequest, EventParseResponse
-from app.services.llm_client import ClarifyingQuestion, LLMResponseParsingError, SlotName, fill_event_slots_for_user
+from app.schemas.event_parse import EventDraft, EventParseRequest, EventParseResponse, NewDateRangeDraft
+from app.services import date_range_command_service as ranges
+from app.services.llm_client import (
+    ClarifyingQuestion,
+    EventSlotFillResult,
+    LLMResponseParsingError,
+    SlotName,
+    fill_event_slots_for_user,
+)
 from app.services.common import require
 from app.services.recurrence import build_recurrence_rule
 from app.services.event_command_service import (
     CommandDescription,
+    Target,
     command_result,
     execute,
     request_confirmation,
@@ -132,11 +140,77 @@ def _answer_locally(session: SlotFillSession, utterance: str) -> bool:
     return False
 
 
+def _repeat_until_question(db: Session, user: User) -> ClarifyingQuestion:
+    """반복 종료 질문. 제안할 기간이 있으면 그 기간을 쓰거나 다른 날짜를 말할 수 있게 한 번에 묻는다."""
+    lang = user.preferred_language
+    suggestion = ranges.current_range(db, user.id, date.today())
+    if suggestion is None:
+        return ClarifyingQuestion(slot="date_range_id", question=render_message("command.ask_repeat_until_none", lang))
+    question = render_message(
+        "command.ask_repeat_until",
+        lang,
+        name=suggestion.name,
+        start=ranges.format_day(suggestion.start_date),
+        end=ranges.format_day(suggestion.end_date),
+    )
+    return ClarifyingQuestion(slot="date_range_id", question=question)
+
+
+def _enforce_date_range_rules(db: Session, session: SlotFillSession, user: User) -> None:
+    """새 반복 기간이 등록된 기간과 이름이 같으면 그 기간을 쓴다. 날짜를 알아볼 수 없으면 다시 묻는다.
+    반복 종료를 물을 때는 LLM 질문 대신 '기존 기간까지? 다른 날짜면 말해 달라'를 한 번에 묻는다."""
+    if session.new_date_range is not None:
+        name = session.new_date_range.get("name")
+        existing = ranges.find_by_name(db, user.id, name) if name else None
+        if existing is not None and ranges.same_name(existing.name, name):
+            session.date_range_id, session.new_date_range = existing.id, None
+        else:
+            try:
+                _resolve_new_range(db, session, user)
+            except InvalidInputError:
+                session.new_date_range = None
+                if "date_range_id" not in session.missing_slots:
+                    session.missing_slots.append("date_range_id")
+        if session.new_date_range is not None or session.date_range_id is not None:
+            _drop_slots(session, ("date_range_id",))
+
+    if _is_recurring(session) and "date_range_id" in session.missing_slots:
+        session.clarifying_questions = [
+            _repeat_until_question(db, user) if q.slot == "date_range_id" else q for q in session.clarifying_questions
+        ]
+        if not any(q.slot == "date_range_id" for q in session.clarifying_questions):
+            session.clarifying_questions.append(_repeat_until_question(db, user))
+
+
+def _resolve_new_range(db: Session, session: SlotFillSession, user: User) -> NewDateRangeDraft:
+    """새 반복 기간을 실제 날짜와 이름으로. 시작일을 말하지 않았으면 제안했던(오늘이 속한) 기간의 시작일, 그것도
+    없으면 일정 날짜나 오늘부터. 이름을 말하지 않았으면 '2026-2학기 (~12/8)'처럼 붙인다."""
+    raw = session.new_date_range or {}
+    today = date.today()
+    suggestion = ranges.current_range(db, user.id, today)
+    if suggestion is not None:
+        default_start = suggestion.start_date
+    elif session.date:
+        default_start = resolve_event_date(session.date, today)
+    else:
+        default_start = today
+    start, end = ranges.resolve_range_dates(raw.get("start_date"), raw["end_date"], today, default_start)
+    name = raw.get("name")
+    auto_named = not name
+    if auto_named:
+        name = ranges.auto_range_name(db, user.id, start, end, user.preferred_language)
+    return NewDateRangeDraft(name=name, start_date=start, end_date=end, auto_named=auto_named)
+
+
 def _enforce_create_rules(session: SlotFillSession, utterance: str, known_before: dict[str, object], language: str) -> None:
     """LLM 결과를 세션에 합친 뒤 백엔드가 보장하는 규칙: 단발로 답했으면 단발 유지, 애매한 시각은 한 번 묻기,
     단발 일정은 날짜 필수."""
     if session.one_off:
         _make_one_off(session)
+        session.new_date_range = None
+    if _is_recurring(session):
+        # 반복 일정의 첫 날짜는 선택이다(말하지 않으면 반복 기간의 시작일부터). LLM이 물으려 해도 묻지 않는다.
+        _drop_slots(session, ("date",))
 
     new_start = session.start_time and "start_time" not in session.missing_slots and "start_time" not in known_before
     if new_start and not session.meridiem_asked:
@@ -170,7 +244,7 @@ def _resolve_anchor_date(db: Session, date_range_id: int | None) -> date:
     return date.today()
 
 
-def _build_event_draft(db: Session, session: SlotFillSession) -> EventDraft:
+def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> EventDraft:
     recurring = session.frequency is not None
     if not session.title or not session.start_time or not session.end_time or not (recurring or session.date):
         raise LLMResponseParsingError(
@@ -178,8 +252,11 @@ def _build_event_draft(db: Session, session: SlotFillSession) -> EventDraft:
             f"일부가 비어 있습니다: {session!r}"
         )
 
+    new_range = _resolve_new_range(db, session, user) if recurring and session.new_date_range else None
     if session.date:
         day = resolve_event_date(session.date, date.today())
+    elif new_range is not None:
+        day = new_range.start_date
     else:
         day = _resolve_anchor_date(db, session.date_range_id)
     start_time = datetime.combine(day, _parse_hhmm(session.start_time))
@@ -195,20 +272,34 @@ def _build_event_draft(db: Session, session: SlotFillSession) -> EventDraft:
         importance=session.importance,
         is_recurring=recurring,
         recurrence_rule=build_recurrence_rule(session.frequency, session.by_day) if recurring else None,
-        date_range_id=session.date_range_id if recurring else None,
+        date_range_id=session.date_range_id if recurring and new_range is None else None,
+        new_date_range=new_range,
     )
 
 
 def _to_response(db: Session, session: SlotFillSession, user: User) -> EventParseResponse:
     if session.is_complete:
-        draft = _build_event_draft(db, session)
+        draft = _build_event_draft(db, session, user)
+        lang = user.preferred_language
+        message = render_message("command.confirm_create", lang)
+        if draft.new_date_range is not None:
+            new_range = draft.new_date_range
+            message = render_message(
+                "command.confirm_create_with_range",
+                lang,
+                name=new_range.name,
+                start=ranges.format_day(new_range.start_date),
+                end=ranges.format_day(new_range.end_date),
+            )
+            if new_range.auto_named:
+                message += " " + render_message("range.auto_named", lang, name=new_range.name)
         # v3.6: 초안은 클라이언트가 확인하면 POST /events/commands/confirm으로 서버가 만든다 (되돌리기 기록 포함).
         pending = create_pending_action(user.id, "create", {"draft": draft.model_dump(mode="json")})
         return EventParseResponse(
             session_id=session.session_id,
             is_complete=True,
             draft=draft,
-            message=render_message("command.confirm_create", user.preferred_language),
+            message=message,
             command=CommandResult(
                 action="create",
                 status="needs_confirmation",
@@ -277,6 +368,83 @@ def _handle_command(db: Session, user: User, session: SlotFillSession, desc: Com
     )
 
 
+def _handle_range_command(db: Session, user: User, session: SlotFillSession, result: EventSlotFillResult) -> EventParseResponse:
+    """반복 기간 만들기·바꾸기·지우기·보여주기 (target_kind=date_range)."""
+    lang = user.preferred_language
+    base = {"session_id": session.session_id, "is_complete": False, "intent": result.intent}
+
+    def reply(message: str, command: CommandResult | None = None) -> EventParseResponse:
+        return EventParseResponse(**base, message=message, command=command)
+
+    def executed(action_type: str, action) -> EventParseResponse:
+        message = render_message("command.executed", lang, summary=action.summary_text)
+        return reply(message, command_result(action_type, "executed", action_id=action.id, target_kind="date_range"))
+
+    if result.intent == "list":
+        return reply(ranges.list_message(db, user))
+
+    today = date.today()
+    if result.intent == "create":
+        if not result.range_end:
+            return reply(render_message("range.need_dates", lang))
+        try:
+            start, end = ranges.resolve_range_dates(result.range_start, result.range_end, today, today)
+        except InvalidInputError:
+            return reply(render_message("range.invalid_dates", lang))
+        name = result.range_name or ranges.auto_range_name(db, user.id, start, end, lang)
+        existing = ranges.find_by_name(db, user.id, name)
+        if existing is not None and ranges.same_name(existing.name, name):
+            return reply(
+                render_message(
+                    "range.exists", lang, name=existing.name,
+                    start=ranges.format_day(existing.start_date), end=ranges.format_day(existing.end_date),
+                )
+            )
+        _, action = ranges.create_range(db, user, name, start, end, ActionSource.NL)
+        response = executed("create", action)
+        if not result.range_name:
+            response.message += " " + render_message("range.auto_named", lang, name=name)
+        return response
+
+    if not result.range_name:
+        return reply(render_message("range.need_name", lang))
+    date_range = ranges.find_by_name(db, user.id, result.range_name)
+    if date_range is None:
+        return reply(
+            render_message("range.not_found", lang, name=result.range_name),
+            command_result(result.intent, "not_found", target_kind="date_range"),
+        )
+
+    if result.intent == "update":
+        if not (result.range_start or result.range_end or result.range_new_name):
+            return reply(render_message("range.nothing_to_update", lang))
+        try:
+            start = ranges.parse_day(result.range_start, date_range.start_date.year) if result.range_start else None
+            end = ranges.parse_day(result.range_end, (start or date_range.start_date).year) if result.range_end else None
+            updated = ranges.update_range(db, user, date_range, name=result.range_new_name, start=start, end=end, source=ActionSource.NL)
+        except InvalidInputError:
+            return reply(render_message("range.invalid_dates", lang))
+        return executed("update", updated.action)
+
+    events = ranges.events_using(db, date_range.id)
+    if not events:
+        return executed("delete", ranges.delete_range(db, user, date_range, None, ActionSource.NL))
+    # 사용 중인 기간은 바로 지우지 않는다: 쓰는 일정을 보여주고 기간만 지울지, 일정도 지울지 고르게 한다.
+    pending = create_pending_action(user.id, "delete_range", {"date_range_id": date_range.id})
+    message = render_message(
+        "range.in_use", lang, name=date_range.name, count=len(events), events=", ".join(e.title for e in events)
+    )
+    command = command_result(
+        "delete",
+        "needs_confirmation",
+        targets=[Target(event) for event in events],
+        pending=pending,
+        target_kind="date_range",
+        options=["range_only", "with_events"],
+    )
+    return reply(message, command)
+
+
 def _pending_command_prompt(session: SlotFillSession) -> str | None:
     if session.command is None:
         return None
@@ -292,35 +460,53 @@ def parse_event_utterance(
     *,
     http_client: httpx.Client | None = None,
 ) -> EventParseResponse:
-    """FR-2 자연어 한 턴을 처리한다.
+    """FR-2 자연어 한 턴을 처리하고, 이 턴의 사용자 말과 앱의 답을 세션의 최근 대화에 남긴다."""
+    user = require(db, User, data.user_id, "user_id")
+    session = _get_or_create_session(data)
+    response = _parse_turn(db, user, session, data.utterance, http_client)
+    session.remember("user", data.utterance)
+    session.remember("assistant", response.next_question.question if response.next_question else response.message)
+    return response
+
+
+def _get_or_create_session(data: EventParseRequest) -> SlotFillSession:
+    if data.session_id is None:
+        return create_session(data.user_id)
+    session = get_session(data.session_id)
+    if session is None:
+        raise NotFoundError(f"session_id {data.session_id} does not exist")
+    if session.user_id != data.user_id:
+        raise NotFoundError(f"session_id {data.session_id} belongs to a different user")
+    return session
+
+
+def _parse_turn(
+    db: Session, user: User, session: SlotFillSession, utterance: str, http_client: httpx.Client | None
+) -> EventParseResponse:
+    """FR-2 자연어 한 턴.
 
     LLM이 의도(create/delete/update/unknown)를 먼저 분류한다. create는 기존 슬롯필링(부족하면 되묻고, 다
     채워지면 초안 + 확인 토큰), delete/update는 event_command_service가 대상을 찾아 실행하거나 되묻는다.
     """
-    # 없는 사용자면 세션을 만들거나 LLM을 부르기 전에 404로 끝낸다.
-    user = require(db, User, data.user_id, "user_id")
-    if data.session_id is None:
-        session = create_session(data.user_id)
-    else:
-        session = get_session(data.session_id)
-        if session is None:
-            raise NotFoundError(f"session_id {data.session_id} does not exist")
-        if session.user_id != data.user_id:
-            raise NotFoundError(f"session_id {data.session_id} belongs to a different user")
-
-    if _answer_locally(session, data.utterance):
+    if _answer_locally(session, utterance):
         return _to_response(db, session, user)
 
     known_before = session.known_slots()
     result = fill_event_slots_for_user(
         db,
-        data.user_id,
-        data.utterance,
-        known_slots=session.known_slots(),
+        user.id,
+        utterance,
+        known_slots=known_before,
         pending_command=_pending_command_prompt(session),
+        history=session.history,
         http_client=http_client,
     )
 
+    if result.target_kind == "date_range" and result.intent in ("create", "update", "delete", "list"):
+        session.command = None
+        return _handle_range_command(db, user, session, result)
+    if result.intent == "list":
+        result = result.model_copy(update={"intent": "unknown"})  # 일정 목록은 캘린더 탭에서 본다
     if session.command is not None and result.intent != "create":
         # 되묻기에 대한 답: 이전 요청을 새로 알게 된 값으로 보완한다 (unknown으로 분류돼도 같은 요청으로 본다).
         desc = CommandDescription.from_dict(session.command).merged(CommandDescription.from_llm(result))
@@ -342,5 +528,6 @@ def parse_event_utterance(
         )
 
     session.apply(result)
-    _enforce_create_rules(session, data.utterance, known_before, user.preferred_language)
+    _enforce_create_rules(session, utterance, known_before, user.preferred_language)
+    _enforce_date_range_rules(db, session, user)
     return _to_response(db, session, user)

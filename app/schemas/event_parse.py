@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,6 +27,15 @@ class EventParseRequest(BaseModel):
     session_id: str | None = None
 
 
+class NewDateRangeDraft(BaseModel):
+    """초안과 함께 확정할 때 새로 만들 반복 기간. 같은 이름의 기간이 그사이 생겼으면 그것을 쓴다."""
+
+    name: str
+    start_date: date
+    end_date: date
+    auto_named: bool = False  # 사용자가 이름을 말하지 않아 앱이 붙인 이름
+
+
 class EventDraft(BaseModel):
     """모든 슬롯이 채워졌을 때 반환하는 완성된 이벤트 초안.
 
@@ -45,6 +54,8 @@ class EventDraft(BaseModel):
     is_recurring: bool = True
     recurrence_rule: str | None = None
     date_range_id: int | None
+    # 등록된 기간 대신 새 반복 기간을 쓸 때. 확인(POST /events/commands/confirm)하면 이벤트와 같은 트랜잭션에서 만든다.
+    new_date_range: NewDateRangeDraft | None = None
 
 
 class EventParseResponse(BaseModel):

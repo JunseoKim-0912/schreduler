@@ -259,6 +259,7 @@ code {
 
 input[type="text"],
 input[type="datetime-local"],
+input[type="date"],
 select {
   padding: 6px 10px;
   border: 1px solid var(--border);
@@ -1050,4 +1051,50 @@ select:focus-visible {
   .cal-scroll {
     max-height: 65vh;
   }
+}
+
+/* --- 반복 기간 목록 --- */
+
+.range-item {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.range-item .actions {
+  flex-wrap: wrap;
+}
+
+.range-form {
+  display: grid;
+  gap: 6px;
+}
+
+.range-form label {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.range-form input {
+  width: 100%;
+  min-width: 0;
+}
+
+.range-confirm {
+  margin: 0;
+  font-size: 13px;
+}
+
+#ranges-status[data-state="error"] {
+  color: var(--error-text);
+}
+
+.command-card .actions {
+  flex-wrap: wrap;
+}
+
+.command-card .button {
+  white-space: nowrap;
 }

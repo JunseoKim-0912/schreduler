@@ -8,6 +8,7 @@ import {
   describeEventTime,
   describeRecurrence,
   formatDate,
+  formatShortDate,
   formatTime,
   importanceLabel,
   sortEvents,
@@ -35,6 +36,10 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   const list = document.getElementById("event-list");
   const listStatus = document.getElementById("events-status");
   const refreshButton = document.getElementById("events-refresh");
+
+  const rangeList = document.getElementById("range-list");
+  const rangesStatus = document.getElementById("ranges-status");
+  const rangesRefreshButton = document.getElementById("ranges-refresh");
 
   const actionList = document.getElementById("action-list");
   const actionsStatus = document.getElementById("actions-status");
@@ -99,17 +104,34 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 
-  // 2개 이상 영향받는 삭제·수정: 서버는 아직 실행하지 않았다. [실행]을 눌러야 토큰으로 실행된다.
+  // 사용 중인 반복 기간을 지울 때 고르는 처리 (POST /events/commands/confirm의 option)
+  const RANGE_DELETE_OPTIONS = {
+    range_only: "기간만 삭제 (일정은 마지막 회차까지 유지)",
+    with_events: "일정도 함께 삭제",
+  };
+
+  // 2개 이상 영향받는 삭제·수정, 사용 중인 기간 삭제: 서버는 아직 실행하지 않았다. 버튼을 눌러야 토큰으로 실행된다.
   function addConfirmCard(command) {
     const verb = command.action === "delete" ? "삭제" : "수정";
-    const runButton = el("button", { className: "button", text: "실행", attrs: { type: "button" } });
+    const choices = command.options?.length ? command.options : [null];
+    const runButtons = choices.map((option, index) =>
+      el("button", {
+        className: index === 0 ? "button" : "button button-secondary",
+        text: option ? RANGE_DELETE_OPTIONS[option] : "실행",
+        attrs: { type: "button" },
+      }),
+    );
     const cancel = el("button", { className: "button button-secondary", text: "취소", attrs: { type: "button" } });
-    const buttons = el("div", { className: "actions" }, [runButton, cancel]);
+    const buttons = el("div", { className: "actions" }, [...runButtons, cancel]);
     const status = el("p", { className: "hint", attrs: { role: "status" } });
     status.hidden = true;
+    const title =
+      command.target_kind === "date_range"
+        ? `이 기간을 쓰는 반복 일정 ${command.affected_count}개`
+        : `${verb}할 일정 ${command.affected_count}개`;
     const card = appendToLog(
       el("li", { className: "command-card" }, [
-        el("p", { className: "command-card-title", text: `${verb}할 일정 ${command.affected_count}개` }),
+        el("p", { className: "command-card-title", text: title }),
         el("ul", { className: "command-targets" }, command.affected.map((t) => el("li", { text: describeCommandTarget(t) }))),
         buttons,
         status,
@@ -122,14 +144,20 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       setStatus(status, text);
     }
 
-    runButton.addEventListener("click", async () => {
-      runButton.disabled = true;
-      cancel.disabled = true;
+    const setDisabled = (disabled) => {
+      for (const button of [...runButtons, cancel]) button.disabled = disabled;
+    };
+    runButtons.forEach((runButton, index) => runButton.addEventListener("click", () => run(choices[index])));
+
+    async function run(option) {
+      setDisabled(true);
       setStatus(status, "실행하는 중…");
+      const body = { user_id: Number(getUserId()), token: command.confirmation_token };
+      if (option) body.option = option;
       try {
         const result = await apiFetch("/events/commands/confirm", {
           method: "POST",
-          body: { user_id: Number(getUserId()), token: command.confirmation_token },
+          body,
           showError: bannerUnless(404, 409, 410),
         });
         close("실행했어요.");
@@ -141,17 +169,16 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
         else if (error.status === 409) close(error.detail);
         else {
           setStatus(status, "실행하지 못했어요. 위의 안내를 확인해 주세요.");
-          runButton.disabled = false;
-          cancel.disabled = false;
+          setDisabled(false);
         }
       }
-    });
+    }
     cancel.addEventListener("click", () => {
       close("취소했어요. 아무것도 바뀌지 않았어요.");
       sessionId = null;
       input.focus();
     });
-    runButton.focus();
+    runButtons[0].focus();
   }
 
   async function handleCommand(message, command) {
@@ -162,6 +189,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
         await dataChanged();
         return;
       case "needs_confirmation":
+        if (command.target_kind === "date_range") addMessage("assistant", message);
         addConfirmCard(command);
         return;
       case "needs_clarification":
@@ -243,11 +271,11 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       await showDraft(result.draft);
       return;
     }
-    if (command && command.action !== "create") {
+    if (command && (command.action !== "create" || command.target_kind === "date_range")) {
       await handleCommand(result.message, command);
       return;
     }
-    if (result.intent === "unknown") {
+    if (result.intent === "unknown" || result.intent === "list" || (!result.next_question && result.message)) {
       addMessage("assistant", result.message ?? "일정 추가·삭제·수정만 도와드릴 수 있어요.");
       return;
     }
@@ -405,6 +433,129 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     }
   }
 
+  // --- 반복 기간 -----------------------------------------------------------------
+
+  function setRangesStatus(text, state = "ok") {
+    setStatus(rangesStatus, text);
+    rangesStatus.dataset.state = state;
+  }
+
+  function rangeButton(text, { primary = false } = {}) {
+    return el("button", {
+      className: primary ? "button button-small" : "button button-secondary button-small",
+      text,
+      attrs: { type: "button" },
+    });
+  }
+
+  function renderRange(range) {
+    const item = el("li", { className: "list-item range-item" });
+
+    function showSummary() {
+      const edit = rangeButton("수정");
+      const remove = rangeButton("삭제");
+      edit.addEventListener("click", showEditForm);
+      remove.addEventListener("click", showDeleteConfirm);
+      item.replaceChildren(
+        el("div", { className: "list-main" }, [
+          el("div", { className: "list-title" }, [el("span", { text: range.name })]),
+          el("div", {
+            className: "list-meta",
+            text: `${formatShortDate(range.start_date)}~${formatShortDate(range.end_date)} · 일정 ${range.event_count}개`,
+          }),
+        ]),
+        el("div", { className: "actions" }, [edit, remove]),
+      );
+    }
+
+    function showEditForm() {
+      const name = el("input", { attrs: { type: "text", value: range.name, maxlength: "100", "aria-label": "기간 이름" } });
+      const start = el("input", { attrs: { type: "date", value: range.start_date, "aria-label": "시작일" } });
+      const end = el("input", { attrs: { type: "date", value: range.end_date, "aria-label": "종료일" } });
+      const save = rangeButton("저장", { primary: true });
+      const cancel = rangeButton("취소");
+      cancel.addEventListener("click", showSummary);
+      save.addEventListener("click", async () => {
+        save.disabled = cancel.disabled = true;
+        try {
+          await apiFetch(`/date-ranges/${range.id}`, {
+            method: "PUT",
+            body: { name: name.value.trim(), start_date: start.value, end_date: end.value },
+            showError: bannerUnless(422),
+          });
+          setRangesStatus(`'${name.value.trim()}' 기간을 수정했어요. 반복 일정의 회차도 맞췄어요.`);
+          await dataChanged();
+        } catch (error) {
+          save.disabled = cancel.disabled = false;
+          if (error.status === 422) setRangesStatus(error.message, "error");
+        }
+      });
+      item.replaceChildren(
+        el("div", { className: "range-form" }, [
+          el("label", {}, [el("span", { text: "이름" }), name]),
+          el("label", {}, [el("span", { text: "시작일" }), start]),
+          el("label", {}, [el("span", { text: "종료일" }), end]),
+        ]),
+        el("div", { className: "actions" }, [save, cancel]),
+      );
+      name.focus();
+    }
+
+    // 브라우저 confirm() 대신 항목 안에서 한 번 더 묻는다. 쓰는 일정이 있으면 기간만/일정도 함께를 고른다.
+    async function showDeleteConfirm() {
+      let users = [];
+      if (range.event_count > 0) {
+        const events = await apiFetch(`/events?user_id=${encodeURIComponent(getUserId())}`);
+        users = events.filter((e) => e.date_range_id === range.id && e.parent_event_id === null).map((e) => e.title);
+      }
+      const cancel = rangeButton("취소");
+      cancel.addEventListener("click", showSummary);
+      const choices = users.length ? ["range_only", "with_events"] : [null];
+      const buttons = choices.map((mode, index) => {
+        const button = rangeButton(mode ? RANGE_DELETE_OPTIONS[mode] : "삭제", { primary: index === 0 });
+        button.addEventListener("click", async () => {
+          for (const b of [...buttons, cancel]) b.disabled = true;
+          try {
+            await apiFetch(`/date-ranges/${range.id}${mode ? `?mode=${mode}` : ""}`, { method: "DELETE" });
+            setRangesStatus(`'${range.name}' 기간을 삭제했어요. 최근 변경에서 되돌릴 수 있어요.`);
+            await dataChanged();
+          } catch {
+            for (const b of [...buttons, cancel]) b.disabled = false;
+          }
+        });
+        return button;
+      });
+      const text = users.length
+        ? `이 기간을 쓰는 반복 일정 ${users.length}개: ${users.join(", ")}. 어떻게 할까요?`
+        : "이 기간을 삭제할까요?";
+      item.replaceChildren(el("p", { className: "range-confirm", text }), el("div", { className: "actions" }, [...buttons, cancel]));
+      buttons[0].focus();
+    }
+
+    showSummary();
+    return item;
+  }
+
+  async function refreshRanges() {
+    const userId = getUserId();
+    if (!userId) {
+      rangeList.replaceChildren();
+      setRangesStatus("사용자 ID를 입력하면 반복 기간이 보여요.");
+      return;
+    }
+    rangesRefreshButton.disabled = true;
+    try {
+      const ranges = await apiFetch(`/date-ranges?user_id=${encodeURIComponent(userId)}`);
+      rangeList.replaceChildren(...ranges.map(renderRange));
+      if (!ranges.length) setRangesStatus("아직 반복 기간이 없어요.");
+      else if (rangesStatus.textContent === "아직 반복 기간이 없어요.") setRangesStatus("");
+    } catch {
+      setRangesStatus("반복 기간을 불러오지 못했어요.", "error");
+    } finally {
+      rangesRefreshButton.disabled = false;
+    }
+  }
+
   // --- 이벤트 목록 --------------------------------------------------------------
 
   function renderEvent(event) {
@@ -446,7 +597,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   }
 
   async function refresh() {
-    await Promise.all([refreshEvents(), refreshActions()]);
+    await Promise.all([refreshEvents(), refreshActions(), refreshRanges()]);
   }
 
   // 실행·되돌리기 뒤: 이 탭의 목록과 최근 변경, 그리고 할 일·포인트 탭까지 다시 불러온다.
@@ -467,6 +618,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   });
   refreshButton.addEventListener("click", refreshEvents);
   actionsRefreshButton.addEventListener("click", refreshActions);
+  rangesRefreshButton.addEventListener("click", refreshRanges);
 
   resetConversation();
   return {
@@ -486,6 +638,8 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       setStatus(listStatus, "");
       actionList.replaceChildren();
       setActionsStatus("");
+      rangeList.replaceChildren();
+      setRangesStatus("");
     },
   };
 }

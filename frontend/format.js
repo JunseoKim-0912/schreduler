@@ -39,6 +39,12 @@ export function formatDate(isoDateTime) {
   return p ? `${p.date} (${p.weekday})` : "";
 }
 
+// "2026-09-01" → "9/1" (반복 기간처럼 짧게 보여줄 때)
+export function formatShortDate(isoDate) {
+  const p = parts(isoDate);
+  return p ? `${Number(p.date.slice(5, 7))}/${Number(p.date.slice(8, 10))}` : "";
+}
+
 export function formatTime(isoDateTime) {
   return parts(isoDateTime)?.time ?? "";
 }

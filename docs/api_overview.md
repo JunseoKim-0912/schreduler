@@ -88,9 +88,11 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 | `child_kind` | `travel`, `custom` | 하위 일정 종류. `travel`은 장소 이동시간으로 서버가 자동 생성 |
 | `reason_category` | `overslept`, `fatigue`, `priority_shift`, `schedule_conflict`, `forgot`, `transit_issue`, `other` | 미준수 사유. 버튼 라벨은 `GET /compliance-reports/categories`로 받는다 |
 | `role` (대화 메시지) | `user`, `assistant` | |
-| `intent` (자연어 요청) | `create`, `delete`, `update`, `unknown` | `POST /events/parse`가 분류한 요청 종류 |
+| `intent` (자연어 요청) | `create`, `delete`, `update`, `list`, `unknown` | `POST /events/parse`가 분류한 요청 종류. `list`는 반복 기간 목록 보기 |
+| `target_kind` (자연어 요청 대상) | `event`, `date_range` | `command.target_kind`. `date_range`면 반복 기간 자체에 대한 요청 |
+| `option` (사용 중인 기간 삭제) | `range_only`, `with_events` | 기간만 삭제(일정은 이미 만들어진 마지막 회차에서 끝남) / 일정도 함께 삭제 |
 | `action_type` (변경 기록) | `create`, `delete`, `update` | |
-| `source` (변경 기록) | `nl`, `ui` | `nl`=자연어 요청, `ui`=목록의 삭제 버튼 |
+| `source` (변경 기록) | `nl`, `ui` | `nl`=자연어 요청, `ui`=화면 버튼(일정 삭제, 반복 기간 등록·수정·삭제) |
 | 포인트 가중치 | 중요도 `null`→0, `1`~`5`→그대로, `6`(MAX)→10 | 연속 100% 완료 3일 ×1.1, 7일 ×1.25, 14일 ×1.5 |
 
 반복 규칙 `recurrence_rule`은 RFC 5545 RRULE 문자열이다. 예: 매주 화요일 `FREQ=WEEKLY;BYDAY=TU`, 매일 `FREQ=DAILY`.
@@ -131,7 +133,14 @@ POST /events/commands/confirm {"user_id": 1, "token": "<command.confirmation_tok
 - 반복을 말하지 않으면("10월 1일 저녁 8시 미팅") **단발 일정**이다 — `draft.is_recurring: false`, `recurrence_rule`·`date_range_id`는
   `null`. 연도 없는 날짜는 오늘 이후 가장 가까운 그 날짜다. 반복 여부를 되물었을 때 "반복 없이/한 번만"이라고 답해도 단발이 된다.
 - "8시"처럼 오전/오후가 애매하면 `next_question`이 "오전 8시인가요, 오후 8시인가요?"(`slot: start_time`)로 **한 번** 온다.
-- `date_range_id`(반복 기간)는 반복 일정일 때만 묻는다. 후보는 사용자가 등록한 중요 기간(`/date-ranges`)에서만 고른다.
+- `date_range_id`(반복 기간)는 반복 일정일 때만 묻는다. 질문은 "2026-2학기(9/1~12/20)까지 반복할까요? 다른 날짜까지라면
+  말해주세요"처럼 등록된 기간을 제안하면서 다른 날짜도 받는다.
+- 등록되지 않은 기간을 말하면("Lecture End Date는 12월 8일, 2학기 시작부터") `draft.date_range_id`는 `null`이고
+  `draft.new_date_range`에 `{name, start_date, end_date, auto_named}`가 온다. **확인할 때 일정과 함께 만들어진다** —
+  초안을 버리면 기간도 생기지 않는다. 이름을 말하지 않으면 `"2026-2학기 (~12/8)"`처럼 붙이고(`auto_named: true`)
+  `message`로 알려 준다. 같은 이름의 기간이 이미 있으면 새로 만들지 않고 그것을 쓴다.
+  `new_date_range`가 있는 초안은 `POST /events`가 아니라 `POST /events/commands/confirm`으로 확정해야 한다.
+- 같은 `session_id` 안에서는 앞서 답한 내용을 서버가 기억해 다시 묻지 않는다.
 - LLM을 호출하므로 응답이 수 초 걸릴 수 있다. 로딩 표시와 `500`/`502` 처리를 넣는다.
 
 ### 3.2.1 자연어로 일정 삭제·수정
@@ -162,14 +171,25 @@ POST /events/commands/confirm {"user_id": 1, "token": "…"}   → 실행, comma
 - 반복 일정의 한 회차만 삭제하면 그 회차가 `cancelled`가 된다. 제목·중요도 변경은 항상 반복 전체에 적용된다.
 - 추가·삭제·수정이 아닌 말이면 `intent: "unknown"`과 안내 `message`가 온다.
 
-### 3.2.2 되돌리기
+### 3.2.2 반복 기간을 자연어로 관리
+
+"Lecture End Date 기간 만들어줘, 9월 1일부터 12월 8일까지", "Lecture End Date를 12월 10일까지로 바꿔줘",
+"Lecture End Date 기간 지워줘", "등록된 기간 보여줘"도 같은 입력창에서 된다. `command.target_kind`가 `date_range`다.
+
+- 만들기·바꾸기는 바로 실행되고 `command.action_id`로 되돌릴 수 있다. 기간을 바꾸면 그 기간을 쓰는 반복 일정의
+  회차를 다시 맞춘다: 늘어난 날짜는 회차(와 알림)를 추가하고, 범위 밖의 대기 회차는 `cancelled`가 된다(완료·놓침은 그대로).
+- 목록 보기는 `intent: "list"`와 여러 줄 `message`만 온다.
+- 쓰는 반복 일정이 있는 기간을 지우면 `needs_confirmation`과 `command.options: ["range_only", "with_events"]`,
+  `affected`(그 일정들)가 온다. 사용자가 고른 것을 `POST /events/commands/confirm`의 `option`으로 보낸다(빠지면 `422`, 토큰은 유지).
+
+### 3.2.3 되돌리기
 
 ```
 GET  /actions?limit=10                       → 최근 변경 기록 (최신순, undone=true면 이미 되돌림)
 POST /actions/{action_id}/undo               → 되돌린 기록(ActionRead)
 ```
 
-- 자연어로 실행한 추가·삭제·수정과 `DELETE /events/{id}`(응답 헤더 `X-Action-Id`)가 기록된다. `PUT /events`, `POST /events`는 기록되지 않는다.
+- 자연어로 실행한 추가·삭제·수정, `DELETE /events/{id}`, 반복 기간 등록·수정·삭제(`/date-ranges`, 응답 헤더 `X-Action-Id`)가 기록된다. `PUT /events`, `POST /events`는 기록되지 않는다.
 - 여러 개를 한 번에 바꾼 요청도 기록 하나 → 되돌리기 한 번으로 모두 복구된다. 삭제를 되돌리면 원래 ID 그대로 돌아온다(미준수 사유 포함).
 - 같은 일정을 건드린 더 최근 기록이 남아 있으면 `409` ("더 최근 변경을 먼저 되돌려야 해요"). 이미 되돌린 기록도 `409`.
 - 과거 회차가 바뀌었다면 그날부터 어제까지 포인트가 다시 계산된다.
@@ -227,7 +247,7 @@ GET /points/summary
 ### 3.7 기타 기록
 
 - 수면: 아침 8시 수면 체크인 푸시 → `POST /sleep-logs` (`actual_wake_time`이 `actual_bedtime`보다 늦어야 한다)
-- 중요 기간(학기 등): `/date-ranges` — 반복 일정이 쓰는 기간은 삭제하면 `409`
+- 중요 기간(학기 등): `/date-ranges` — 반복 일정이 쓰는 기간은 `?mode=range_only|with_events` 없이 삭제하면 `409`
 - 장소: `/locations` — 장소가 있는 일정에는 이동시간 하위 일정(`child_kind: travel`)이 자동으로 붙는다. 일정이 쓰는 장소는 삭제하면 `409`
 
 ---
@@ -243,7 +263,7 @@ GET /points/summary
 | `POST /events` | 이벤트 생성 | `EventCreate` | `201 EventRead` |
 | `GET /events` | 이벤트 목록 (`?user_id=`) | | `EventRead[]` |
 | `POST /events/parse` 🤖 | 자연어로 일정 추가·삭제·수정 (3.2, 3.2.1) | `{user_id, utterance, session_id?}` | `EventParseResponse` |
-| `POST /events/commands/confirm` | 확인이 필요한 자연어 요청 실행 (3.2.1) | `{user_id, token}` | `CommandConfirmResponse` |
+| `POST /events/commands/confirm` | 확인이 필요한 자연어 요청 실행 (3.2.1, 3.2.2) | `{user_id, token, option?}` | `CommandConfirmResponse` |
 | `GET /events/{event_id}` | 이벤트 조회 | | `EventRead` |
 | `PUT /events/{event_id}` | 이벤트 수정 (부분) | `EventUpdate` | `EventRead` |
 | `DELETE /events/{event_id}` | 이벤트 삭제 (반복 회차·하위 일정 포함). 헤더 `X-Action-Id`로 되돌리기 id | | `204` |
@@ -253,7 +273,9 @@ GET /points/summary
 
 `EventParseResponse`: `session_id`, `intent`, `is_complete`, `draft?`, `next_question?`, `missing_slots`, `message?`, `command?`
 
-`CommandResult`(`command`): `action`, `status`, `scope?`, `affected[]`, `affected_count`, `candidates[]`, `confirmation_token?`, `expires_at?`, `action_id?`
+`CommandResult`(`command`): `action`, `status`, `target_kind`, `scope?`, `affected[]`, `affected_count`, `candidates[]`, `confirmation_token?`, `expires_at?`, `options[]`, `action_id?`
+
+`EventDraft`(`draft`): `EventCreate`와 같은 필드 + `new_date_range?`(`{name, start_date, end_date, auto_named}`)
 
 > `scheduled` → `deadline`으로 바꿀 때는 `{"event_type": "deadline", "start_time": null}`을 함께 보낸다(하나만 보내면 422).
 
@@ -285,11 +307,11 @@ GET /points/summary
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `POST /date-ranges` | 중요 기간 등록 | `{user_id, name, start_date, end_date}` | `201 DateRangeRead` |
-| `GET /date-ranges` | 목록 (`?user_id=`) | | `DateRangeRead[]` |
+| `POST /date-ranges` | 중요 기간 등록. 헤더 `X-Action-Id`로 되돌리기 id | `{user_id, name, start_date, end_date}` | `201 DateRangeRead` |
+| `GET /date-ranges` | 목록 (`?user_id=`). `event_count`는 이 기간을 쓰는 일정 수 | | `DateRangeUsageRead[]` |
 | `GET /date-ranges/{date_range_id}` | 조회 | | `DateRangeRead` |
-| `PUT /date-ranges/{date_range_id}` | 수정 (부분) | `{name?, start_date?, end_date?}` | `DateRangeRead` |
-| `DELETE /date-ranges/{date_range_id}` | 삭제 (사용 중이면 `409`) | | `204` |
+| `PUT /date-ranges/{date_range_id}` | 수정 (부분). 쓰는 반복 일정의 회차를 다시 맞춤. 헤더 `X-Action-Id` | `{name?, start_date?, end_date?}` | `DateRangeRead` |
+| `DELETE /date-ranges/{date_range_id}` | 삭제 (`?mode=range_only\|with_events`, 사용 중인데 없으면 `409`). 헤더 `X-Action-Id` | | `204` |
 
 ### locations — 장소
 

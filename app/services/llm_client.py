@@ -57,9 +57,15 @@ SLOT_NAMES: tuple[SlotName, ...] = (
 
 # FR-2 v3.6 의도 분류와 삭제·수정 대상 "설명". LLM은 이벤트 ID를 고르지 않는다 — 어떤 이벤트인지는
 # 백엔드(event_command_service)가 이 설명으로 DB에서 결정적으로 찾는다.
-Intent = Literal["create", "delete", "update", "unknown"]
+Intent = Literal["create", "delete", "update", "list", "unknown"]
+TargetKind = Literal["event", "date_range"]
 _COMMAND_FIELDS: dict[str, dict[str, object]] = {
-    "intent": {"type": "string", "enum": ["create", "delete", "update", "unknown"]},
+    "intent": {"type": "string", "enum": ["create", "delete", "update", "list", "unknown"]},
+    "target_kind": {"type": "string", "enum": ["event", "date_range"], "description": "일정이면 event, 반복 기간 자체면 date_range"},
+    "range_name": {"type": ["string", "null"], "description": "만들 기간의 이름, 또는 바꾸거나 지울 기간의 이름"},
+    "range_start": {"type": ["string", "null"], "description": "기간 시작일 YYYY-MM-DD(연도를 말하지 않았으면 MM-DD)"},
+    "range_end": {"type": ["string", "null"], "description": "기간 종료일 YYYY-MM-DD(연도를 말하지 않았으면 MM-DD)"},
+    "range_new_name": {"type": ["string", "null"], "description": "기간 이름을 바꿀 때 새 이름"},
     "target_title": {"type": ["string", "null"], "description": "삭제/수정할 일정 제목"},
     "target_date": {"type": ["string", "null"], "description": "특정 날짜 YYYY-MM-DD"},
     "target_all": {"type": "boolean", "description": "'전부/모두'면 true"},
@@ -110,6 +116,22 @@ _EVENT_SLOT_JSON_SCHEMA = {
                 "description": "null=없음(수면), 1~5, 6=MAX",
             },
             "date_range_id": {"type": ["integer", "null"]},
+            "new_date_range": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": ["string", "null"]},
+                            "start_date": {"type": ["string", "null"]},
+                            "end_date": {"type": "string"},
+                        },
+                        "required": ["name", "start_date", "end_date"],
+                        "additionalProperties": False,
+                    },
+                    {"type": "null"},
+                ],
+                "description": "등록된 기간 대신 새로 만들 반복 기간",
+            },
             "missing_slots": {
                 "type": "array",
                 "items": {"type": "string", "enum": list(SLOT_NAMES)},
@@ -128,7 +150,7 @@ _EVENT_SLOT_JSON_SCHEMA = {
             },
             **_COMMAND_FIELDS,
         },
-        "required": list(SLOT_NAMES) + ["missing_slots", "clarifying_questions"] + list(_COMMAND_FIELDS),
+        "required": list(SLOT_NAMES) + ["new_date_range", "missing_slots", "clarifying_questions"] + list(_COMMAND_FIELDS),
         "additionalProperties": False,
     },
 }
@@ -141,6 +163,14 @@ class DateRangeOption(BaseModel):
     name: str
     start_date: date
     end_date: date
+
+
+class NewDateRangeSlot(BaseModel):
+    """대화 중에 새로 만들 반복 기간. 날짜는 YYYY-MM-DD 또는 연도 없는 MM-DD, 이름·시작일은 없을 수 있다."""
+
+    name: str | None = None
+    start_date: str | None = None
+    end_date: str
 
 
 class ClarifyingQuestion(BaseModel):
@@ -161,10 +191,16 @@ class EventSlotFillResult(BaseModel):
     end_time: str | None = None
     importance: Importance | None = None
     date_range_id: int | None = None
+    new_date_range: NewDateRangeSlot | None = None
     missing_slots: list[SlotName] = Field(default_factory=list)
     clarifying_questions: list[ClarifyingQuestion] = Field(default_factory=list)
     # v3.6: 새 필드가 없는 응답(기존 테스트의 가짜 응답 등)은 일정 추가(create)로 본다.
     intent: Intent = "create"
+    target_kind: TargetKind = "event"
+    range_name: str | None = None
+    range_start: str | None = None
+    range_end: str | None = None
+    range_new_name: str | None = None
     target_title: str | None = None
     target_date: dt_date | None = None  # 이 모델에 date 슬롯 필드가 있어 타입은 별칭으로 쓴다
     target_all: bool = False
@@ -231,19 +267,31 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "3(의무이지만 출석 체크 없음), 4(공식적 의무/평가), 5(반드시 지켜야 함), "
     "6(MAX, 5보다 예외적으로 중요) 중 하나다. 발화에서 유추할 수 없으면 슬롯을 "
     "채우지 말고 missing_slots에 넣는다.\n"
-    "- date_range_id는 반복 일정의 반복 기간이다. 반복 일정일 때만 묻고 쓴다. 함께 제공되는 후보 목록의 "
-    "id 중 하나만 쓸 수 있고, 후보가 없거나 어떤 후보를 말하는지 애매하면 절대 추측하지 말고 null로 두고 "
-    "missing_slots에 추가한다. 단발 일정이면 항상 null이고 묻지 않는다.\n"
+    "- 반복 기간(언제까지 반복하는지)은 반복 일정일 때만 묻고 쓴다. 단발 일정이면 date_range_id와 "
+    "new_date_range 모두 null이고 묻지 않는다. 등록된 기간 후보(이름·시작일·종료일)를 그대로 쓰면 date_range_id에 "
+    "그 id를 적는다. 사용자가 다른 날짜까지라고 하거나 새 기간을 말하면 date_range_id는 null로 두고 new_date_range에 "
+    "{name, start_date, end_date}를 적는다. '2학기 시작부터', '학기 끝까지'처럼 등록된 기간의 시작일·종료일을 "
+    "가리키는 말은 후보 목록의 실제 날짜로 바꿔 적는다. 시작일을 말하지 않으면 start_date는 null, 이름을 "
+    "말하지 않으면 name은 null이다(앱이 정하고 알려 준다). 이름은 사용자가 말한 그대로 적는다(예: 'Lecture End "
+    "Date'). 기간을 새로 만들 수 없다고 답하지 않는다. 기간을 전혀 모를 때만 date_range_id를 missing_slots에 넣는다.\n"
     "- 확실하게 알아낸 슬롯은 missing_slots에 넣지 않는다. 값을 못 정한 슬롯만 "
     "missing_slots에 넣고, 그 각각에 대해 사용자에게 되물을 자연스러운 질문을 "
     "clarifying_questions에 함께 준다 (질문 언어는 [질문 언어] 블록을 따른다).\n"
+    "- '최근 대화'가 함께 주어지면 같은 대화에서 앱이 물은 것과 사용자가 답한 것이다. 사용자가 이미 답했거나 "
+    "분명히 말한 내용은 다시 묻지 말고 그 답을 반영한다.\n"
     "- '이미 확정된 슬롯'이 함께 주어질 수 있다. 이는 이전 대화 턴에서 이미 "
     "알아낸 값이다. 최신 발화가 그 값을 바꾸라고 명시하지 않는 한 그대로 결과에 "
     "포함하고 missing_slots에 넣지 않는다. 최신 발화가 다른 값으로 정정하면 그 "
     "값으로 덮어쓴다.\n"
     "[의도 분류] 먼저 intent를 정한다: 새 일정을 만들려는 발화는 create, 기존 일정을 없애려는 발화"
-    "(삭제·취소·없애줘)는 delete, 기존 일정의 시간·제목·중요도를 바꾸려는 발화는 update, 일정 관리와 "
-    "무관하면 unknown이다.\n"
+    "(삭제·취소·없애줘)는 delete, 기존 일정의 시간·제목·중요도를 바꾸려는 발화는 update, 목록을 보여 달라는 "
+    "발화는 list, 일정 관리와 무관하면 unknown이다. 대상이 일정이면 target_kind=event, 반복 기간(학기, "
+    "'Lecture End Date'처럼 이름 붙은 기간) 자체를 만들거나 바꾸거나 지우거나 보여 달라는 것이면 "
+    "target_kind=date_range다. 일정을 만들면서 반복 기간을 말하는 것은 일정 생성(event)이다.\n"
+    "- target_kind=date_range면 슬롯·target_*·new_* 필드는 비워 두고 range_* 만 쓴다. create: range_name(말한 "
+    "이름, 없으면 null), range_start, range_end. update: range_name은 바꿀 기간의 이름(등록된 기간 목록에서 가장 "
+    "가까운 이름), 바뀌는 값만 range_start/range_end/range_new_name에 적는다. delete: range_name. list: 모두 null. "
+    "날짜는 YYYY-MM-DD, 연도를 말하지 않았으면 MM-DD다. target_kind=event면 range_* 는 모두 null이다.\n"
     "- create일 때만 위의 슬롯 규칙을 따른다. create가 아니면 슬롯 필드는 모두 null, missing_slots와 "
     "clarifying_questions는 빈 배열로 둔다.\n"
     "- delete/update면 대상을 '설명'만 한다: target_title에는 '등록된 일정 제목' 목록 중 사용자가 말한 "
@@ -359,16 +407,24 @@ def _build_event_titles_block(event_titles: list[str]) -> str:
     return f"등록된 일정 제목: {json.dumps(event_titles, ensure_ascii=False)}"
 
 
+ConversationTurn = tuple[Literal["user", "assistant"], str]
+_SPEAKERS = {"user": "사용자", "assistant": "앱"}
+
+
 def _build_user_message(
     utterance: str,
     reference_date: date,
     known_slots: dict[str, object] | None = None,
     pending_command: str | None = None,
+    history: list[ConversationTurn] | None = None,
 ) -> str:
     known_slots_json = json.dumps(known_slots or {}, ensure_ascii=False, default=str)
     lines = [f"오늘 날짜: {reference_date.isoformat()}", f"이미 확정된 슬롯: {known_slots_json}"]
     if pending_command:
         lines.append(f"진행 중인 요청: {pending_command}")
+    if history:
+        lines.append("최근 대화:")
+        lines.extend(f"{_SPEAKERS[role]}: {text}" for role, text in history)
     lines.append(f"사용자 발화: {utterance}")
     return "\n".join(lines)
 
@@ -381,6 +437,7 @@ def _build_request_payload(
     language: str = "ko",
     event_titles: list[str] | None = None,
     pending_command: str | None = None,
+    history: list[ConversationTurn] | None = None,
 ) -> dict[str, object]:
     # 공유 범위 순: 작업 지시(전체 공통) → 질문 언어(언어별) → 등록된 기간·일정 제목(사용자별, 자주 안 바뀜)
     return _build_payload(
@@ -391,7 +448,7 @@ def _build_request_payload(
             _build_date_ranges_block(available_date_ranges),
             _build_event_titles_block(event_titles or []),
         ],
-        _build_user_message(utterance, reference_date, known_slots, pending_command),
+        _build_user_message(utterance, reference_date, known_slots, pending_command, history),
         response_format={"type": "json_schema", "json_schema": _EVENT_SLOT_JSON_SCHEMA},
     )
 
@@ -503,6 +560,7 @@ def fill_event_slots(
     language: str = "ko",
     event_titles: list[str] | None = None,
     pending_command: str | None = None,
+    history: list[ConversationTurn] | None = None,
     http_client: httpx.Client | None = None,
 ) -> EventSlotFillResult:
     """자연어 발화에서 title/frequency/by_day/start_time/end_time/importance/
@@ -526,6 +584,7 @@ def fill_event_slots(
         language,
         event_titles,
         pending_command,
+        history,
     )
     raw_content = _call_chat_completion(payload, http_client)
     return _parse_response(raw_content)
@@ -643,6 +702,7 @@ def fill_event_slots_for_user(
     reference_date: date | None = None,
     known_slots: dict[str, object] | None = None,
     pending_command: str | None = None,
+    history: list[ConversationTurn] | None = None,
     http_client: httpx.Client | None = None,
 ) -> EventSlotFillResult:
     """fill_event_slots를 호출하되, 이 user_id가 등록해둔 ImportantDateRange 전체를
@@ -660,6 +720,7 @@ def fill_event_slots_for_user(
         language=user.preferred_language if user else "ko",
         event_titles=get_event_titles(db, user_id),
         pending_command=pending_command,
+        history=history,
         http_client=http_client,
     )
 

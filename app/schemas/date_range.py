@@ -67,3 +67,7 @@ class DateRangeRead(BaseModel):
     name: str
     start_date: date
     end_date: date
+
+
+class DateRangeUsageRead(DateRangeRead):
+    event_count: int  # 이 기간을 반복 기준으로 쓰는 일정 수 (하위 일정 제외)

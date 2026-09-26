@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.db import get_db
 from app.main import app
 from app.models import ActionHistory, Base, Event, EventInstance, User
-from app.models.enums import EventInstanceStatus
+from app.models.enums import ActionSource, EventInstanceStatus
 from app.services import event_parse_service
 from app.services.llm_client import EventSlotFillResult
 from app.services.slot_fill_session import clear_all_sessions
@@ -141,8 +141,9 @@ def _instance(engine, event_id: int, day: date) -> EventInstance:
 
 
 def _actions(engine) -> list[ActionHistory]:
+    """자연어 요청으로 남은 변경 기록 (준비 단계에서 POST /date-ranges가 남긴 기록은 뺀다)."""
     with Session(engine) as session:
-        return list(session.execute(select(ActionHistory)).scalars())
+        return list(session.execute(select(ActionHistory).where(ActionHistory.source == ActionSource.NL)).scalars())
 
 
 def test_single_event_is_deleted_immediately_and_recorded(client, engine, user_id, llm):

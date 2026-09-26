@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 
 class ImportantDateRange(Base):
     __tablename__ = "important_date_ranges"
+    # 되돌리기가 삭제된 기간을 원래 id로 다시 넣으므로, SQLite도 지운 id를 재사용하지 않게 한다.
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))

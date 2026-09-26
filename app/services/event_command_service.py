@@ -17,15 +17,18 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictError
+from app.core.exceptions import ConflictError, InvalidInputError
 from app.i18n import render_message
 from app.models.action_history import ActionHistory
 from app.models.enums import ActionSource, ActionType, EventInstanceStatus, Importance
 from app.models.event import Event
 from app.models.event_instance import EventInstance
+from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
 from app.schemas.event import EventCreate
-from app.schemas.event_command import CommandResult, CommandTarget
+from app.schemas.event_command import CommandResult, CommandTarget, RangeDeleteOption, TargetKind
+from app.schemas.event_parse import NewDateRangeDraft
+from app.services import date_range_command_service as ranges
 from app.services.action_history_service import Snapshot, record_action, recalculate_points_for_dates
 from app.services.event_instance_service import cancel_instance, child_instances_on_same_date, set_instance_times
 from app.services.event_service import apply_event_update, build_event, remove_event
@@ -387,10 +390,29 @@ def delete_instance_from_ui(db: Session, instance: EventInstance) -> ActionHisto
     return execute(db, user, desc, [Target(event, instance)], ActionSource.UI).action
 
 
-def create_event_from_nl(db: Session, user: User, data: EventCreate) -> ExecutionResult:
-    """자연어로 만든 초안을 확정한다. 되돌리기는 만든 이벤트(와 하위 일정)를 지운다."""
+def create_event_from_nl(
+    db: Session, user: User, data: EventCreate, new_date_range: NewDateRangeDraft | None = None
+) -> ExecutionResult:
+    """자연어로 만든 초안을 확정한다. 초안에 새 반복 기간이 있으면 이벤트와 같은 트랜잭션에서 만든다(같은 이름의
+    기간이 이미 있으면 그것을 쓴다). 되돌리기는 만든 이벤트(와 하위 일정)를 지우고, 같이 만든 기간도 다른 일정이
+    쓰지 않으면 지운다."""
+    lang = user.preferred_language
+    created_range = None
+    notes: list[str] = []
+    if new_date_range is not None:
+        date_range = ranges.find_by_name(db, user.id, new_date_range.name)
+        if date_range is None or not ranges.same_name(date_range.name, new_date_range.name):
+            date_range = ranges.build_date_range(db, user.id, new_date_range.name, new_date_range.start_date, new_date_range.end_date)
+            created_range = date_range
+            if new_date_range.auto_named:
+                notes.append(render_message("range.auto_named", lang, name=date_range.name))
+        data = data.model_copy(update={"date_range_id": date_range.id})
+
     event = build_event(db, data)
-    summary = render_message("summary.create", user.preferred_language, title=event.title)
+    if created_range is not None:
+        summary = render_message("summary.create_with_range", lang, title=event.title, name=created_range.name)
+    else:
+        summary = render_message("summary.create", lang, title=event.title)
     all_events = [event, *event.child_events]
     action = record_action(
         db,
@@ -403,13 +425,15 @@ def create_event_from_nl(db: Session, user: User, data: EventCreate) -> Executio
             "created_events": [event.id],
             "events": sorted(e.id for e in all_events),
             "event_instances": sorted(i.id for e in all_events for i in e.instances),
+            "created_date_ranges": [created_range.id] if created_range is not None else [],
+            "date_ranges": [event.date_range_id] if event.date_range_id is not None else [],
         },
     )
     db.commit()
     db.refresh(action)
     db.refresh(event)
     sync_notifications(db, event_ids=[event.id])
-    message = render_message("command.executed", user.preferred_language, summary=summary)
+    message = " ".join([render_message("command.executed", lang, summary=summary), *notes])
     return ExecutionResult(action=action, affected=[to_command_target(Target(event))], message=message)
 
 
@@ -430,9 +454,20 @@ def request_confirmation(user: User, desc: CommandDescription, targets: list[Tar
     return pending, message
 
 
-def execute_pending(db: Session, user: User, pending: PendingAction) -> ExecutionResult:
+def execute_pending(db: Session, user: User, pending: PendingAction, option: RangeDeleteOption | None = None) -> ExecutionResult:
     if pending.kind == "create":
-        return create_event_from_nl(db, user, EventCreate(**pending.payload["draft"]))
+        draft = dict(pending.payload["draft"])
+        new_range = draft.pop("new_date_range", None)
+        return create_event_from_nl(db, user, EventCreate(**draft), NewDateRangeDraft(**new_range) if new_range else None)
+    if pending.kind == "delete_range":
+        if option is None:
+            raise InvalidInputError("option is required: range_only or with_events")
+        date_range = db.get(ImportantDateRange, pending.payload["date_range_id"])
+        if date_range is None or date_range.user_id != user.id:
+            raise ConflictError("the date range changed after confirmation was requested — please make the request again")
+        action = ranges.delete_range(db, user, date_range, option, ActionSource.NL)
+        message = render_message("command.executed", user.preferred_language, summary=action.summary_text)
+        return ExecutionResult(action=action, affected=[], message=message)
 
     desc = CommandDescription.from_dict(pending.payload["description"])
     targets: list[Target] = []
@@ -455,14 +490,18 @@ def command_result(
     candidates: list[Target] | None = None,
     pending: PendingAction | None = None,
     action_id: int | None = None,
+    target_kind: TargetKind = "event",
+    options: list[RangeDeleteOption] | None = None,
 ) -> CommandResult:
     affected_list = affected if affected is not None else [to_command_target(t) for t in targets or []]
     scope = None
-    if affected_list and action != "create":
+    if affected_list and action != "create" and target_kind == "event":
         scope = "instance" if all(t.event_instance_id is not None for t in affected_list) else "series"
     return CommandResult(
         action=action,
         status=status,
+        target_kind=target_kind,
+        options=options or [],
         scope=scope,
         affected=affected_list,
         affected_count=len(affected_list),

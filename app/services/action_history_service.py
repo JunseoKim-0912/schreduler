@@ -26,6 +26,7 @@ from app.models.compliance_report import ComplianceReport
 from app.models.enums import ActionSource, ActionType
 from app.models.event import Event
 from app.models.event_instance import EventInstance
+from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
 from app.services.event_service import remove_event
 from app.services.notification import sync_notifications
@@ -33,8 +34,9 @@ from app.services.points import recalculate_points_since
 
 logger = logging.getLogger(__name__)
 
-# 복원할 때 이 순서로 넣어야 FK(events ← event_instances ← compliance_reports)가 맞는다.
+# 복원할 때 이 순서로 넣어야 FK(important_date_ranges ← events ← event_instances ← compliance_reports)가 맞는다.
 SNAPSHOT_TABLES: dict[str, type[Any]] = {
+    "important_date_ranges": ImportantDateRange,
     "events": Event,
     "event_instances": EventInstance,
     "compliance_reports": ComplianceReport,
@@ -147,11 +149,16 @@ def _event_ids(action: ActionHistory) -> set[int]:
     return set(ids.get("events", [])) | set(ids.get("created_events", []))
 
 
+def _range_ids(action: ActionHistory) -> set[int]:
+    ids = action.affected_ids or {}
+    return set(ids.get("date_ranges", [])) | set(ids.get("created_date_ranges", []))
+
+
 def _restore(db: Session, snapshot: dict[str, list[dict[str, Any]]]) -> list[date]:
     """스냅샷 값으로 행을 덮어쓰거나, 지워졌으면 원래 ID 그대로 다시 넣는다. 영향받은 회차 날짜를 돌려준다."""
     # 부모 이벤트가 먼저 들어가야 하위 일정의 parent_event_id가 맞는다.
-    events = sorted(snapshot.get("events", []), key=lambda row: row.get("parent_event_id") is not None)
-    ordered = {"events": events, **{t: snapshot.get(t, []) for t in SNAPSHOT_TABLES if t != "events"}}
+    ordered = {table: snapshot.get(table, []) for table in SNAPSHOT_TABLES}
+    ordered["events"] = sorted(ordered["events"], key=lambda row: row.get("parent_event_id") is not None)
 
     touched_dates: list[date] = []
     for table, model in SNAPSHOT_TABLES.items():
@@ -178,7 +185,36 @@ def _undo_create(db: Session, action: ActionHistory) -> list[date]:
         for item in [event, *event.child_events]:
             touched_dates.extend(instance.date for instance in item.instances)
         remove_event(db, event)
+    db.flush()
+    # 이벤트를 만들면서 같이 만든 기간은 다른 일정이 쓰지 않을 때만 지운다. 기간만 만든 기록인데 그사이 그 기간을
+    # 쓰는 일정이 생겼다면 지울 수 없으므로 되돌리기를 거절한다.
+    for range_id in action.affected_ids.get("created_date_ranges", []):
+        date_range = db.get(ImportantDateRange, range_id)
+        if date_range is None:
+            continue
+        in_use = db.execute(select(Event.id).where(Event.date_range_id == range_id).limit(1)).first() is not None
+        if not in_use:
+            db.delete(date_range)
+        elif not action.affected_ids.get("created_events"):
+            raise ConflictError(render_message("undo.range_in_use", user_language(db, action)))
     return touched_dates
+
+
+def user_language(db: Session, action: ActionHistory) -> str:
+    user = db.get(User, action.user_id)
+    return user.preferred_language if user else "ko"
+
+
+def _delete_created_instances(db: Session, action: ActionHistory) -> list[date]:
+    """기간을 늘리면서 새로 만든 회차. 스냅샷에는 없으므로 되돌릴 때 지운다."""
+    dates: list[date] = []
+    for instance_id in action.affected_ids.get("created_instances", []):
+        instance = db.get(EventInstance, instance_id)
+        if instance is not None:
+            dates.append(instance.date)
+            db.delete(instance)
+    db.flush()
+    return dates
 
 
 def undo_action(db: Session, user: User, action_id: int) -> ActionHistory:
@@ -196,18 +232,21 @@ def undo_action(db: Session, user: User, action_id: int) -> ActionHistory:
             ActionHistory.undone_at.is_(None),
         )
     ).scalars()
-    if any(_event_ids(later) & _event_ids(action) for later in newer):
+    if any(_event_ids(later) & _event_ids(action) or _range_ids(later) & _range_ids(action) for later in newer):
         raise ConflictError(render_message("undo.newer_change_exists", user.preferred_language))
 
     if action.action_type == ActionType.CREATE:
         touched_dates = _undo_create(db, action)
     else:
-        touched_dates = _restore(db, action.snapshot_before)
+        touched_dates = _delete_created_instances(db, action) + _restore(db, action.snapshot_before)
 
     action.undone_at = datetime.now()
     db.commit()
     db.refresh(action)
-    sync_notifications(db, event_ids=_event_ids(action), instance_ids=(action.affected_ids or {}).get("event_instances", []))
+    affected = action.affected_ids or {}
+    sync_notifications(
+        db, event_ids=_event_ids(action), instance_ids=[*affected.get("event_instances", []), *affected.get("created_instances", [])]
+    )
     logger.info("[되돌리기] user_id=%s action_id=%s (%s)", user.id, action.id, action.summary_text)
 
     recalculate_points_for_dates(db, user.id, touched_dates)

@@ -6,9 +6,11 @@ from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any, Literal
 
-from app.core.exceptions import ExpiredError, NotFoundError
+from app.core.exceptions import ExpiredError, InvalidInputError, NotFoundError
 from app.models.enums import Importance
 from app.services.llm_client import ClarifyingQuestion, EventSlotFillResult, SLOT_NAMES, SlotName
+
+HISTORY_TURNS = 10
 
 # 초기 버전: 프로세스 인메모리 dict로 세션을 보관한다. 서버 재시작/멀티 워커에서는
 # 유지되지 않으므로, 나중에 필요해지면 이 저장소만 교체하면 되도록 함수 인터페이스
@@ -29,6 +31,8 @@ class SlotFillSession:
     end_time: str | None = None
     importance: Importance | None = None
     date_range_id: int | None = None
+    # 등록된 기간 대신 대화 중에 새로 만들 반복 기간 ({name, start_date, end_date}). 이벤트를 확정할 때 함께 만든다.
+    new_date_range: dict[str, Any] | None = None
     missing_slots: list[SlotName] = field(default_factory=lambda: list(SLOT_NAMES))
     clarifying_questions: list[ClarifyingQuestion] = field(default_factory=list)
     # 되묻는 중인 삭제·수정 요청 (event_command_service.CommandDescription을 dict로). 다음 턴의 답으로 보완한다.
@@ -40,6 +44,12 @@ class SlotFillSession:
     # "8시"처럼 오전/오후가 애매해 되묻는 중인 시(1~11). 한 번만 묻는다.
     meridiem_hour: int | None = None
     meridiem_asked: bool = False
+    # 같은 대화의 최근 말(사용자·앱). 다음 LLM 호출에 넘겨 이미 답한 것을 다시 묻지 않게 한다.
+    history: list[tuple[Literal["user", "assistant"], str]] = field(default_factory=list)
+
+    def remember(self, role: Literal["user", "assistant"], text: str | None) -> None:
+        if text:
+            self.history = [*self.history, (role, text)][-HISTORY_TURNS:]
 
     @property
     def is_complete(self) -> bool:
@@ -51,7 +61,10 @@ class SlotFillSession:
         이걸 다음 fill_event_slots/fill_event_slots_for_user 호출의 known_slots
         인자로 넘기면, 이전 턴에 알아낸 정보를 이번 턴에도 잃지 않는다.
         """
-        return {slot: getattr(self, slot) for slot in SLOT_NAMES if slot not in self.missing_slots}
+        known: dict[str, object] = {slot: getattr(self, slot) for slot in SLOT_NAMES if slot not in self.missing_slots}
+        if self.new_date_range is not None:
+            known["new_date_range"] = self.new_date_range
+        return known
 
     def apply(self, result: EventSlotFillResult) -> None:
         """새 LLM 슬롯필링 결과를 세션에 병합한다.
@@ -64,6 +77,11 @@ class SlotFillSession:
         for slot in SLOT_NAMES:
             if slot not in result.missing_slots:
                 setattr(self, slot, getattr(result, slot))
+        if result.new_date_range is not None:
+            self.new_date_range = result.new_date_range.model_dump()
+            self.date_range_id = None
+        elif "date_range_id" not in result.missing_slots and result.date_range_id is not None:
+            self.new_date_range = None
         self.missing_slots = list(result.missing_slots)
         self.clarifying_questions = list(result.clarifying_questions)
 
@@ -111,7 +129,7 @@ def clear_all_sessions() -> None:
 # 저장소라 서버를 재시작하면 사라진다.
 
 PENDING_ACTION_TTL = timedelta(minutes=10)
-PendingKind = Literal["create", "delete", "update"]
+PendingKind = Literal["create", "delete", "update", "delete_range"]
 
 
 @dataclass
@@ -140,12 +158,15 @@ def create_pending_action(user_id: int, kind: PendingKind, payload: dict[str, An
     return pending
 
 
-def take_pending_action(token: str, user_id: int) -> PendingAction:
-    """토큰을 꺼낸다 (한 번만 쓸 수 있다). 없거나 다른 사용자 것이면 404, 10분이 지났으면 410."""
+def take_pending_action(token: str, user_id: int, *, needs_option: bool = False) -> PendingAction:
+    """토큰을 꺼낸다 (한 번만 쓸 수 있다). 없거나 다른 사용자 것이면 404, 10분이 지났으면 410.
+    needs_option=False인데 선택지가 필요한 요청(사용 중인 기간 삭제)이면 토큰을 그대로 두고 422."""
     with _lock:
         pending = _pending_actions.get(token)
         if pending is None or pending.user_id != user_id:
             raise NotFoundError("confirmation token does not exist")
+        if pending.kind == "delete_range" and not needs_option:
+            raise InvalidInputError("option is required: range_only or with_events")
         del _pending_actions[token]
     if pending.expires_at <= datetime.now():
         raise ExpiredError("confirmation token expired — please make the request again")

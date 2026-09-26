@@ -46,17 +46,25 @@ def parse_event(data: EventParseRequest, db: Session = Depends(get_db)) -> Event
 def confirm_command(data: CommandConfirmRequest, db: Session = Depends(get_db)) -> CommandConfirmResponse:
     """`POST /events/parse`가 `needs_confirmation`으로 돌려준 요청을 실행한다.
 
-    - 자연어로 만든 일정 초안(create), 또는 2개 이상을 한꺼번에 지우거나 바꾸는 요청(delete/update)이 대상이다.
+    - 자연어로 만든 일정 초안(create, 새 반복 기간이 있으면 같이 만든다), 2개 이상을 한꺼번에 지우거나 바꾸는
+      요청(delete/update), 사용 중인 반복 기간 삭제가 대상이다.
+    - `command.options`가 있으면(사용 중인 기간 삭제) 그중 하나를 `option`으로 보낸다: `range_only`(기간만 지우고 일정은
+      이미 만들어진 마지막 회차에서 끝남) / `with_events`(일정도 함께 삭제). 빠지면 422이고 토큰은 그대로 남는다.
     - 토큰은 발급 후 10분 동안 한 번만 쓸 수 있다. 지나면 410, 다른 사용자의 토큰이면 404.
     - 실행 결과의 `command.action_id`로 `POST /actions/{id}/undo`를 부르면 되돌릴 수 있다.
     """
     user = require(db, User, data.user_id, "user_id")
-    pending = take_pending_action(data.token, user.id)
-    result = event_command_service.execute_pending(db, user, pending)
+    pending = take_pending_action(data.token, user.id, needs_option=data.option is not None)
+    result = event_command_service.execute_pending(db, user, pending, data.option)
+    is_range = pending.kind == "delete_range"
     return CommandConfirmResponse(
         message=result.message,
         command=event_command_service.command_result(
-            pending.kind, "executed", affected=result.affected, action_id=result.action.id
+            "delete" if is_range else pending.kind,
+            "executed",
+            affected=result.affected,
+            action_id=result.action.id,
+            target_kind="date_range" if is_range else "event",
         ),
     )
 

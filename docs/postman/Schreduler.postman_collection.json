@@ -166,7 +166,7 @@
                 "confirm"
               ]
             },
-            "description": "`POST /events/parse`가 `needs_confirmation`으로 돌려준 요청을 실행한다.\n\n- 자연어로 만든 일정 초안(create), 또는 2개 이상을 한꺼번에 지우거나 바꾸는 요청(delete/update)이 대상이다.\n- 토큰은 발급 후 10분 동안 한 번만 쓸 수 있다. 지나면 410, 다른 사용자의 토큰이면 404.\n- 실행 결과의 `command.action_id`로 `POST /actions/{id}/undo`를 부르면 되돌릴 수 있다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `410`: 확인 토큰이 만료됨 (발급 후 10분)\n- `422`: Validation Error",
+            "description": "`POST /events/parse`가 `needs_confirmation`으로 돌려준 요청을 실행한다.\n\n- 자연어로 만든 일정 초안(create, 새 반복 기간이 있으면 같이 만든다), 2개 이상을 한꺼번에 지우거나 바꾸는\n  요청(delete/update), 사용 중인 반복 기간 삭제가 대상이다.\n- `command.options`가 있으면(사용 중인 기간 삭제) 그중 하나를 `option`으로 보낸다: `range_only`(기간만 지우고 일정은\n  이미 만들어진 마지막 회차에서 끝남) / `with_events`(일정도 함께 삭제). 빠지면 422이고 토큰은 그대로 남는다.\n- 토큰은 발급 후 10분 동안 한 번만 쓸 수 있다. 지나면 410, 다른 사용자의 토큰이면 404.\n- 실행 결과의 `command.action_id`로 `POST /actions/{id}/undo`를 부르면 되돌릴 수 있다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `410`: 확인 토큰이 만료됨 (발급 후 10분)\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"user_id\": {{userId}},\n  \"token\": \"3f2b…(needs_confirmation 응답의 토큰)\"\n}",
@@ -529,7 +529,7 @@
                 "date-ranges"
               ]
             },
-            "description": "반복 일정의 종료 기준으로 재사용할 기간을 등록한다 (예: '2026 가을학기').\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
+            "description": "반복 일정의 종료 기준으로 재사용할 기간을 등록한다 (예: '2026 가을학기'). 되돌리기 id는 헤더 `X-Action-Id`.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"user_id\": {{userId}},\n  \"name\": \"2026 가을학기\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-12-20\"\n}",
@@ -564,7 +564,7 @@
                 }
               ]
             },
-            "description": "`user_id`로 특정 사용자의 기간만 거를 수 있다.\n\n**오류 응답**\n- `422`: Validation Error"
+            "description": "`user_id`로 특정 사용자의 기간만 거를 수 있다. `event_count`는 이 기간을 반복 기준으로 쓰는 일정 수(하위 일정 제외).\n\n**오류 응답**\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -619,7 +619,7 @@
                 }
               ]
             },
-            "description": "보낸 필드만 수정한다. 종료일이 시작일보다 빠르면 422.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
+            "description": "보낸 필드만 수정한다. 종료일이 시작일보다 빠르면 422.\n\n이 기간을 쓰는 반복 일정의 회차를 다시 맞춘다: 늘어난 날짜의 회차를 만들고, 범위 밖의 대기 회차는 취소한다\n(완료·놓침 기록은 그대로). 되돌리기 id는 헤더 `X-Action-Id`.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"end_date\": \"2026-12-22\"\n}",
@@ -646,6 +646,14 @@
                 "date-ranges",
                 ":date_range_id"
               ],
+              "query": [
+                {
+                  "key": "mode",
+                  "value": "",
+                  "description": "이 기간을 쓰는 일정이 있을 때의 처리: range_only(기간만 지우고 일정은 이미 만들어진 마지막 회차에서 끝남) / with_events(일정도 함께 삭제). 쓰는 일정이 있는데 빠지면 409",
+                  "disabled": true
+                }
+              ],
               "variable": [
                 {
                   "key": "date_range_id",
@@ -653,7 +661,7 @@
                 }
               ]
             },
-            "description": "기간을 삭제한다. 이 기간을 반복 종료 기준으로 쓰는 일정이 있으면 409.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
+            "description": "기간을 삭제한다. 되돌리기 id는 헤더 `X-Action-Id`.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
           },
           "response": []
         }

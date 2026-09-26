@@ -12,6 +12,7 @@ import {
   describeStreakBonus,
   formatDate,
   formatDateTime,
+  formatShortDate,
   formatPoints,
   formatTime,
   importanceLabel,
@@ -135,5 +136,13 @@ describe("자연어 일정 관리", () => {
   test("변경 기록은 출처와 시각을 보여준다", () => {
     assert.equal(describeAction({ source: "ui", created_at: "2026-09-26T09:05:12.345678" }), "목록에서 삭제 · 2026-09-26 (토) 09:05");
     assert.equal(describeAction({ source: "nl", created_at: "2026-09-26T21:00:00" }), "자연어 · 2026-09-26 (토) 21:00");
+  });
+});
+
+describe("반복 기간", () => {
+  test("짧은 날짜는 월/일", () => {
+    assert.equal(formatShortDate("2026-09-01"), "9/1");
+    assert.equal(formatShortDate("2026-12-20"), "12/20");
+    assert.equal(formatShortDate(null), "");
   });
 });

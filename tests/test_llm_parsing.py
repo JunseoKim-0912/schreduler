@@ -209,6 +209,7 @@ def test_parse_event_multiturn_completes_with_draft(
         "is_recurring": True,
         "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO",
         "date_range_id": date_range_id,
+        "new_date_range": None,
     }
 
     # 2턴째 요청에 1턴에서 알아낸 title이 "이미 확정된 슬롯"으로 같이 넘어갔는지 확인
@@ -596,6 +597,7 @@ def test_one_off_without_recurrence_mention_becomes_one_off_draft_without_asking
         "is_recurring": False,
         "recurrence_rule": None,
         "date_range_id": None,
+        "new_date_range": None,
     }
     assert body["command"]["affected"][0]["is_recurring"] is False
     instructions = sent[0]["messages"][0]["content"]
@@ -653,6 +655,7 @@ def test_one_off_stays_one_off_even_if_llm_asks_about_recurrence_again(
     assert (third["draft"]["is_recurring"], third["draft"]["importance"]) == (False, 3)
 
 
+@freeze_time("2026-09-26 09:00:00")
 def test_weekly_mention_still_goes_through_recurrence_flow(
     client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -672,7 +675,11 @@ def test_weekly_mention_still_goes_through_recurrence_flow(
     _mock_llm(monkeypatch, [_answer(weekly), _answer(filled)])
 
     first = _parse(client, user_id, "매주 월요일 오전 9시 알고리즘 스터디")
-    assert first["next_question"] == {"slot": "date_range_id", "question": "언제까지 반복할까요?"}
+    # 반복 종료는 등록된 기간을 제안하면서 다른 날짜도 말할 수 있게 한 번에 묻는다.
+    assert first["next_question"] == {
+        "slot": "date_range_id",
+        "question": "2026 가을학기(9/7~12/18)까지 반복할까요? 다른 날짜까지라면 말해주세요.",
+    }
     assert "date" not in first["missing_slots"], "반복 일정은 날짜를 따로 묻지 않는다"
 
     second = _parse(client, user_id, "가을학기 동안", first["session_id"])
