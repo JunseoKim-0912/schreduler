@@ -74,6 +74,8 @@ MessageKey = Literal[
     "command.ask_date",
     "command.nothing_to_update",
     "command.confirm",
+    "command.ask_meridiem",
+    "command.ask_event_date",
     "command.confirm_create",
     "command.executed",
     "command.title_applies_to_series",

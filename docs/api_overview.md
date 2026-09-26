@@ -128,7 +128,10 @@ POST /events/commands/confirm {"user_id": 1, "token": "<command.confirmation_tok
 - `is_complete: true`가 되면 `draft`와 `command.confirmation_token`이 온다. **서버는 아직 저장하지 않았다** — 확인 화면에서
   "만들기"를 누르면 토큰으로 `POST /events/commands/confirm`을 부른다(되돌리기 기록이 남는다).
   초안을 고쳐서 저장하고 싶으면 대신 `POST /events`로 보내도 된다(이때는 되돌리기 기록이 없다).
-- `date_range_id` 후보는 사용자가 등록한 중요 기간(`/date-ranges`)에서만 고른다. 먼저 학기 등을 등록해 두면 대화가 짧아진다.
+- 반복을 말하지 않으면("10월 1일 저녁 8시 미팅") **단발 일정**이다 — `draft.is_recurring: false`, `recurrence_rule`·`date_range_id`는
+  `null`. 연도 없는 날짜는 오늘 이후 가장 가까운 그 날짜다. 반복 여부를 되물었을 때 "반복 없이/한 번만"이라고 답해도 단발이 된다.
+- "8시"처럼 오전/오후가 애매하면 `next_question`이 "오전 8시인가요, 오후 8시인가요?"(`slot: start_time`)로 **한 번** 온다.
+- `date_range_id`(반복 기간)는 반복 일정일 때만 묻는다. 후보는 사용자가 등록한 중요 기간(`/date-ranges`)에서만 고른다.
 - LLM을 호출하므로 응답이 수 초 걸릴 수 있다. 로딩 표시와 `500`/`502` 처리를 넣는다.
 
 ### 3.2.1 자연어로 일정 삭제·수정

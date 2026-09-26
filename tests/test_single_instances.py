@@ -225,7 +225,7 @@ def test_undoing_nl_create_removes_the_instance_and_its_jobs(client, engine, use
         title="강의", frequency="WEEKLY", by_day=["MO"], start_time="09:00", end_time="10:00", date_range_id=date_range
     )
     monkeypatch.setattr(event_parse_service, "fill_event_slots_for_user", lambda *a, **k: result)
-    token = client.post("/events/parse", json={"user_id": user_id, "utterance": "월요일 9시 강의"}).json()["command"]["confirmation_token"]
+    token = client.post("/events/parse", json={"user_id": user_id, "utterance": "매주 월요일 오전 9시 강의"}).json()["command"]["confirmation_token"]
     confirmed = client.post("/events/commands/confirm", json={"user_id": user_id, "token": token}).json()
     [event_id] = [a["event_id"] for a in confirmed["command"]["affected"]]
     instance_ids = [i.id for i in _instances(engine, event_id)]

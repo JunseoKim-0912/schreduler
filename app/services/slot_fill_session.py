@@ -22,6 +22,7 @@ class SlotFillSession:
     session_id: str
     user_id: int
     title: str | None = None
+    date: str | None = None  # YYYY-MM-DD 또는 연도 없는 MM-DD
     frequency: str | None = None
     by_day: list[str] | None = None
     start_time: str | None = None
@@ -34,10 +35,15 @@ class SlotFillSession:
     command: dict[str, Any] | None = None
     # 되물을 때 보여준 후보 ("1) 물리 퀴즈 (2026-09-26)" 등). 다음 턴 프롬프트에 넣는다.
     command_candidates: list[str] = field(default_factory=list)
+    # 반복 여부를 물었을 때 "반복 없이/한 번만"이라고 답했으면, 이후 LLM이 다시 반복을 물어도 단발로 고정한다.
+    one_off: bool = False
+    # "8시"처럼 오전/오후가 애매해 되묻는 중인 시(1~11). 한 번만 묻는다.
+    meridiem_hour: int | None = None
+    meridiem_asked: bool = False
 
     @property
     def is_complete(self) -> bool:
-        return not self.missing_slots
+        return not self.missing_slots and self.meridiem_hour is None
 
     def known_slots(self) -> dict[str, object]:
         """missing_slots에 없는(=이미 확정된) 슬롯만 {슬롯명: 값}으로 반환한다.

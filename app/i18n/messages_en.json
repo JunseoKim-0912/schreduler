@@ -8,6 +8,8 @@
   "command.ask_date": "Which date of '{title}'?",
   "command.nothing_to_update": "What should I change? e.g. 'Move it to 6'",
   "command.confirm": "{count} events will be affected: {targets}. Go ahead?",
+  "command.ask_meridiem": "Is that {hour} AM or {hour} PM?",
+  "command.ask_event_date": "What date is it on?",
   "command.confirm_create": "Create this event?",
   "command.executed": "✔ {summary}",
   "command.title_applies_to_series": "Title and importance apply to the whole series.",

@@ -4,14 +4,16 @@ from datetime import date
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from freezegun import freeze_time
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.scheduler import scheduler, shutdown_scheduler, start_scheduler
 from app.main import app
-from app.models import Base, ImportantDateRange, User
+from app.models import Base, Event, EventInstance, ImportantDateRange, User
 from app.services import llm_client as llm_client_module
 from app.services.slot_fill_session import clear_all_sessions, get_session
 
@@ -189,7 +191,7 @@ def test_parse_event_multiturn_completes_with_draft(
         json={
             "user_id": user_id,
             "session_id": session_id,
-            "utterance": "매주 월요일 9시부터 10시, 2026 가을학기 기준으로",
+            "utterance": "매주 월요일 오전 9시부터 10시, 2026 가을학기 기준으로",
         },
     )
     assert second.status_code == 200
@@ -532,3 +534,243 @@ def test_parse_event_with_unknown_user_is_404_without_calling_llm(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "user_id 999 does not exist"
+
+
+# --- 단발 일정 / 오전·오후 (반복 언급이 없으면 단발, 애매한 시각은 한 번만 묻기) ---
+
+MEETING = "UTKESA 썸포차 이벤트 미팅"
+
+
+def _slots(**overrides) -> dict:
+    """LLM 슬롯필링 응답. 기본값은 '단발 일정, 전부 확정'."""
+    payload = {
+        "title": MEETING,
+        "date": "10-01",
+        "frequency": None,
+        "by_day": None,
+        "start_time": "20:00",
+        "end_time": "21:00",
+        "importance": 2,
+        "date_range_id": None,
+        "missing_slots": [],
+        "clarifying_questions": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _answer(payload: dict, sink: list | None = None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        if sink is not None:
+            sink.append(json.loads(request.content))
+        return _chat_response(payload)
+
+    return handler
+
+
+def _parse(client: TestClient, user_id: int, utterance: str, session_id: str | None = None) -> dict:
+    body = {"user_id": user_id, "utterance": utterance}
+    if session_id:
+        body["session_id"] = session_id
+    response = client.post("/events/parse", json=body)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_one_off_without_recurrence_mention_becomes_one_off_draft_without_asking(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list = []
+    _mock_llm(monkeypatch, [_answer(_slots(), sent)])
+
+    body = _parse(client, user_id, f"10월 1일 저녁 8시에 {MEETING} 1시간동안 추가해줘")
+
+    assert body["is_complete"] is True and body["next_question"] is None
+    assert body["draft"] == {
+        "user_id": user_id,
+        "title": MEETING,
+        "start_time": "2026-10-01T20:00:00",
+        "end_time": "2026-10-01T21:00:00",
+        "importance": 2,
+        "is_recurring": False,
+        "recurrence_rule": None,
+        "date_range_id": None,
+    }
+    assert body["command"]["affected"][0]["is_recurring"] is False
+    instructions = sent[0]["messages"][0]["content"]
+    assert "항상 반복" not in instructions and "단발 일정과 반복 일정을 모두 지원한다" in instructions
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_one_off_answer_to_recurrence_question_is_handled_as_one_off(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # LLM이 (예전처럼) 반복 주기를 되물은 상황. "반복 없이 한번만"은 LLM을 다시 부르지 않고 단발로 확정한다.
+    asks_frequency = _slots(
+        missing_slots=["frequency", "by_day", "date_range_id"],
+        clarifying_questions=[{"slot": "frequency", "question": "얼마나 자주 반복하나요?"}],
+    )
+    _mock_llm(monkeypatch, [_answer(asks_frequency)])
+
+    first = _parse(client, user_id, f"10월 1일 저녁 8시에 {MEETING} 1시간동안 추가해줘")
+    assert first["next_question"]["slot"] == "frequency"
+
+    second = _parse(client, user_id, "반복 없이 한번만", first["session_id"])
+
+    assert second["is_complete"] is True
+    draft = second["draft"]
+    assert (draft["is_recurring"], draft["recurrence_rule"], draft["date_range_id"]) == (False, None, None)
+    assert (draft["start_time"], draft["end_time"]) == ("2026-10-01T20:00:00", "2026-10-01T21:00:00")
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_one_off_stays_one_off_even_if_llm_asks_about_recurrence_again(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    asks_frequency = _slots(
+        importance=None,
+        missing_slots=["frequency", "importance"],
+        clarifying_questions=[
+            {"slot": "frequency", "question": "얼마나 자주 반복하나요?"},
+            {"slot": "importance", "question": "얼마나 중요한가요?"},
+        ],
+    )
+    # 중요도 답을 받은 LLM이 다시 반복을 물어도, 이미 단발이라고 답했으므로 묻지 않는다.
+    asks_again = _slots(
+        importance=3,
+        missing_slots=["frequency"],
+        clarifying_questions=[{"slot": "frequency", "question": "이 앱에서는 모든 일정이 반복 일정으로 등록돼요. 얼마나 자주?"}],
+    )
+    _mock_llm(monkeypatch, [_answer(asks_frequency), _answer(asks_again)])
+
+    first = _parse(client, user_id, f"10월 1일 저녁 8시에 {MEETING} 1시간동안 추가해줘")
+    second = _parse(client, user_id, "이번만", first["session_id"])
+    assert second["next_question"]["slot"] == "importance"
+    third = _parse(client, user_id, "학교 공식 행사야, 중요도 3", first["session_id"])
+
+    assert third["is_complete"] is True
+    assert (third["draft"]["is_recurring"], third["draft"]["importance"]) == (False, 3)
+
+
+def test_weekly_mention_still_goes_through_recurrence_flow(
+    client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with Session(engine) as session:
+        date_range = ImportantDateRange(
+            user_id=user_id, name="2026 가을학기", start_date=date(2026, 9, 7), end_date=date(2026, 12, 18)
+        )
+        session.add(date_range)
+        session.commit()
+        date_range_id = date_range.id
+    weekly = _slots(
+        title="알고리즘 스터디", date=None, frequency="WEEKLY", by_day=["MO"], start_time="09:00", end_time="10:00",
+        missing_slots=["date_range_id"],
+        clarifying_questions=[{"slot": "date_range_id", "question": "언제까지 반복할까요?"}],
+    )
+    filled = {**weekly, "date_range_id": date_range_id, "missing_slots": [], "clarifying_questions": []}
+    _mock_llm(monkeypatch, [_answer(weekly), _answer(filled)])
+
+    first = _parse(client, user_id, "매주 월요일 오전 9시 알고리즘 스터디")
+    assert first["next_question"] == {"slot": "date_range_id", "question": "언제까지 반복할까요?"}
+    assert "date" not in first["missing_slots"], "반복 일정은 날짜를 따로 묻지 않는다"
+
+    second = _parse(client, user_id, "가을학기 동안", first["session_id"])
+
+    draft = second["draft"]
+    assert (draft["is_recurring"], draft["recurrence_rule"], draft["date_range_id"]) == (
+        True,
+        "FREQ=WEEKLY;BYDAY=MO",
+        date_range_id,
+    )
+    assert draft["start_time"] == "2026-09-07T09:00:00"
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_ambiguous_hour_is_asked_once_and_pm_answer_shifts_both_times(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # "8시"를 LLM은 지시대로 오전(08:00)으로 적는다. 오전/오후 답은 LLM 없이 처리한다(handler 하나뿐).
+    _mock_llm(monkeypatch, [_answer(_slots(start_time="08:00", end_time="09:00"))])
+
+    first = _parse(client, user_id, f"10월 1일 8시에 {MEETING} 1시간동안 추가해줘")
+
+    assert first["is_complete"] is False
+    assert first["next_question"] == {"slot": "start_time", "question": "오전 8시인가요, 오후 8시인가요?"}
+    assert first["missing_slots"] == ["start_time"]
+
+    second = _parse(client, user_id, "오후요", first["session_id"])
+
+    assert second["is_complete"] is True
+    assert (second["draft"]["start_time"], second["draft"]["end_time"]) == ("2026-10-01T20:00:00", "2026-10-01T21:00:00")
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_ambiguous_hour_is_not_asked_twice(client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    ambiguous = _slots(start_time="08:00", end_time="09:00")
+    _mock_llm(monkeypatch, [_answer(ambiguous), _answer(ambiguous)])
+
+    first = _parse(client, user_id, f"10월 1일 8시에 {MEETING} 1시간동안 추가해줘")
+    second = _parse(client, user_id, "음 8시 그대로", first["session_id"])
+
+    assert second["is_complete"] is True, "한 번 물었으면 다시 묻지 않고 처음 해석(오전)대로 둔다"
+    assert second["draft"]["start_time"] == "2026-10-01T08:00:00"
+
+
+@pytest.mark.parametrize(
+    "utterance", ["10월 1일 오후 8시에 미팅", "10월 1일 저녁 8시에 미팅", "10월 1일 20시에 미팅", "10월 1일 12시에 점심 미팅"]
+)
+@freeze_time("2026-09-26 09:00:00")
+def test_clear_hour_is_not_asked(client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch, utterance: str) -> None:
+    _mock_llm(monkeypatch, [_answer(_slots())])
+
+    assert _parse(client, user_id, utterance)["is_complete"] is True
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_date_without_year_is_the_nearest_upcoming_date(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_llm(monkeypatch, [_answer(_slots(date="09-01")), _answer(_slots(date="10-01"))])
+
+    past_month = _parse(client, user_id, "9월 1일 저녁 8시 미팅")
+    upcoming = _parse(client, user_id, "10월 1일 저녁 8시 미팅")
+
+    assert past_month["draft"]["start_time"] == "2027-09-01T20:00:00", "올해 9월 1일은 지났으므로 내년"
+    assert upcoming["draft"]["start_time"] == "2026-10-01T20:00:00"
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_one_off_without_date_asks_for_the_date(client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_llm(monkeypatch, [_answer(_slots(date=None)), _answer(_slots(date="10-02"))])
+
+    first = _parse(client, user_id, "저녁 8시에 미팅 1시간")
+    assert first["next_question"] == {"slot": "date", "question": "몇 월 며칠 일정인가요?"}
+
+    second = _parse(client, user_id, "10월 2일", first["session_id"])
+    assert second["draft"]["start_time"] == "2026-10-02T20:00:00"
+
+
+@freeze_time("2026-09-26 09:00:00")
+def test_one_off_draft_creates_one_instance_with_notification_jobs(
+    client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mock_llm(monkeypatch, [_answer(_slots())])
+    draft = _parse(client, user_id, f"10월 1일 저녁 8시에 {MEETING} 1시간동안 추가해줘")["draft"]
+
+    start_scheduler()
+    scheduler.pause()  # 등록만 확인하고 실행은 하지 않는다
+    try:
+        response = client.post("/events", json=draft)
+        assert response.status_code == 201
+        with Session(engine) as session:
+            event = session.get(Event, response.json()["id"])
+            [instance] = session.execute(select(EventInstance).where(EventInstance.event_id == event.id)).scalars().all()
+            assert (event.is_recurring, instance.date) == (False, date(2026, 10, 1))
+        assert {job.id for job in scheduler.get_jobs()} == {
+            f"event_instance_{instance.id}_start",
+            f"event_instance_{instance.id}_end",
+        }
+    finally:
+        scheduler.remove_all_jobs()
+        shutdown_scheduler()

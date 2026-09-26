@@ -211,14 +211,22 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
 
   async function showDraft(newDraft) {
     draft = newDraft;
-    const rows = [
-      ["제목", draft.title],
-      ["시간", `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
-      ["시작일", formatDate(draft.start_time)],
-      ["반복", describeRecurrence(draft.is_recurring ? draft.recurrence_rule : null)],
-      ["반복 기간", await dateRangeName(draft.date_range_id)],
-      ["중요도", importanceLabel(draft.importance)],
-    ];
+    const rows = draft.is_recurring
+      ? [
+          ["제목", draft.title],
+          ["시간", `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
+          ["시작일", formatDate(draft.start_time)],
+          ["반복", describeRecurrence(draft.recurrence_rule)],
+          ["반복 기간", await dateRangeName(draft.date_range_id)],
+          ["중요도", importanceLabel(draft.importance)],
+        ]
+      : [
+          ["제목", draft.title],
+          ["날짜", formatDate(draft.start_time)],
+          ["시간", `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
+          ["반복", "반복 안 함 (한 번만)"],
+          ["중요도", importanceLabel(draft.importance)],
+        ];
     draftFields.replaceChildren(...rows.flatMap(([label, value]) => [el("dt", { text: label }), el("dd", { text: value })]));
     confirmBox.hidden = false;
     input.disabled = true;

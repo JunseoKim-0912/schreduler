@@ -8,6 +8,8 @@
   "command.ask_date": "'{title}'의 몇 월 며칠 회차인지 알려 주세요.",
   "command.nothing_to_update": "무엇을 어떻게 바꿀지 알려 주세요. 예: '6시로 옮겨줘'",
   "command.confirm": "{count}개 일정이 영향을 받아요: {targets}. 진행할까요?",
+  "command.ask_meridiem": "오전 {hour}시인가요, 오후 {hour}시인가요?",
+  "command.ask_event_date": "몇 월 며칠 일정인가요?",
   "command.confirm_create": "이 내용으로 만들까요?",
   "command.executed": "✔ {summary}",
   "command.title_applies_to_series": "제목·중요도는 반복 전체에 적용돼요.",

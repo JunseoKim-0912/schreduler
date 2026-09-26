@@ -32,9 +32,9 @@ class EventDraft(BaseModel):
 
     EventCreate와 같은 모양이라 이 draft를 그대로 POST /events에 넘기면 이벤트가
     바로 생성된다 (아직 이 draft 자체가 DB에 저장된 상태는 아니다 — 클라이언트가
-    확인 후 실제로 POST해야 한다). start_time/end_time은 반복 시작일
-    (date_range.start_date, 없으면 오늘)과 슬롯필링된 HH:MM을 합친 전체
-    datetime이고, recurrence_rule은 frequency/by_day로 조립한 RRULE 문자열이다.
+    확인 후 실제로 POST해야 한다). 단발 일정은 is_recurring=false, recurrence_rule·date_range_id가
+    null이고 start_time/end_time은 그 날짜의 일시다. 반복 일정은 첫 날짜(말하지 않았으면 반복 기간의
+    start_date, 없으면 오늘)에 HH:MM을 합친 일시이고, recurrence_rule은 frequency/by_day로 조립한 RRULE이다.
     """
 
     user_id: int
@@ -43,7 +43,7 @@ class EventDraft(BaseModel):
     end_time: datetime
     importance: Importance | None
     is_recurring: bool = True
-    recurrence_rule: str
+    recurrence_rule: str | None = None
     date_range_id: int | None
 
 

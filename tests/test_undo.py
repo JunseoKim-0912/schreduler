@@ -240,7 +240,7 @@ def test_nl_create_then_undo_removes_the_event(client, engine, user_id, llm):
     ).json()["id"]
     before = _dump(engine)
     llm(title="치과 교정", frequency="WEEKLY", by_day=["MO"], start_time="10:00", end_time="11:00", importance=2, date_range_id=date_range)
-    token = _parse(client, user_id, "매주 월요일 10시 치과 교정")["command"]["confirmation_token"]
+    token = _parse(client, user_id, "매주 월요일 오전 10시 치과 교정")["command"]["confirmation_token"]
     confirmed = client.post("/events/commands/confirm", json={"user_id": user_id, "token": token}).json()
     assert len(_dump(engine)["events"]) == 1
 

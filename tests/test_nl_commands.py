@@ -309,7 +309,7 @@ def test_completed_draft_is_created_through_confirmation(client, engine, user_id
     date_range_id = _date_range(client, user_id)
     llm(title="치과 교정", frequency="WEEKLY", by_day=["MO"], start_time="10:00", end_time="11:00", importance=2, date_range_id=date_range_id)
 
-    body = _parse(client, user_id, "학기 동안 매주 월요일 10시에 치과 교정")
+    body = _parse(client, user_id, "학기 동안 매주 월요일 오전 10시에 치과 교정")
 
     assert body["is_complete"] is True and body["draft"]["title"] == "치과 교정"
     command = body["command"]

@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import date
+from datetime import date as dt_date
 from typing import Any, Literal
 
 import httpx
@@ -40,11 +41,12 @@ _NATIVE_QUESTION_LANGUAGE_RULES: dict[Language, str] = {
 DEFAULT_PERSONA_BLOCK = "[페르소나]\n일정 관리 앱의 다정한 코치. 나무라지 않고 공감하며 격려한다."
 
 SlotName = Literal[
-    "title", "frequency", "by_day", "start_time", "end_time", "importance", "date_range_id"
+    "title", "date", "frequency", "by_day", "start_time", "end_time", "importance", "date_range_id"
 ]
 
 SLOT_NAMES: tuple[SlotName, ...] = (
     "title",
+    "date",
     "frequency",
     "by_day",
     "start_time",
@@ -78,6 +80,10 @@ _EVENT_SLOT_JSON_SCHEMA = {
         "type": "object",
         "properties": {
             "title": {"type": ["string", "null"]},
+            "date": {
+                "type": ["string", "null"],
+                "description": "일정 날짜 YYYY-MM-DD. 사용자가 연도를 말하지 않았으면 MM-DD",
+            },
             "frequency": {
                 "type": ["string", "null"],
                 "enum": ["DAILY", "WEEKLY", "MONTHLY", "YEARLY", None],
@@ -148,6 +154,7 @@ class EventSlotFillResult(BaseModel):
     """
 
     title: str | None = None
+    date: str | None = None  # YYYY-MM-DD, 연도를 말하지 않았으면 MM-DD (event_parse_service가 날짜로 정한다)
     frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None = None
     by_day: list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None = None
     start_time: str | None = None
@@ -159,7 +166,7 @@ class EventSlotFillResult(BaseModel):
     # v3.6: 새 필드가 없는 응답(기존 테스트의 가짜 응답 등)은 일정 추가(create)로 본다.
     intent: Intent = "create"
     target_title: str | None = None
-    target_date: date | None = None
+    target_date: dt_date | None = None  # 이 모델에 date 슬롯 필드가 있어 타입은 별칭으로 쓴다
     target_all: bool = False
     target_scope: Literal["instance", "series"] | None = None
     new_start_time: str | None = None
@@ -202,24 +209,31 @@ class LLMResponseParsingError(LLMClientError):
 
 
 _EVENT_SLOT_INSTRUCTIONS = (
-    "너는 일정 관리 앱의 자연어 '반복' 이벤트 파서다. 사용자의 발화에서 다음 "
-    "슬롯을 추출해 JSON으로만 답한다: title, frequency, by_day, start_time, "
-    "end_time, importance, date_range_id. 이 앱에서 자연어로 만드는 이벤트는 "
-    "항상 반복 이벤트다.\n"
-    "- frequency는 DAILY/WEEKLY/MONTHLY/YEARLY 중 하나다. '매일'이면 DAILY, "
+    "너는 일정 관리 앱의 자연어 이벤트 파서다. 이 앱은 한 번만 있는 단발 일정과 반복 일정을 모두 "
+    "지원한다. 사용자의 발화에서 다음 슬롯을 추출해 JSON으로만 답한다: title, date, frequency, by_day, "
+    "start_time, end_time, importance, date_range_id.\n"
+    "- 반복 여부: 사용자가 '매일', '매주', '월수금마다', '격주'처럼 반복을 직접 말했을 때만 반복 일정이다. "
+    "반복을 말하지 않았거나 '반복 없이', '한 번만', '이번만'처럼 답하면 단발 일정이다. 단발 일정이면 "
+    "frequency, by_day, date_range_id를 모두 null로 두고 missing_slots에 넣지 않으며, 반복 여부를 묻지 않는다.\n"
+    "- date는 일정 날짜다. 단발 일정에는 꼭 필요하고, 반복 일정은 첫 날짜를 말했을 때만 적는다. "
+    "'오늘', '내일', '다음 주 금요일'처럼 상대적인 표현은 오늘 날짜 기준으로 계산해 YYYY-MM-DD로 적는다. "
+    "'10월 1일'처럼 연도 없이 말하면 연도를 붙이지 말고 MM-DD(예: 10-01)로 적는다. 단발 일정인데 날짜를 "
+    "모르면 date를 missing_slots에 넣고 묻는다.\n"
+    "- frequency는 반복 일정일 때만 DAILY/WEEKLY/MONTHLY/YEARLY 중 하나로 적는다. '매일'이면 DAILY, "
     "'매주'면 WEEKLY다.\n"
     "- by_day는 frequency가 WEEKLY일 때 반복 요일들을 MO/TU/WE/TH/FR/SA/SU "
     "코드의 배열로 담는다 (예: '매주 월요일'이면 [\"MO\"], '매주 화, 목'이면 "
     "[\"TU\", \"TH\"]). DAILY/MONTHLY/YEARLY면 보통 필요 없으니 빈 배열로 둔다.\n"
-    "- start_time, end_time은 24시간제 HH:MM 형식이다.\n"
+    "- start_time, end_time은 24시간제 HH:MM 형식이다. '1시간 동안'처럼 길이만 말하면 end_time은 "
+    "start_time에 그 길이를 더한 시각이다. '8시'처럼 오전/오후가 분명하지 않으면 오전으로 적고 직접 묻지 "
+    "않는다(필요하면 앱이 한 번 되묻는다). '오후 8시', '저녁 8시', '20시'처럼 분명하면 그대로 변환한다.\n"
     "- importance는 null(없음/수면), 1(개인 여가), 2(타인 연관 약속), "
     "3(의무이지만 출석 체크 없음), 4(공식적 의무/평가), 5(반드시 지켜야 함), "
     "6(MAX, 5보다 예외적으로 중요) 중 하나다. 발화에서 유추할 수 없으면 슬롯을 "
     "채우지 말고 missing_slots에 넣는다.\n"
-    "- date_range_id는 함께 제공되는 후보 목록의 id 중 하나만 쓸 수 있다. 후보가 "
-    "없거나 어떤 후보를 말하는지 애매하면 절대 추측하지 말고 date_range_id를 "
-    "null로 두고 missing_slots에 추가한다 (모호한 기간 표현은 항상 명시적으로 "
-    "확인한다).\n"
+    "- date_range_id는 반복 일정의 반복 기간이다. 반복 일정일 때만 묻고 쓴다. 함께 제공되는 후보 목록의 "
+    "id 중 하나만 쓸 수 있고, 후보가 없거나 어떤 후보를 말하는지 애매하면 절대 추측하지 말고 null로 두고 "
+    "missing_slots에 추가한다. 단발 일정이면 항상 null이고 묻지 않는다.\n"
     "- 확실하게 알아낸 슬롯은 missing_slots에 넣지 않는다. 값을 못 정한 슬롯만 "
     "missing_slots에 넣고, 그 각각에 대해 사용자에게 되물을 자연스러운 질문을 "
     "clarifying_questions에 함께 준다 (질문 언어는 [질문 언어] 블록을 따른다).\n"
