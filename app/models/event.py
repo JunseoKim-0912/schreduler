@@ -24,6 +24,8 @@ class Event(Base):
             "OR (event_type = 'DEADLINE' AND start_time IS NULL)",
             name="ck_events_event_type_start_time",
         ),
+        # 되돌리기가 삭제된 행을 원래 id로 다시 넣으므로, SQLite도 지운 id를 재사용하지 않게 한다.
+        {"sqlite_autoincrement": True},
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)

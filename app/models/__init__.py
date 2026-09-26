@@ -1,8 +1,11 @@
+from app.models.action_history import ActionHistory
 from app.models.base import Base
 from app.models.compliance_report import ComplianceReport
 from app.models.daily_actual_log import DailyActualLog
 from app.models.engagement_state import EngagementState
 from app.models.enums import (
+    ActionSource,
+    ActionType,
     ChildEventKind,
     CompletionMethod,
     EngagementScope,
@@ -23,6 +26,9 @@ from app.models.sleep_log import SleepLog
 from app.models.user import User
 
 __all__ = [
+    "ActionHistory",
+    "ActionSource",
+    "ActionType",
     "Base",
     "ChildEventKind",
     "ComplianceReport",

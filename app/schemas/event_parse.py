@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 from app.models.enums import Importance
 from app.schemas.common import NonEmptyStr
-from app.services.llm_client import ClarifyingQuestion, SlotName
+from app.schemas.event_command import CommandResult
+from app.services.llm_client import ClarifyingQuestion, Intent, SlotName
 
 
 class EventParseRequest(BaseModel):
@@ -52,3 +53,9 @@ class EventParseResponse(BaseModel):
     next_question: ClarifyingQuestion | None = None
     missing_slots: list[SlotName] = []
     draft: EventDraft | None = None
+    # v3.6: 발화 의도. create면 위 필드들(기존 슬롯필링)을, delete/update면 command를 본다.
+    intent: Intent = "create"
+    # 사용자 언어로 된 안내 문구 (의도 파악 불가, 대상 없음, 되묻기, 실행 결과, 확인 요청 등)
+    message: str | None = None
+    # 삭제·수정 결과, 또는 일정 초안(create)의 확인 대기 정보
+    command: CommandResult | None = None

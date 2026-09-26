@@ -29,6 +29,12 @@ class ConflictError(AppError):
     status_code = status.HTTP_409_CONFLICT
 
 
+class ExpiredError(AppError):
+    """시간이 지나 더 이상 쓸 수 없는 요청 (예: 10분이 지난 확인 토큰)."""
+
+    status_code = status.HTTP_410_GONE
+
+
 class InvalidInputError(AppError, ValueError):
     """요청 값끼리는 맞지만 기존 데이터와 합쳤을 때 규칙에 어긋나는 경우 등.
 

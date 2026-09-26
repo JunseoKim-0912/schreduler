@@ -23,10 +23,11 @@ def _describe_missed_reason(instance: EventInstance) -> str | None:
 
 def _describe_missed_instance(instance: EventInstance) -> str:
     event = instance.event
-    if event.start_time is None:
-        time_range = f"{event.end_time.strftime('%H:%M')} 마감"
+    start = instance.effective_start
+    if start is None:
+        time_range = f"{instance.effective_end.strftime('%H:%M')} 마감"
     else:
-        time_range = f"{event.start_time.strftime('%H:%M')}~{event.end_time.strftime('%H:%M')}"
+        time_range = f"{start.strftime('%H:%M')}~{instance.effective_end.strftime('%H:%M')}"
     reason = _describe_missed_reason(instance)
     detail = f"사유: {reason}" if reason else "사유 미기록"
     return f"{event.title} ({time_range}) - {detail}"
@@ -43,10 +44,16 @@ def build_daily_checkin_summary(db: Session, user_id: int, target_date: dt_date)
     stmt = (
         select(EventInstance)
         .join(Event, EventInstance.event_id == Event.id)
-        .where(Event.user_id == user_id, EventInstance.date == target_date)
-        .order_by(func.coalesce(Event.start_time, Event.end_time))
+        .where(
+            Event.user_id == user_id,
+            EventInstance.date == target_date,
+            EventInstance.status != EventInstanceStatus.CANCELLED,
+        )
     )
-    instances = db.execute(stmt).scalars().all()
+    # 회차별로 옮긴 시각(override)까지 반영해 실제 시각 순으로 정렬한다.
+    instances = sorted(
+        db.execute(stmt).scalars().all(), key=lambda i: (i.effective_start or i.effective_end, i.id)
+    )
 
     total = len(instances)
     done_count = sum(1 for instance in instances if instance.status == EventInstanceStatus.DONE)

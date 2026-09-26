@@ -23,6 +23,20 @@ class EventInstanceStatus(enum.Enum):
     PENDING = "pending"
     DONE = "done"
     MISSED = "missed"
+    # 반복 일정의 한 회차만 삭제한 상태. 행을 남겨야 반복 회차 생성이 그 날짜를 다시 만들지 않는다.
+    # 포인트·streak·Task 목록·체크인 요약·알림에서 제외한다.
+    CANCELLED = "cancelled"
+
+
+class ActionType(enum.Enum):
+    CREATE = "create"
+    DELETE = "delete"
+    UPDATE = "update"
+
+
+class ActionSource(enum.Enum):
+    NL = "nl"  # 자연어(/events/parse → 확인)
+    UI = "ui"  # 화면의 버튼(DELETE /events/{id} 등)
 
 
 class CompletionMethod(enum.Enum):

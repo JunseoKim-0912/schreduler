@@ -22,7 +22,11 @@ APP_DESCRIPTION = """
 """
 
 TAGS_METADATA: list[dict[str, Any]] = [
-    {"name": "events", "description": "일정 CRUD와 자연어 일정 추가 (FR-1, FR-2). `scheduled`(시작~종료)와 `deadline`(마감만) 두 종류."},
+    {
+        "name": "events",
+        "description": "일정 CRUD와 자연어 일정 관리 (FR-1, FR-2). 자연어로 추가·삭제·수정할 수 있다. "
+        "`scheduled`(시작~종료)와 `deadline`(마감만) 두 종류.",
+    },
     {"name": "tasks", "description": "`deadline` 일정을 할 일 목록처럼 다루는 편의 API. 별도 테이블 없이 Event/EventInstance를 재사용한다."},
     {"name": "date-ranges", "description": "'2026 가을학기' 같은 중요 기간. 반복 일정의 종료 기준으로 재사용한다 (FR-2)."},
     {"name": "locations", "description": "일정 장소와 기본 이동시간. 이동시간 하위 일정 생성에 쓰인다 (FR-5)."},
@@ -32,6 +36,10 @@ TAGS_METADATA: list[dict[str, Any]] = [
     {"name": "personas", "description": "대화 캐릭터(페르소나) 관리 (FR-9). 코드 수정 없이 추가·수정할 수 있다."},
     {"name": "users", "description": "현재 사용자(`X-User-Id`)의 페르소나 선택과 대화 기록."},
     {"name": "points", "description": "규칙성 포인트와 연속 완료(streak) 보너스 (FR-10)."},
+    {
+        "name": "actions",
+        "description": "변경 기록과 되돌리기 (FR-2 v3.6). 자연어로 실행한 생성·삭제·수정과 목록의 삭제 버튼이 기록된다.",
+    },
     {"name": "health", "description": "서버 상태 확인."},
 ]
 
@@ -41,6 +49,7 @@ CURRENT_USER: dict[int | str, dict[str, Any]] = {
     401: {"description": "`X-User-Id` 헤더가 없음"},
     404: {"description": "`X-User-Id`의 사용자(또는 대상)를 찾을 수 없음"},
 }
+EXPIRED: dict[int | str, dict[str, Any]] = {410: {"description": "확인 토큰이 만료됨 (발급 후 10분)"}}
 LLM_ERRORS: dict[int | str, dict[str, Any]] = {
     500: {"description": "LLM_API_KEY가 설정되지 않음"},
     502: {"description": "LLM API 호출 실패"},

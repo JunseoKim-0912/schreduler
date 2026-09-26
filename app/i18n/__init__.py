@@ -62,3 +62,44 @@ def load_non_compliance_category_labels() -> dict[str, dict[str, str]]:
 def non_compliance_category_label(category: NonComplianceCategory, language: str | None) -> str:
     """FR-6 카테고리의 화면 표시 라벨. 코드값(category.value)은 그대로 두고 라벨만 언어별로 고른다."""
     return load_non_compliance_category_labels()[category.value][to_language(language)]
+
+
+MessageKey = Literal[
+    "command.unknown",
+    "command.need_title",
+    "command.not_found",
+    "command.not_found_on_date",
+    "command.ambiguous",
+    "command.ask_scope",
+    "command.ask_date",
+    "command.nothing_to_update",
+    "command.confirm",
+    "command.confirm_create",
+    "command.executed",
+    "command.title_applies_to_series",
+    "summary.create",
+    "summary.delete_series",
+    "summary.delete_instance",
+    "summary.update_series",
+    "summary.update_instance",
+    "summary.multiple",
+    "summary.action.delete",
+    "summary.action.update",
+    "change.time",
+    "change.deadline",
+    "change.title",
+    "change.importance",
+    "undo.newer_change_exists",
+    "undo.already_undone",
+]
+
+
+@cache
+def load_message_templates(language: Language) -> dict[str, str]:
+    """API 응답 문구(자연어 일정 관리 안내, 변경 기록 요약 등). 언어마다 messages_<language>.json."""
+    path = _I18N_DIR / f"messages_{language}.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def render_message(key: MessageKey, language: str | None, **params: object) -> str:
+    return load_message_templates(to_language(language))[key].format(**params)

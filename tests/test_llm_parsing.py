@@ -514,9 +514,10 @@ def test_question_language_changes_cache_key_but_not_task_instructions() -> None
     ko_blocks = ko["messages"][0]["content"].split("\n\n")
     en_blocks = en["messages"][0]["content"].split("\n\n")
     assert ko_blocks[0] == en_blocks[0]  # 작업 지시문은 언어와 무관하게 동일
-    assert len(en_blocks) == 3
+    assert len(en_blocks) == 4
     assert en_blocks[1].startswith("[질문 언어]\npreferred_language: en")
     assert en_blocks[2] == "등록된 기간(date_range) 후보: []"
+    assert en_blocks[3] == "등록된 일정 제목: []"
 
 
 def test_parse_event_with_unknown_user_is_404_without_calling_llm(

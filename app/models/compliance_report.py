@@ -18,6 +18,7 @@ class ComplianceReport(Base):
     저장되고(FR-6 LLM 우회 UI 숏컷), other 선택이나 자유 텍스트 입력 시에만 True가 된다."""
 
     __tablename__ = "compliance_reports"
+    __table_args__ = {"sqlite_autoincrement": True}  # event_instances와 같은 이유
 
     id: Mapped[int] = mapped_column(primary_key=True)
     event_instance_id: Mapped[int] = mapped_column(ForeignKey("event_instances.id"))

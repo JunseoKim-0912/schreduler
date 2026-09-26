@@ -6,9 +6,9 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError
 from app.models.compliance_report import ComplianceReport
-from app.models.enums import NonComplianceCategory
+from app.models.enums import EventInstanceStatus, NonComplianceCategory
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.schemas.compliance_report import (
@@ -45,6 +45,8 @@ def create_compliance_report(
     event_instance = db.get(EventInstance, data.event_instance_id)
     if event_instance is None:
         raise NotFoundError(f"event_instance_id {data.event_instance_id} does not exist")
+    if event_instance.status == EventInstanceStatus.CANCELLED:
+        raise ConflictError(f"event_instance_id {data.event_instance_id} is cancelled")
 
     llm_triggered = _should_trigger_llm(data)
 

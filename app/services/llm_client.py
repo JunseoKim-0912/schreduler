@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.exceptions import AppError
 from app.i18n import Language, non_compliance_category_label, to_language
 from app.models.enums import Importance, NonComplianceCategory
+from app.models.event import Event
 from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
 from app.schemas.persona import PersonaRead
@@ -51,6 +52,21 @@ SLOT_NAMES: tuple[SlotName, ...] = (
     "importance",
     "date_range_id",
 )
+
+# FR-2 v3.6 의도 분류와 삭제·수정 대상 "설명". LLM은 이벤트 ID를 고르지 않는다 — 어떤 이벤트인지는
+# 백엔드(event_command_service)가 이 설명으로 DB에서 결정적으로 찾는다.
+Intent = Literal["create", "delete", "update", "unknown"]
+_COMMAND_FIELDS: dict[str, dict[str, object]] = {
+    "intent": {"type": "string", "enum": ["create", "delete", "update", "unknown"]},
+    "target_title": {"type": ["string", "null"], "description": "삭제/수정할 일정 제목"},
+    "target_date": {"type": ["string", "null"], "description": "특정 날짜 YYYY-MM-DD"},
+    "target_all": {"type": "boolean", "description": "'전부/모두'면 true"},
+    "target_scope": {"type": ["string", "null"], "enum": ["instance", "series", None]},
+    "new_start_time": {"type": ["string", "null"], "description": "24시간제 HH:MM"},
+    "new_end_time": {"type": ["string", "null"], "description": "24시간제 HH:MM"},
+    "new_title": {"type": ["string", "null"]},
+    "new_importance": {"type": ["integer", "null"], "enum": [1, 2, 3, 4, 5, 6, None]},
+}
 
 # FR-2 슬롯필링 결과의 JSON 스키마. frequency/by_day는 RRULE FREQ/BYDAY 값과 그대로
 # 이어지게 해서, event_parse_service가 "FREQ=WEEKLY;BYDAY=MO" 같은 recurrence_rule을
@@ -104,8 +120,9 @@ _EVENT_SLOT_JSON_SCHEMA = {
                     "additionalProperties": False,
                 },
             },
+            **_COMMAND_FIELDS,
         },
-        "required": list(SLOT_NAMES) + ["missing_slots", "clarifying_questions"],
+        "required": list(SLOT_NAMES) + ["missing_slots", "clarifying_questions"] + list(_COMMAND_FIELDS),
         "additionalProperties": False,
     },
 }
@@ -139,6 +156,16 @@ class EventSlotFillResult(BaseModel):
     date_range_id: int | None = None
     missing_slots: list[SlotName] = Field(default_factory=list)
     clarifying_questions: list[ClarifyingQuestion] = Field(default_factory=list)
+    # v3.6: 새 필드가 없는 응답(기존 테스트의 가짜 응답 등)은 일정 추가(create)로 본다.
+    intent: Intent = "create"
+    target_title: str | None = None
+    target_date: date | None = None
+    target_all: bool = False
+    target_scope: Literal["instance", "series"] | None = None
+    new_start_time: str | None = None
+    new_end_time: str | None = None
+    new_title: str | None = None
+    new_importance: Importance | None = None
 
     @property
     def is_complete(self) -> bool:
@@ -199,7 +226,22 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "- '이미 확정된 슬롯'이 함께 주어질 수 있다. 이는 이전 대화 턴에서 이미 "
     "알아낸 값이다. 최신 발화가 그 값을 바꾸라고 명시하지 않는 한 그대로 결과에 "
     "포함하고 missing_slots에 넣지 않는다. 최신 발화가 다른 값으로 정정하면 그 "
-    "값으로 덮어쓴다."
+    "값으로 덮어쓴다.\n"
+    "[의도 분류] 먼저 intent를 정한다: 새 일정을 만들려는 발화는 create, 기존 일정을 없애려는 발화"
+    "(삭제·취소·없애줘)는 delete, 기존 일정의 시간·제목·중요도를 바꾸려는 발화는 update, 일정 관리와 "
+    "무관하면 unknown이다.\n"
+    "- create일 때만 위의 슬롯 규칙을 따른다. create가 아니면 슬롯 필드는 모두 null, missing_slots와 "
+    "clarifying_questions는 빈 배열로 둔다.\n"
+    "- delete/update면 대상을 '설명'만 한다: target_title에는 '등록된 일정 제목' 목록 중 사용자가 말한 "
+    "일정과 가장 가까운 제목을 그대로 적는다(목록에 없으면 사용자가 말한 표현). 특정 날짜를 말하면 "
+    "target_date(YYYY-MM-DD, '오늘'·'내일'·'이번 주 금요일'은 오늘 날짜 기준으로 계산)를 적는다. "
+    "'전부/모두/다'면 target_all=true. '이번만/그날만'이면 target_scope=instance, '반복 전체/매번/앞으로 "
+    "전부'면 series, 알 수 없으면 null.\n"
+    "- update면 바꿀 값만 new_start_time/new_end_time(HH:MM)/new_title/new_importance에 채우고 "
+    "나머지는 null로 둔다. 시작 시각만 말하면 new_end_time은 null로 둔다(지속 시간은 백엔드가 유지한다).\n"
+    "- create와 unknown이면 target_* 는 null(target_all은 false), new_* 는 null이다.\n"
+    "- '진행 중인 요청'이 함께 주어지면 이전 턴의 삭제·수정 요청이다. 사용자의 답을 반영해 같은 intent로 "
+    "target_*/new_* 를 다시 채운다(번호로 고르면 그 후보의 제목과 날짜를 적는다)."
 )
 
 
@@ -299,17 +341,22 @@ def _build_persona_prompt(
     )
 
 
+def _build_event_titles_block(event_titles: list[str]) -> str:
+    return f"등록된 일정 제목: {json.dumps(event_titles, ensure_ascii=False)}"
+
+
 def _build_user_message(
     utterance: str,
     reference_date: date,
     known_slots: dict[str, object] | None = None,
+    pending_command: str | None = None,
 ) -> str:
     known_slots_json = json.dumps(known_slots or {}, ensure_ascii=False, default=str)
-    return (
-        f"오늘 날짜: {reference_date.isoformat()}\n"
-        f"이미 확정된 슬롯: {known_slots_json}\n"
-        f"사용자 발화: {utterance}"
-    )
+    lines = [f"오늘 날짜: {reference_date.isoformat()}", f"이미 확정된 슬롯: {known_slots_json}"]
+    if pending_command:
+        lines.append(f"진행 중인 요청: {pending_command}")
+    lines.append(f"사용자 발화: {utterance}")
+    return "\n".join(lines)
 
 
 def _build_request_payload(
@@ -318,16 +365,19 @@ def _build_request_payload(
     reference_date: date,
     known_slots: dict[str, object] | None = None,
     language: str = "ko",
+    event_titles: list[str] | None = None,
+    pending_command: str | None = None,
 ) -> dict[str, object]:
-    # 공유 범위 순: 작업 지시(전체 공통) → 질문 언어(언어별) → 등록된 기간(사용자별)
+    # 공유 범위 순: 작업 지시(전체 공통) → 질문 언어(언어별) → 등록된 기간·일정 제목(사용자별, 자주 안 바뀜)
     return _build_payload(
         "event_slot_fill",
         [
             _EVENT_SLOT_INSTRUCTIONS,
             _build_question_language_block(to_language(language)),
             _build_date_ranges_block(available_date_ranges),
+            _build_event_titles_block(event_titles or []),
         ],
-        _build_user_message(utterance, reference_date, known_slots),
+        _build_user_message(utterance, reference_date, known_slots, pending_command),
         response_format={"type": "json_schema", "json_schema": _EVENT_SLOT_JSON_SCHEMA},
     )
 
@@ -437,6 +487,8 @@ def fill_event_slots(
     reference_date: date | None = None,
     known_slots: dict[str, object] | None = None,
     language: str = "ko",
+    event_titles: list[str] | None = None,
+    pending_command: str | None = None,
     http_client: httpx.Client | None = None,
 ) -> EventSlotFillResult:
     """자연어 발화에서 title/frequency/by_day/start_time/end_time/importance/
@@ -453,7 +505,13 @@ def fill_event_slots(
         settings.llm_api_key로 인증한 기본 클라이언트를 새로 만든다.
     """
     payload = _build_request_payload(
-        utterance, available_date_ranges or [], reference_date or date.today(), known_slots, language
+        utterance,
+        available_date_ranges or [],
+        reference_date or date.today(),
+        known_slots,
+        language,
+        event_titles,
+        pending_command,
     )
     raw_content = _call_chat_completion(payload, http_client)
     return _parse_response(raw_content)
@@ -570,11 +628,13 @@ def fill_event_slots_for_user(
     *,
     reference_date: date | None = None,
     known_slots: dict[str, object] | None = None,
+    pending_command: str | None = None,
     http_client: httpx.Client | None = None,
 ) -> EventSlotFillResult:
     """fill_event_slots를 호출하되, 이 user_id가 등록해둔 ImportantDateRange 전체를
     date_range_id 후보로 자동으로 함께 제시하고, 되묻는 질문은 그 사용자의
-    preferred_language로 받는다 (FR-2, FR-11).
+    preferred_language로 받는다 (FR-2, FR-11). 삭제·수정 대상을 정확히 짚도록 사용자의
+    기존 일정 제목(ID 없이)도 함께 넣는다 (v3.6).
     """
     date_range_options = get_date_range_options(db, user_id)
     user = db.get(User, user_id)
@@ -584,5 +644,15 @@ def fill_event_slots_for_user(
         reference_date=reference_date,
         known_slots=known_slots,
         language=user.preferred_language if user else "ko",
+        event_titles=get_event_titles(db, user_id),
+        pending_command=pending_command,
         http_client=http_client,
     )
+
+
+def get_event_titles(db: Session, user_id: int) -> list[str]:
+    """사용자의 최상위 일정 제목 목록 (하위 이동시간 일정 제외, 중복 제거·정렬 — 프롬프트 캐시가 흔들리지 않게)."""
+    titles = db.execute(
+        select(Event.title).where(Event.user_id == user_id, Event.parent_event_id.is_(None)).distinct()
+    ).scalars()
+    return sorted(titles)

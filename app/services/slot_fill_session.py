@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from threading import Lock
+from typing import Any, Literal
 
+from app.core.exceptions import ExpiredError, NotFoundError
 from app.models.enums import Importance
 from app.services.llm_client import ClarifyingQuestion, EventSlotFillResult, SLOT_NAMES, SlotName
 
@@ -27,6 +30,10 @@ class SlotFillSession:
     date_range_id: int | None = None
     missing_slots: list[SlotName] = field(default_factory=lambda: list(SLOT_NAMES))
     clarifying_questions: list[ClarifyingQuestion] = field(default_factory=list)
+    # 되묻는 중인 삭제·수정 요청 (event_command_service.CommandDescription을 dict로). 다음 턴의 답으로 보완한다.
+    command: dict[str, Any] | None = None
+    # 되물을 때 보여준 후보 ("1) 물리 퀴즈 (2026-09-26)" 등). 다음 턴 프롬프트에 넣는다.
+    command_candidates: list[str] = field(default_factory=list)
 
     @property
     def is_complete(self) -> bool:
@@ -86,6 +93,59 @@ def delete_session(session_id: str) -> None:
 
 
 def clear_all_sessions() -> None:
-    """테스트 등에서 인메모리 저장소를 초기화할 때 쓴다."""
+    """테스트 등에서 인메모리 저장소(세션과 확인 대기 요청)를 초기화할 때 쓴다."""
     with _lock:
         _sessions.clear()
+        _pending_actions.clear()
+
+
+# --- 확인 대기 중인 요청 -----------------------------------------------------------
+# 여러 개를 한꺼번에 지우거나 바꾸는 요청, 그리고 자연어로 만든 일정 초안은 바로 실행하지 않고
+# 토큰을 발급한다. POST /events/commands/confirm으로 토큰을 보내면 실행된다. 세션과 같은 인메모리
+# 저장소라 서버를 재시작하면 사라진다.
+
+PENDING_ACTION_TTL = timedelta(minutes=10)
+PendingKind = Literal["create", "delete", "update"]
+
+
+@dataclass
+class PendingAction:
+    token: str
+    user_id: int
+    kind: PendingKind
+    payload: dict[str, Any]
+    created_at: datetime
+
+    @property
+    def expires_at(self) -> datetime:
+        return self.created_at + PENDING_ACTION_TTL
+
+
+_pending_actions: dict[str, PendingAction] = {}
+
+
+def create_pending_action(user_id: int, kind: PendingKind, payload: dict[str, Any]) -> PendingAction:
+    now = datetime.now()
+    pending = PendingAction(token=str(uuid.uuid4()), user_id=user_id, kind=kind, payload=payload, created_at=now)
+    with _lock:
+        for token in [t for t, p in _pending_actions.items() if p.expires_at <= now]:
+            del _pending_actions[token]
+        _pending_actions[pending.token] = pending
+    return pending
+
+
+def take_pending_action(token: str, user_id: int) -> PendingAction:
+    """토큰을 꺼낸다 (한 번만 쓸 수 있다). 없거나 다른 사용자 것이면 404, 10분이 지났으면 410."""
+    with _lock:
+        pending = _pending_actions.get(token)
+        if pending is None or pending.user_id != user_id:
+            raise NotFoundError("confirmation token does not exist")
+        del _pending_actions[token]
+    if pending.expires_at <= datetime.now():
+        raise ExpiredError("confirmation token expired — please make the request again")
+    return pending
+
+
+def clear_all_pending_actions() -> None:
+    with _lock:
+        _pending_actions.clear()

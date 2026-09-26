@@ -20,7 +20,7 @@
   "item": [
     {
       "name": "events",
-      "description": "일정 CRUD와 자연어 일정 추가 (FR-1, FR-2). `scheduled`(시작~종료)와 `deadline`(마감만) 두 종류.",
+      "description": "일정 CRUD와 자연어 일정 관리 (FR-1, FR-2). 자연어로 추가·삭제·수정할 수 있다. `scheduled`(시작~종료)와 `deadline`(마감만) 두 종류.",
       "item": [
         {
           "name": "이벤트 생성",
@@ -146,6 +146,40 @@
           "response": []
         },
         {
+          "name": "자연어 요청 확인 후 실행",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/commands/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "commands",
+                "confirm"
+              ]
+            },
+            "description": "`POST /events/parse`가 `needs_confirmation`으로 돌려준 요청을 실행한다.\n\n- 자연어로 만든 일정 초안(create), 또는 2개 이상을 한꺼번에 지우거나 바꾸는 요청(delete/update)이 대상이다.\n- 토큰은 발급 후 10분 동안 한 번만 쓸 수 있다. 지나면 410, 다른 사용자의 토큰이면 404.\n- 실행 결과의 `command.action_id`로 `POST /actions/{id}/undo`를 부르면 되돌릴 수 있다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `410`: 확인 토큰이 만료됨 (발급 후 10분)\n- `422`: Validation Error",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": {{userId}},\n  \"token\": \"3f2b…(needs_confirmation 응답의 토큰)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
           "name": "이벤트 조회",
           "request": {
             "method": "GET",
@@ -230,7 +264,7 @@
                 }
               ]
             },
-            "description": "이벤트와 그 반복 인스턴스, 하위 일정(이동시간·준비)을 함께 삭제한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
+            "description": "이벤트와 그 반복 인스턴스, 하위 일정(이동시간·준비)을 함께 삭제한다.\n\n삭제 전 상태가 변경 기록(source=ui)으로 남아 `POST /actions/{id}/undo`로 되돌릴 수 있다.\n기록 id는 응답 헤더 `X-Action-Id`로 돌려준다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
           },
           "response": []
         }
@@ -1444,6 +1478,74 @@
               ]
             },
             "description": "오늘은 현재까지 완료 상태로 실시간 계산하고, 이번 주(월요일 시작)와 누적은 어제까지 기록된 포인트에 오늘 값을 더한다.\n\n`current_streak_days`는 오늘 일정이 남아 있으면 어제까지의 연속 일수, 오늘 전부 완료하면 오늘 포함, 오늘 하나라도 놓치면 0이다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "actions",
+      "description": "변경 기록과 되돌리기 (FR-2 v3.6). 자연어로 실행한 생성·삭제·수정과 목록의 삭제 버튼이 기록된다.",
+      "item": [
+        {
+          "name": "최근 변경 기록",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "가져올 기록 수 (최신순)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "자연어로 실행한 생성·삭제·수정과 목록의 삭제 버튼 기록을 최신순으로 돌려준다. `undone`이 true면 이미 되돌린 기록.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+          },
+          "response": []
+        },
+        {
+          "name": "변경 되돌리기",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actions/:action_id/undo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actions",
+                ":action_id",
+                "undo"
+              ],
+              "variable": [
+                {
+                  "key": "action_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "기록된 변경을 되돌린다.\n\n- 삭제는 원래 ID 그대로 다시 넣고(회차·하위 일정·미준수 사유 포함), 수정은 이전 값으로, 생성은 만든 일정을 지운다.\n- 과거 날짜 회차가 영향을 받았으면 그날부터 어제까지 포인트 원장을 다시 계산한다.\n- 이미 되돌린 기록이거나, 같은 일정을 건드린 더 최근 기록이 아직 남아 있으면 409. 되돌리기 자체는 다시 되돌릴 수 없다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
           },
           "response": []
         }

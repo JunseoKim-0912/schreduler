@@ -24,6 +24,8 @@ from app.schemas.points import DailyPointsResult, PointsSummaryRead
 
 logger = logging.getLogger(__name__)
 
+_CANCELLED = EventInstanceStatus.CANCELLED
+
 DAILY_POINTS_JOB_ID = "daily_points_calculation"
 DAILY_POINTS_HOUR = 0
 DAILY_POINTS_MINUTE = 0
@@ -59,7 +61,7 @@ def _instances_on(db: Session, user_id: int, target_date: dt_date) -> list[Event
         select(EventInstance)
         .join(Event, EventInstance.event_id == Event.id)
         .options(contains_eager(EventInstance.event))
-        .where(Event.user_id == user_id, EventInstance.date == target_date)
+        .where(Event.user_id == user_id, EventInstance.date == target_date, EventInstance.status != _CANCELLED)
     )
     return list(db.execute(stmt).scalars().all())
 
@@ -69,8 +71,13 @@ def calculate_streak_days(db: Session, user_id: int, target_date: dt_date) -> in
 
     일정이 하나도 없는 날은 streak를 끊지도 늘리지도 않는다(그런 날은 조회 결과에 아예 없다).
     PENDING이 남은 날도 미완료로 본다 — 하루라도 미완료가 있으면 그 날에서 streak가 0으로 끊긴다.
+    취소(CANCELLED)된 회차는 처음부터 없던 일정으로 본다.
     """
-    user_instances_until_target = (Event.user_id == user_id, EventInstance.date <= target_date)
+    user_instances_until_target = (
+        Event.user_id == user_id,
+        EventInstance.date <= target_date,
+        EventInstance.status != _CANCELLED,
+    )
 
     last_incomplete_date = db.scalar(
         select(func.max(EventInstance.date))
@@ -143,6 +150,7 @@ def recalculate_points_since(
     today = today or dt_date.today()
     # 일정이 없는 날은 점수가 항상 0이고 배율도 붙지 않으므로, 일정 회차가 있거나 이미 원장 행이 있는 날만
     # 다시 계산한다. 몇 년 전 할 일을 완료해도 그 사이의 빈 날짜를 전부 쓰지 않는다.
+    # 취소된 회차도 포함한다 — 취소 전에 기록된 그날 점수를 다시 계산해야 하기 때문이다.
     in_range = (EventInstance.date >= start_date, EventInstance.date < today)
     instance_dates = db.execute(
         select(EventInstance.date).join(Event, EventInstance.event_id == Event.id).where(Event.user_id == user_id, *in_range)

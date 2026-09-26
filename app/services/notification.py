@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
 from app.i18n import render_notification
-from app.models.enums import EventType
+from app.models.enums import EventInstanceStatus, EventType
 from app.models.event_instance import EventInstance
 
 logger = logging.getLogger(__name__)
@@ -89,6 +89,10 @@ def _send_notification(event_instance_id: int, kind: NotificationKind) -> None:
             )
             return
 
+        if instance.status == EventInstanceStatus.CANCELLED:
+            logger.info("[알림][%s] 취소된 회차라 발송 생략. event_instance_id=%s", kind, event_instance_id)
+            return
+
         event = instance.event
         language = event.user.preferred_language
         if kind == "start":
@@ -126,13 +130,15 @@ def schedule_event_instance_notifications(instance: EventInstance) -> None:
     같아서(replace_existing=True) 중복 등록되지 않는다.
     """
     event = instance.event
-    end_at = datetime.combine(instance.date, event.end_time.time())
+    if instance.status == EventInstanceStatus.CANCELLED:
+        return
+    end_at = instance.effective_end
 
     if event.event_type == EventType.DEADLINE:
         # 마감 이벤트는 시작 시각이 없으므로 시작 알림 대신 마감 하루 전 리마인더를 보낸다.
         _add_notification_job(instance.id, "deadline_reminder", end_at - DEADLINE_REMINDER_OFFSET)
     else:
-        _add_notification_job(instance.id, "start", datetime.combine(instance.date, event.start_time.time()))
+        _add_notification_job(instance.id, "start", instance.effective_start)
     _add_notification_job(instance.id, "end", end_at)
 
 

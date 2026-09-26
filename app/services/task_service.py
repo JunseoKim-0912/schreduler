@@ -25,13 +25,13 @@ class TaskNotFoundError(NotFoundError):
 def _due_at(event: Event, instance: EventInstance | None) -> datetime:
     if instance is None:
         return event.end_time
-    return datetime.combine(instance.date, event.end_time.time())
+    return instance.effective_end
 
 
 def current_instance(event: Event) -> EventInstance | None:
     """Task 목록에 보여줄 인스턴스: 아직 완료 안 된 것 중 가장 이른 것(밀린 마감이 먼저 보이게),
-    전부 완료했다면 가장 최근 것."""
-    instances = sorted(event.instances, key=lambda i: i.date)
+    전부 완료했다면 가장 최근 것. 취소된 회차는 없는 것으로 본다."""
+    instances = sorted((i for i in event.instances if i.status != EventInstanceStatus.CANCELLED), key=lambda i: i.date)
     if not instances:
         return None
     pending = [i for i in instances if i.status != EventInstanceStatus.DONE]
@@ -63,7 +63,12 @@ def list_tasks(db: Session, user_id: int, now: datetime | None = None) -> list[T
         .where(Event.user_id == user_id, Event.event_type == EventType.DEADLINE)
         .options(selectinload(Event.instances))
     ).scalars().all()
-    tasks = [to_task_read(event, current_instance(event), now) for event in events]
+    tasks = [
+        to_task_read(event, current_instance(event), now)
+        for event in events
+        # 회차가 있는데 전부 취소됐으면 목록에서 뺀다 (회차가 원래 없는 옛 deadline은 그대로 보여준다).
+        if not event.instances or current_instance(event) is not None
+    ]
     return sorted(tasks, key=lambda t: (t.due_at, t.event_id))
 
 
