@@ -136,6 +136,16 @@ describe("apiFetch 에러", () => {
     assert.deepEqual(seen.map((e) => e.status), [404]);
   });
 
+  test("onHeaders로 성공 응답의 헤더를 받는다 (204 포함)", async () => {
+    mockFetch(() => new Response(null, { status: 204, headers: { "X-Action-Id": "12" } }));
+    let actionId = null;
+
+    const result = await apiFetch("/event-instances/3", { method: "DELETE", onHeaders: (h) => (actionId = h.get("X-Action-Id")) });
+
+    assert.equal(result, null);
+    assert.equal(actionId, "12");
+  });
+
   test("네트워크 오류는 status 0으로 알린다", async () => {
     globalThis.fetch = async () => {
       throw new TypeError("Failed to fetch");

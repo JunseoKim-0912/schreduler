@@ -1,10 +1,9 @@
 import { apiFetch, getUserId, onApiError, setUserId } from "./api.js";
+import { initCalendarPanel } from "./calendar.js";
 import { initEventsPanel } from "./events.js";
 import { initPersonasPanel } from "./personas.js";
 import { initPointsPanel } from "./points.js";
 import { initTasksPanel } from "./tasks.js";
-
-const TAB_KEY = "schreduler.activeTab";
 
 // --- 에러 배너 ---------------------------------------------------------------
 
@@ -60,12 +59,22 @@ userIdInput.addEventListener("keydown", (event) => {
 // --- 탭별 기능 ---------------------------------------------------------------
 
 // 탭을 열 때마다 해당 탭의 데이터를 새로 불러온다. 키는 탭 버튼의 data-tab 값이다.
-// 이벤트 탭에서 실행·되돌리기를 하면 할 일(마감 일정)과 포인트(지난 회차 재계산)도 바뀌므로 함께 다시 불러온다.
+// 한 탭에서 일정을 바꾸면(자연어 실행·되돌리기, 캘린더 완료·삭제, 할 일 완료) 다른 탭의 캘린더·목록·포인트도
+// 달라지므로 나머지 탭을 함께 다시 불러온다. 페르소나 탭은 일정과 무관해서 뺀다.
+const DATA_TABS = ["calendar", "events", "tasks", "points"];
+const refreshOtherTabs = (source) =>
+  Promise.all(DATA_TABS.filter((name) => name !== source).map((name) => panels[name].refresh()));
+
 const panels = {
-  events: initEventsPanel({
-    onDataChanged: () => Promise.all([panels.tasks.refresh(), panels.points.refresh()]),
+  calendar: initCalendarPanel({
+    onDataChanged: () => refreshOtherTabs("calendar"),
+    onCreateAt: (text) => {
+      activateTab("events");
+      panels.events.prefill(text);
+    },
   }),
-  tasks: initTasksPanel(),
+  events: initEventsPanel({ onDataChanged: () => refreshOtherTabs("events") }),
+  tasks: initTasksPanel({ onDataChanged: () => refreshOtherTabs("tasks") }),
   points: initPointsPanel(),
   chat: initPersonasPanel(),
 };
@@ -86,11 +95,6 @@ function activateTab(name, { focus = false } = {}) {
   if (focus) target.focus();
   activeTab = target.dataset.tab;
   panels[activeTab]?.refresh();
-  try {
-    localStorage.setItem(TAB_KEY, target.dataset.tab);
-  } catch {
-    // 탭 기억은 편의 기능이라 저장 실패는 무시한다.
-  }
 }
 
 for (const tab of tabs) {
@@ -103,13 +107,8 @@ for (const tab of tabs) {
   });
 }
 
-let initialTab = null;
-try {
-  initialTab = localStorage.getItem(TAB_KEY);
-} catch {
-  initialTab = null;
-}
-activateTab(initialTab);
+// 페이지를 열면 항상 캘린더 탭부터 보여준다.
+activateTab("calendar");
 
 // --- 서버 연결 확인 (공통 fetch 동작 확인용) ----------------------------------
 

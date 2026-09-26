@@ -111,8 +111,9 @@ async function readBody(response) {
  * - 2xx면 파싱한 JSON(204면 null)을 돌려주고, 실패하면 ApiError를 던지면서 등록된 에러 핸들러에 알린다.
  *   화면에 띄우지 않고 직접 처리하려면 { showError: false }. 함수를 넘기면 그 함수가 true를 돌려준 에러만 알린다
  *   (예: 409는 화면 안에서 직접 보여주고 나머지는 배너로).
+ * - 응답 헤더가 필요하면(예: 삭제의 X-Action-Id) onHeaders(headers)로 받는다. 성공 응답에서만 불린다.
  */
-export async function apiFetch(path, { method = "GET", body, headers, showError = true, ...rest } = {}) {
+export async function apiFetch(path, { method = "GET", body, headers, showError = true, onHeaders, ...rest } = {}) {
   const requestHeaders = new Headers(headers);
   requestHeaders.set("Content-Type", "application/json");
   requestHeaders.set("Accept", "application/json");
@@ -136,6 +137,7 @@ export async function apiFetch(path, { method = "GET", body, headers, showError 
     throw fail(new ApiError(describeError({ status: 0, method, path }), { status: 0, method, path, cause }));
   }
 
+  if (response.ok) onHeaders?.(response.headers);
   if (response.status === 204) return null;
   const data = await readBody(response);
   if (!response.ok) {

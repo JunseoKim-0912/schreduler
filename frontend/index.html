@@ -32,13 +32,39 @@
       </div>
 
       <nav class="tabs" role="tablist" aria-label="기능">
+        <button type="button" role="tab" id="tab-calendar" aria-controls="panel-calendar" data-tab="calendar">캘린더</button>
         <button type="button" role="tab" id="tab-events" aria-controls="panel-events" data-tab="events">이벤트</button>
         <button type="button" role="tab" id="tab-tasks" aria-controls="panel-tasks" data-tab="tasks">할 일(Task)</button>
         <button type="button" role="tab" id="tab-points" aria-controls="panel-points" data-tab="points">포인트</button>
         <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat" data-tab="chat">페르소나 대화</button>
       </nav>
 
-      <section id="panel-events" class="panel" role="tabpanel" aria-labelledby="tab-events">
+      <section id="panel-calendar" class="panel" role="tabpanel" aria-labelledby="tab-calendar">
+        <div class="cal-toolbar">
+          <div class="cal-nav">
+            <button id="cal-prev" type="button" class="button button-secondary button-small">◀ 이전 주</button>
+            <button id="cal-today" type="button" class="button button-secondary button-small">오늘</button>
+            <button id="cal-next" type="button" class="button button-secondary button-small">다음 주 ▶</button>
+          </div>
+          <h2 id="cal-range" class="cal-range" aria-live="polite"></h2>
+        </div>
+        <p id="calendar-status" class="hint" role="status" hidden></p>
+        <div id="calendar-toast" class="cal-toast" role="status" hidden></div>
+        <div id="calendar-scroll" class="cal-scroll">
+          <div id="calendar-grid" class="cal-grid"></div>
+        </div>
+        <div class="cal-legend" aria-label="색 범례">
+          <span class="cal-legend-item"><i class="cal-swatch imp-none"></i>중요도 없음</span>
+          <span class="cal-legend-item"><i class="cal-swatch imp-1"></i><i class="cal-swatch imp-2"></i><i class="cal-swatch imp-3"></i><i class="cal-swatch imp-4"></i><i class="cal-swatch imp-5"></i>1→5</span>
+          <span class="cal-legend-item"><i class="cal-swatch imp-max"></i>MAX</span>
+          <span class="cal-legend-item"><i class="cal-swatch imp-3 is-done"></i>완료</span>
+          <span class="cal-legend-item"><i class="cal-swatch imp-3 is-missed"></i>놓침</span>
+          <span class="cal-legend-item"><i class="cal-swatch is-overdue"></i>마감 지남</span>
+        </div>
+        <div id="cal-popover" class="cal-popover" role="dialog" aria-labelledby="cal-popover-title" hidden></div>
+      </section>
+
+      <section id="panel-events" class="panel" role="tabpanel" aria-labelledby="tab-events" hidden>
         <div class="events-layout">
           <div class="events-main">
             <h2>자연어로 일정 관리</h2>

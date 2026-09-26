@@ -49,14 +49,15 @@ def test_every_asset_referenced_by_index_exists() -> None:
         assert client.get(f"/app/{ref}").status_code == 200
 
 
-def test_layout_has_four_tabs_with_panels() -> None:
+def test_layout_has_five_tabs_with_calendar_first() -> None:
     tabs = re.findall(r'role="tab"[^>]*aria-controls="([\w-]+)"[^>]*>([^<]+)<', INDEX)
 
-    assert [label for _, label in tabs] == ["이벤트", "할 일(Task)", "포인트", "페르소나 대화"]
+    assert [label for _, label in tabs] == ["캘린더", "이벤트", "할 일(Task)", "포인트", "페르소나 대화"]
     for panel_id, _ in tabs:
         assert f'id="{panel_id}"' in INDEX
-    # 첫 탭 패널만 처음부터 보이고 나머지는 숨겨져 있다 (JS가 켜지기 전에도 한 섹션만 보이게)
-    assert len(re.findall(r'role="tabpanel"[^>]*hidden', INDEX)) == 3
+    # 첫 탭(캘린더) 패널만 처음부터 보이고 나머지는 숨겨져 있다 (JS가 켜지기 전에도 한 섹션만 보이게)
+    assert re.search(r'id="panel-calendar"[^>]*role="tabpanel"[^>]*>', INDEX).group(0).find("hidden") == -1
+    assert len(re.findall(r'role="tabpanel"[^>]*hidden', INDEX)) == 4
 
 
 def test_missing_file_is_404_and_api_routes_still_work() -> None:

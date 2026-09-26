@@ -463,6 +463,14 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   resetConversation();
   return {
     refresh,
+    // 캘린더의 빈 칸을 누르면 "9월 24일 14시에 " 같은 문구를 채워 두고 바로 이어서 입력하게 한다.
+    prefill(text) {
+      if (draft) endConversation();
+      input.value = text;
+      input.focus();
+      input.setSelectionRange(text.length, text.length);
+      input.scrollIntoView({ block: "center" });
+    },
     // 사용자가 바뀌면 이전 사용자의 대화 세션과 목록을 지운다.
     reset() {
       resetConversation();

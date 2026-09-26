@@ -3,7 +3,7 @@ import { badge, el, setStatus } from "./dom.js";
 import { IMPORTANCE_OPTIONS, describeRecurrence, formatDateTime, importanceLabel, toApiDateTime } from "./format.js";
 
 // 할 일 탭: 새 할 일(POST /tasks), 목록(GET /tasks — 서버가 마감 오름차순으로 준다), 완료(PUT /tasks/{event_instance_id}/complete).
-export function initTasksPanel() {
+export function initTasksPanel({ onDataChanged = async () => {} } = {}) {
   const form = document.getElementById("task-form");
   const titleInput = document.getElementById("task-title");
   const dueInput = document.getElementById("task-due");
@@ -33,7 +33,7 @@ export function initTasksPanel() {
       const task = await apiFetch("/tasks", { method: "POST", body });
       form.reset();
       setStatus(formStatus, `"${task.title}"을(를) 추가했어요.`);
-      await refresh();
+      await Promise.all([refresh(), onDataChanged()]);
     } catch {
       setStatus(formStatus, "추가하지 못했어요. 위의 안내를 확인해 주세요.");
     } finally {
@@ -45,7 +45,7 @@ export function initTasksPanel() {
     button.disabled = true;
     try {
       await apiFetch(`/tasks/${task.event_instance_id}/complete`, { method: "PUT" });
-      await refresh();
+      await Promise.all([refresh(), onDataChanged()]);
     } catch {
       button.disabled = false;
     }
