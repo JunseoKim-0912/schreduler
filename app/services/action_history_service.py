@@ -28,6 +28,7 @@ from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.user import User
 from app.services.event_service import remove_event
+from app.services.notification import sync_notifications
 from app.services.points import recalculate_points_since
 
 logger = logging.getLogger(__name__)
@@ -206,6 +207,7 @@ def undo_action(db: Session, user: User, action_id: int) -> ActionHistory:
     action.undone_at = datetime.now()
     db.commit()
     db.refresh(action)
+    sync_notifications(db, event_ids=_event_ids(action), instance_ids=(action.affected_ids or {}).get("event_instances", []))
     logger.info("[되돌리기] user_id=%s action_id=%s (%s)", user.id, action.id, action.summary_text)
 
     recalculate_points_for_dates(db, user.id, touched_dates)

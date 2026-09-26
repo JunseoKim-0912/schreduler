@@ -13,7 +13,8 @@ from app.models.location import Location
 from app.models.user import User
 from app.schemas.event import EventCreate, EventUpdate, validate_event_times, validate_recurrence
 from app.services.common import require
-from app.services.recurrence import generate_event_instances
+from app.services.notification import sync_notifications
+from app.services.recurrence import create_single_instance, follow_single_instance, generate_event_instances
 
 # build_event / apply_event_update / remove_event는 커밋하지 않는다. 자연어 명령·되돌리기
 # (app/services/event_command_service.py, action_history_service.py)가 여러 변경과 ActionHistory 기록을
@@ -41,6 +42,8 @@ def build_event(db: Session, data: EventCreate) -> Event:
 
     if event.is_recurring and event.recurrence_rule and event.date_range_id is not None:
         generate_event_instances(db, event)
+    elif not event.is_recurring:
+        create_single_instance(db, event)
 
     # event 자신이 child가 아니고(parent_event_id 없음) 장소가 있으면, 이동시간
     # TRAVEL child를 자동 생성한다 (FR-5).
@@ -54,6 +57,7 @@ def create_event(db: Session, data: EventCreate) -> Event:
     event = build_event(db, data)
     db.commit()
     db.refresh(event)
+    sync_notifications(db, event_ids=[event.id])
     return event
 
 
@@ -88,12 +92,15 @@ def apply_event_update(db: Session, event: Event, changes: dict[str, Any]) -> No
         setattr(event, field, value)
 
     # 이동시간·준비 하위 일정은 부모 시작 시각에 붙어 있으므로 같은 만큼 민다 (FR-5).
+    children = list_child_events(db, event.id)
     if old_start is not None and event.start_time is not None and event.start_time != old_start:
         delta = event.start_time - old_start
-        for child in list_child_events(db, event.id):
+        for child in children:
             if child.start_time is not None:
                 child.start_time += delta
             child.end_time += delta
+    for item in [event, *children]:
+        follow_single_instance(db, item)
 
 
 def update_event(db: Session, event_id: int, data: EventUpdate) -> Event | None:
@@ -105,6 +112,7 @@ def update_event(db: Session, event_id: int, data: EventUpdate) -> Event | None:
     apply_event_update(db, event, data.model_dump(exclude_unset=True))
     db.commit()
     db.refresh(event)
+    sync_notifications(db, event_ids=[event.id])
     return event
 
 
@@ -125,6 +133,8 @@ def delete_event(db: Session, event_id: int) -> bool:
     if event is None:
         return False
 
+    instance_ids = [i.id for item in [event, *list_child_events(db, event.id)] for i in item.instances]
     remove_event(db, event)
     db.commit()
+    sync_notifications(db, instance_ids=instance_ids)
     return True

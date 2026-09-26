@@ -263,7 +263,7 @@ def test_create_child_event_propagates_recurrence_and_generates_instances(
     assert child_instance_dates == [date(2026, 9, 7), date(2026, 9, 14), date(2026, 9, 21), date(2026, 9, 28)]
 
 
-def test_create_child_event_does_not_recur_when_parent_is_not_recurring(
+def test_create_child_event_for_one_off_parent_gets_single_instance(
     session: Session,
 ) -> None:
     user, location = _make_user_and_location(session)
@@ -283,9 +283,6 @@ def test_create_child_event_does_not_recur_when_parent_is_not_recurring(
     assert child.is_recurring is False
     assert child.recurrence_rule is None
     assert child.date_range_id is None
-    assert (
-        session.execute(select(EventInstance).where(EventInstance.event_id == child.id))
-        .scalars()
-        .first()
-        is None
-    )
+    # 단발 부모의 이동시간 child도 단발 일정이라 회차 하나를 갖는다 (알림·포인트 등이 회차 기준)
+    [instance] = session.execute(select(EventInstance).where(EventInstance.event_id == child.id)).scalars().all()
+    assert instance.date == date(2026, 9, 7)

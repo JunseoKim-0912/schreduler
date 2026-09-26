@@ -87,11 +87,7 @@ def create_task(db: Session, user: User, data: TaskCreate, now: datetime | None 
             date_range_id=data.date_range_id,
         ),
     )
-    # 기존 생성 로직은 반복 이벤트에만 인스턴스를 만든다. 단발성 task도 완료 처리할 수 있도록 마감일에 하나 만든다.
-    if not event.is_recurring:
-        db.add(EventInstance(event_id=event.id, date=data.end_time.date(), status=EventInstanceStatus.PENDING))
-        db.commit()
-    db.refresh(event)
+    # 단발성 task의 회차(마감일 하나)는 create_event가 다른 단발 일정과 같은 방식으로 만든다.
     return to_task_read(event, current_instance(event), now or datetime.now())
 
 

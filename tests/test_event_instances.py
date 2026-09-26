@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.db import get_db
 from app.main import app
-from app.models import ActionHistory, Base, EventInstance, User
+from app.models import ActionHistory, Base, Event, EventInstance, User
 from app.models.enums import EventInstanceStatus
 
 
@@ -183,14 +183,28 @@ def test_instance_time_override_is_reflected(client, engine, user_id):
     assert (next_week["start_time"], next_week["time_overridden"]) == ("2026-10-03T17:00:00", False)
 
 
-def test_one_off_events_without_instances_are_included(client, engine, user_id):
+def test_one_off_events_have_their_single_instance(client, engine, user_id):
     event_id = _one_off(client, user_id, "치과", "2026-09-23T10:00:00", "2026-09-23T11:00:00")
     _one_off(client, user_id, "다음 주 치과", "2026-09-30T10:00:00", "2026-09-30T11:00:00")
 
     [item] = _week(client, user_id).json()
 
-    assert item["event_id"] == event_id and item["event_instance_id"] is None
+    assert item["event_id"] == event_id
+    assert item["event_instance_id"] == _instance_id(engine, event_id, date(2026, 9, 23))
     assert (item["date"], item["status"], item["start_time"]) == ("2026-09-23", "pending", "2026-09-23T10:00:00")
+
+
+def test_legacy_one_off_events_without_instances_are_still_included(client, engine, user_id):
+    """회차 생성 이전에 만들어져 백필하지 않은(지난 날짜) 단발 일정도 캘린더에는 보인다."""
+    with Session(engine) as session:
+        event = Event(user_id=user_id, title="옛 치과", start_time=datetime(2026, 9, 22, 10), end_time=datetime(2026, 9, 22, 11))
+        session.add(event)
+        session.commit()
+        event_id = event.id
+
+    [item] = _week(client, user_id).json()
+
+    assert (item["event_id"], item["event_instance_id"], item["date"]) == (event_id, None, "2026-09-22")
 
 
 @pytest.mark.parametrize(

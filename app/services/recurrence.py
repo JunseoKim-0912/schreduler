@@ -63,6 +63,31 @@ def generate_event_instances(session: Session, event: Event) -> list[EventInstan
     return created
 
 
+def create_single_instance(session: Session, event: Event) -> EventInstance:
+    """비반복 이벤트의 회차 하나를 일정 날짜(deadline이면 마감 날짜)에 만든다. 이미 있으면 그대로 둔다.
+
+    알림(FR-4)·미준수 사유(FR-6)·체크인(FR-8)·포인트(FR-10)가 모두 EventInstance 기준이라,
+    단발 일정도 회차가 있어야 이 기능들에 잡힌다.
+    """
+    existing = session.execute(select(EventInstance).where(EventInstance.event_id == event.id)).scalars().first()
+    if existing is not None:
+        return existing
+    instance = EventInstance(event_id=event.id, date=event.anchor_time.date(), status=EventInstanceStatus.PENDING)
+    session.add(instance)
+    session.flush()
+    return instance
+
+
+def follow_single_instance(session: Session, event: Event) -> None:
+    """비반복 이벤트는 회차가 하나뿐이라 이벤트의 날짜·시각을 그대로 따른다 (수정 뒤 호출)."""
+    if event.is_recurring:
+        return
+    for instance in session.execute(select(EventInstance).where(EventInstance.event_id == event.id)).scalars():
+        instance.date = event.anchor_time.date()
+        instance.start_time_override = None
+        instance.end_time_override = None
+
+
 def build_recurrence_rule(frequency: str, by_day: list[str] | None) -> str:
     """frequency("WEEKLY" 등)와 by_day(["MO"] 등)로 RRULE 문자열을 조립한다.
 

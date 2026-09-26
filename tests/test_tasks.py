@@ -241,12 +241,26 @@ def test_all_instances_done_shows_latest_as_completed(client: TestClient, user_i
 
 
 @freeze_time(NOW)
-def test_deadline_event_without_instance_is_listed(client: TestClient, user_id: int) -> None:
-    """/events로 만든 단발성 deadline은 인스턴스가 없다 — 목록엔 나오되 인스턴스 필드는 null."""
+@freeze_time(NOW)
+def test_deadline_event_from_events_api_gets_instance(client: TestClient, user_id: int) -> None:
+    """/events로 만든 단발성 deadline도 /tasks와 똑같이 마감일에 회차가 하나 생긴다."""
     client.post(
         "/events",
-        json={"user_id": user_id, "title": "옛 마감", "event_type": "deadline", "end_time": "2026-09-23T09:00:00"},
+        json={"user_id": user_id, "title": "마감", "event_type": "deadline", "end_time": "2026-09-23T09:00:00"},
     )
+
+    [listed] = client.get("/tasks", headers=_headers(user_id)).json()
+
+    assert listed["event_instance_id"] is not None
+    assert listed["status"] == "pending"
+    assert (listed["completed"], listed["overdue"]) == (False, True)
+
+
+def test_legacy_deadline_event_without_instance_is_listed(client: TestClient, engine, user_id: int) -> None:
+    """회차 생성 이전에 만들어진(백필 안 한 지난) deadline은 인스턴스가 없다 — 목록엔 나오되 인스턴스 필드는 null."""
+    with Session(engine) as session:
+        session.add(Event(user_id=user_id, title="옛 마감", event_type=EventType.DEADLINE, start_time=None, end_time=datetime(2026, 9, 23, 9)))
+        session.commit()
 
     [listed] = client.get("/tasks", headers=_headers(user_id)).json()
 

@@ -30,6 +30,7 @@ from app.services.action_history_service import Snapshot, record_action, recalcu
 from app.services.event_instance_service import cancel_instance, child_instances_on_same_date, set_instance_times
 from app.services.event_service import apply_event_update, build_event, remove_event
 from app.services.llm_client import EventSlotFillResult, LLMResponseParsingError
+from app.services.notification import sync_notifications
 from app.services.slot_fill_session import PendingAction, create_pending_action
 
 CommandIntent = Literal["delete", "update"]
@@ -173,7 +174,9 @@ def resolve(db: Session, user: User, desc: CommandDescription) -> Resolution:
         targets: list[Target] = []
         for event in events:
             on_date = [i for i in _active_instances(event) if i.date == desc.date]
-            if on_date:
+            if on_date and not _is_recurring(event):
+                targets.append(Target(event))  # 단발 일정은 회차가 하나뿐이라 이벤트 자체를 바꾸고, 회차가 따라간다
+            elif on_date:
                 targets.extend(Target(event, instance) for instance in on_date)
             elif not event.instances and event.anchor_time.date() == desc.date:
                 targets.append(Target(event))  # 회차가 없는 단발성 이벤트
@@ -361,6 +364,7 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
     )
     db.commit()
     db.refresh(action)
+    sync_notifications(db, event_ids=event_ids, instance_ids=instance_ids)
     recalculate_points_for_dates(db, user.id, touched_dates)
 
     message = " ".join([render_message("command.executed", lang, summary=summary), *sorted(notes)])
@@ -404,6 +408,7 @@ def create_event_from_nl(db: Session, user: User, data: EventCreate) -> Executio
     db.commit()
     db.refresh(action)
     db.refresh(event)
+    sync_notifications(db, event_ids=[event.id])
     message = render_message("command.executed", user.preferred_language, summary=summary)
     return ExecutionResult(action=action, affected=[to_command_target(Target(event))], message=message)
 

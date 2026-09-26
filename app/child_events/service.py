@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.enums import ChildEventKind, EventType, Importance
 from app.models.event import Event
-from app.services.recurrence import generate_event_instances
+from app.services.recurrence import create_single_instance, generate_event_instances
 
 TRAVEL_CHILD_TITLE_PREFIX = "이동"
 
@@ -86,6 +86,8 @@ def create_child_event(session: Session, parent_event: Event) -> Event | None:
 
     if should_recur:
         generate_event_instances(session, child)
+    else:
+        create_single_instance(session, child)
 
     return child
 
@@ -115,6 +117,7 @@ def create_custom_child_event(
     )
     session.add(child)
     session.flush()
+    create_single_instance(session, child)
     return child
 
 

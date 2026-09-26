@@ -1,22 +1,29 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from collections.abc import Iterable
+from datetime import date, datetime, timedelta
 from typing import Literal
 
 import firebase_admin
+from apscheduler.jobstores.base import JobLookupError
 from firebase_admin import credentials, messaging
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
 from app.i18n import render_notification
 from app.models.enums import EventInstanceStatus, EventType
+from app.models.event import Event
 from app.models.event_instance import EventInstance
 
 logger = logging.getLogger(__name__)
 
 NotificationKind = Literal["start", "end", "deadline_reminder"]
+NOTIFICATION_KINDS: tuple[NotificationKind, ...] = ("start", "end", "deadline_reminder")
 
 DEADLINE_REMINDER_OFFSET = timedelta(minutes=1440)
 
@@ -129,17 +136,86 @@ def schedule_event_instance_notifications(instance: EventInstance) -> None:
     계산한다. 같은 instance로 다시 호출해도 job id가
     같아서(replace_existing=True) 중복 등록되지 않는다.
     """
-    event = instance.event
     if instance.status == EventInstanceStatus.CANCELLED:
         return
-    end_at = instance.effective_end
+    for kind, run_date in _notification_times(instance):
+        _add_notification_job(instance.id, kind, run_date)
 
-    if event.event_type == EventType.DEADLINE:
+
+def _notification_times(instance: EventInstance) -> list[tuple[NotificationKind, datetime]]:
+    end_at = instance.effective_end
+    if instance.event.event_type == EventType.DEADLINE:
         # 마감 이벤트는 시작 시각이 없으므로 시작 알림 대신 마감 하루 전 리마인더를 보낸다.
-        _add_notification_job(instance.id, "deadline_reminder", end_at - DEADLINE_REMINDER_OFFSET)
-    else:
-        _add_notification_job(instance.id, "start", instance.effective_start)
-    _add_notification_job(instance.id, "end", end_at)
+        return [("deadline_reminder", end_at - DEADLINE_REMINDER_OFFSET), ("end", end_at)]
+    return [("start", instance.effective_start), ("end", end_at)]
+
+
+def _job_id(event_instance_id: int, kind: NotificationKind) -> str:
+    return f"event_instance_{event_instance_id}_{kind}"
+
+
+def remove_instance_notifications(event_instance_id: int) -> None:
+    for kind in NOTIFICATION_KINDS:
+        try:
+            scheduler.remove_job(_job_id(event_instance_id, kind))
+        except JobLookupError:
+            pass
+
+
+# 알림 job은 DB에서 파생되는 상태다. 메모리 job 저장소라 서버를 재시작하면 사라지므로 시작할 때
+# register_upcoming_notifications로 다시 만들고, 일정이 바뀔 때마다(커밋 뒤) sync_*로 DB에 맞춘다.
+# 스케줄러가 돌고 있지 않으면(스크립트·테스트) 등록할 곳이 없으므로 아무것도 하지 않는다.
+def sync_instance_notifications(instance: EventInstance, now: datetime | None = None) -> None:
+    """회차의 알림 job을 지금 상태에 맞춘다: 지우고, 대기 중인 회차면 아직 지나지 않은 알림만 다시 등록한다."""
+    if not scheduler.running:
+        return
+    remove_instance_notifications(instance.id)
+    if instance.status != EventInstanceStatus.PENDING:
+        return
+    now = now or datetime.now()
+    for kind, run_date in _notification_times(instance):
+        if run_date > now:
+            _add_notification_job(instance.id, kind, run_date)
+
+
+def sync_notifications(
+    db: Session, *, event_ids: Iterable[int] = (), instance_ids: Iterable[int] = (), now: datetime | None = None
+) -> None:
+    """커밋 뒤에 부른다. 이벤트는 하위 일정까지 모든 회차를, instance_ids는 그 회차들을 다시 맞춘다.
+    DB에서 사라진 회차(삭제·생성 되돌리기)는 job만 지운다."""
+    if not scheduler.running:
+        return
+    instances: dict[int, EventInstance] = {}
+    event_ids = list(event_ids)
+    if event_ids:
+        for event in db.execute(select(Event).where(Event.id.in_(event_ids))).scalars():
+            for item in [event, *event.child_events]:
+                instances.update((i.id, i) for i in item.instances)
+    missing = set(instance_ids) - instances.keys()
+    if missing:
+        instances.update((i.id, i) for i in db.execute(select(EventInstance).where(EventInstance.id.in_(missing))).scalars())
+    for instance in instances.values():
+        sync_instance_notifications(instance, now)
+    for instance_id in missing - instances.keys():
+        remove_instance_notifications(instance_id)
+
+
+def register_upcoming_notifications(today: date | None = None) -> int:
+    """서버 시작 시 대기 중인 회차들의 알림 job을 다시 등록하고, 등록한 회차 수를 돌려준다.
+    어제 날짜부터 본다 — 전날 시작해 자정을 넘기는 일정의 종료 알림이 남아 있을 수 있다."""
+    since = (today or date.today()) - timedelta(days=1)
+    try:
+        with SessionLocal() as db:
+            instances = db.execute(
+                select(EventInstance).where(EventInstance.status == EventInstanceStatus.PENDING, EventInstance.date >= since)
+            ).scalars().all()
+            for instance in instances:
+                sync_instance_notifications(instance)
+    except SQLAlchemyError:
+        logger.exception("[알림] 시작 시 알림 job 재등록 실패 — 마이그레이션을 확인하세요")
+        return 0
+    logger.info("[알림] 대기 중인 회차 %d개의 알림 job을 등록했습니다", len(instances))
+    return len(instances)
 
 
 def _add_notification_job(event_instance_id: int, kind: NotificationKind, run_date: datetime) -> None:
@@ -148,6 +224,6 @@ def _add_notification_job(event_instance_id: int, kind: NotificationKind, run_da
         trigger="date",
         run_date=run_date,
         args=[event_instance_id, kind],
-        id=f"event_instance_{event_instance_id}_{kind}",
+        id=_job_id(event_instance_id, kind),
         replace_existing=True,
     )

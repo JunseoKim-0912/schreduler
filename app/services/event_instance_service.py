@@ -10,6 +10,7 @@ from app.models.enums import CompletionMethod, EventInstanceStatus
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.schemas.event_instance import EventInstanceRead
+from app.services.notification import sync_instance_notifications
 from app.services.points import recalculate_points_since
 
 
@@ -28,6 +29,7 @@ def complete_event_instance(
         instance.completion_method = method
         db.commit()
         db.refresh(instance)
+        sync_instance_notifications(instance)  # 완료했으면 남은 알림(종료·완료 확인)은 필요 없다
         recalculate_points_since(db, instance.event.user_id, instance.date)
     return instance
 

@@ -23,6 +23,7 @@ from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.openapi import APP_DESCRIPTION, TAGS_METADATA
 from app.core.scheduler import shutdown_scheduler, start_scheduler
+from app.services import notification
 from app.services.daily_checkin import register_daily_checkin_job
 from app.services.engagement_service import register_escalation_job
 from app.services.points import register_daily_points_job
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     register_sleep_checkin_job()
     register_daily_checkin_job()
     register_daily_points_job()
+    notification.register_upcoming_notifications()
     yield
     shutdown_scheduler()
 

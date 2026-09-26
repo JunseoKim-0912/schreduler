@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.db import get_db
 from app.main import app
-from app.models import Base, ChildEventKind, Event, EventInstance, ImportantDateRange, Location, User
+from app.models import Base, ChildEventKind, Event, EventInstance, EventInstanceStatus, ImportantDateRange, Location, User
 
 
 @pytest.fixture
@@ -190,7 +190,7 @@ def test_creating_recurring_event_generates_instances_within_date_range(
     assert all(date(2026, 9, 1) <= instance.date <= date(2026, 9, 30) for instance in instances)
 
 
-def test_creating_non_recurring_event_generates_no_instances(
+def test_creating_non_recurring_event_generates_one_instance(
     client: TestClient, engine, user_id: int
 ) -> None:
     response = client.post("/events", json=_payload(user_id))
@@ -203,7 +203,7 @@ def test_creating_non_recurring_event_generates_no_instances(
             .all()
         )
 
-    assert instances == []
+    assert [(i.date, i.status) for i in instances] == [(date(2026, 9, 17), EventInstanceStatus.PENDING)]
 
 
 def test_creating_event_with_location_via_api_auto_creates_travel_child(
@@ -231,13 +231,13 @@ def test_creating_event_with_location_via_api_auto_creates_travel_child(
         assert child.end_time == datetime.fromisoformat("2026-09-17T09:00:00")
         assert child.start_time == datetime.fromisoformat("2026-09-17T08:35:00")
 
-        # 자동 생성된 child가 not recurring이면 인스턴스는 안 생겨야 함
+        # 단발 부모의 child도 단발 일정이라 부모와 같은 날짜에 회차 하나
         child_instances = (
             session.execute(select(EventInstance).where(EventInstance.event_id == child.id))
             .scalars()
             .all()
         )
-        assert child_instances == []
+        assert [i.date for i in child_instances] == [date(2026, 9, 17)]
 
 
 def test_creating_recurring_event_with_location_auto_creates_child_and_its_instances(

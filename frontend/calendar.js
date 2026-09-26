@@ -296,18 +296,14 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
   }
 
   function showMainActions(item, actions, statusLine) {
-    const noInstance = item.event_instance_id === null;
     const done = item.status === "done";
-    const completeButton = smallButton(done ? "완료됨" : "완료", {
-      primary: true,
-      disabled: done || noInstance,
-      title: noInstance ? "회차가 없는 단발 일정이라 완료 처리할 수 없어요" : undefined,
-    });
+    const completeButton = smallButton(done ? "완료됨" : "완료", { primary: true, disabled: done });
     const deleteButton = smallButton("삭제", { danger: true });
     completeButton.addEventListener("click", () => complete(item, completeButton, statusLine));
     deleteButton.addEventListener("click", () => showDeleteConfirm(item, actions, statusLine));
-    actions.replaceChildren(completeButton, deleteButton);
-    setStatus(statusLine, noInstance ? "단발 일정은 아직 완료 처리를 지원하지 않아요." : "");
+    // 회차가 없는 건 회차 생성 이전에 만든 지난 단발 일정뿐이다 (백필 대상 아님). 완료할 회차가 없어 삭제만 둔다.
+    actions.replaceChildren(...(item.event_instance_id === null ? [deleteButton] : [completeButton, deleteButton]));
+    setStatus(statusLine, "");
   }
 
   // 브라우저 confirm() 대신 패널 안에서 한 번 더 확인한다. 반복 일정은 이 회차만/반복 전체를 고른다.
