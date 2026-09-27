@@ -49,7 +49,7 @@ def test_header_mark_check_catches_a_missing_mark() -> None:
 
 
 def test_llm_endpoints_are_marked() -> None:
-    for method, path in [("POST", "/events/parse"), ("POST", "/daily-actual-logs/checkin"), ("POST", "/compliance-reports")]:
+    for method, path in [("POST", "/events/parse"), ("POST", "/assistant/chat"), ("POST", "/daily-actual-logs/checkin"), ("POST", "/compliance-reports")]:
         assert re.search(rf"^\| `{method} {re.escape(path)}` 🤖", DOC, re.M), (method, path)
 
 

@@ -27,7 +27,7 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 
 | 방식 | 해당 엔드포인트 |
 |---|---|
-| **`X-User-Id: <user id>` 헤더** | `/users/me/*`, `/tasks*`, `/event-instances*`, `/points/summary`, `/compliance-reports/categories`, `/actions*` |
+| **`X-User-Id: <user id>` 헤더** | `/users/me/*`, `/tasks*`, `/event-instances*`, `/points/summary`, `/compliance-reports/categories`, `/actions*`, `/assistant/*` |
 | 요청 본문/쿼리의 `user_id` | 그 밖의 전부 (`/events`, `/date-ranges`, `/locations`, `/sleep-logs`, `/daily-actual-logs` 등) |
 
 헤더가 없으면 `401`, 없는 사용자면 `404`. 정식 인증이 들어오면 헤더 방식이 토큰으로 바뀔 예정이므로,
@@ -218,6 +218,29 @@ POST /actions/{action_id}/undo               → 되돌린 기록(ActionRead)
 - 같은 일정을 건드린 더 최근 기록이 남아 있으면 `409` ("더 최근 변경을 먼저 되돌려야 해요"). 이미 되돌린 기록도 `409`.
 - 과거 회차가 바뀌었다면 그날부터 어제까지 포인트가 다시 계산된다.
 
+### 3.2.4 일정 어시스턴트 (v4, 개발 중 — `/events/parse`와 나란히 동작)
+
+```
+GET  /assistant/sessions/current                          → 오늘의 대화 이어보기 (없으면 session_id: null)
+POST /assistant/chat {"message": "10월 2일 11:00-1:00 스터디 추가해줘"}           // session_id 생략 = 새 대화
+  → {session_id, reply, proposal: {token, expires_at, items: [카드...], warnings}, executed: []}
+POST /assistant/confirm {"session_id": 1, "token": "…"}   → {reply, executed: [{action_id, summary}]}
+POST /assistant/cancel  {"session_id": 1, "token": "…"}   → {reply}
+POST /assistant/chat {"session_id": 1, "message": "7시로 바꿔줘"}   → 새 proposal (이전 제안은 대체됨)
+POST /assistant/chat {"session_id": 1, "message": "좋아"}          → executed에 action_id (채팅 승인)
+```
+
+- 어시스턴트는 되묻기보다 추론해서 **초안**을 제안한다. 확인(버튼 또는 채팅 승인) 전에는 아무것도 저장되지 않는다.
+- 카드(`proposal.items[]`) 공통: `draft_id`, `kind`, `warnings[]`(`{code, message}`, 사용자 언어), `inferred_fields[]`(추정 배지를 붙일 항목).
+  - `create_event`: `title`, `event_type`, `date`(반복이면 첫 회차), `start_time?`, `end_time`, `time_display`("오전 11:00 – 오후 1:00 (2시간)"),
+    `importance?`, `recurring`, `recurrence_rule?`, `date_range?`(`{id?, name, start_date, end_date, is_new}`), `location?`(`{id?, name, travel_minutes, is_new}`), `preview_dates[]`(처음 3회차)
+  - `update_event` / `delete_event`: `scope`(`instance`/`series`), `targets[]`(`{event_id, instance_id?, title, date, time_display, new_time_display?}`), `changes`(수정만)
+  - `create_range` / `update_range` / `delete_range`: `name`, `start_date`, `end_date`, `events_using`, `mode?`
+- 경고 코드: `crosses_midnight`, `over_12_hours`, `past_date`, `start_weekday_mismatch`, `multiple_targets`, `range_in_use`.
+- 한 제안의 여러 초안(예: 새 기간 + 그 기간의 일정)은 **한 트랜잭션**으로 확정된다. `executed[].action_id`마다 `POST /actions/{id}/undo`로 되돌린다.
+- 제안은 30분 뒤 만료(`410`). 이미 확정·취소·대체된 제안은 `409`, 다른 사용자·세션의 토큰은 `404`.
+- 한 턴은 LLM 호출 최대 6회·20초. 넘으면 지금까지 만든 초안을 보여주거나 짧게 되묻는다.
+
 ### 3.3 할 일 목록 (마감형 일정)
 
 ```
@@ -308,6 +331,20 @@ GET /points/summary
 `new_date_range?`(`{name, start_date, end_date, auto_named}`), `new_location?`(`{name, default_travel_minutes}`)
 
 > `scheduled` → `deadline`으로 바꿀 때는 `{"event_type": "deadline", "start_time": null}`을 함께 보낸다(하나만 보내면 422).
+
+### assistant — 일정 어시스턴트 🔑
+
+| 메서드 · 경로 | 설명 | 요청 | 응답 |
+|---|---|---|---|
+| `POST /assistant/chat` 🤖 | 대화 한 턴 — 초안 제안 또는 채팅 승인 실행 (3.2.4) | `{session_id?, message}` | `AssistantChatResponse` |
+| `POST /assistant/confirm` | 제안 확정 (버튼, 한 트랜잭션) | `{session_id, token}` | `AssistantConfirmResponse` |
+| `POST /assistant/cancel` | 제안 취소 (버튼) | `{session_id, token}` | `AssistantConfirmResponse` |
+| `GET /assistant/sessions/current` | 오늘의 최근 대화·기록·대기 제안 | | `AssistantSessionRead` |
+| `POST /assistant/sessions` | 새 대화 | | `201 AssistantSessionRead` |
+
+`AssistantChatResponse`: `session_id`, `reply`, `proposal?`(`{token, expires_at, items[], warnings[]}`), `executed[]`(`{action_id, summary}`)
+
+`AssistantSessionRead`: `session_id?`, `messages[]`(`{role, text, created_at}`), `proposal?`
 
 ### event-instances — 일정 회차 (캘린더) 🔑
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import enum
 import logging
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
@@ -140,6 +141,32 @@ def recalculate_points_for_dates(db: Session, user_id: int, dates: list[date]) -
     past = [day for day in dates if day < date.today()]
     if past:
         recalculate_points_since(db, user_id, min(past))
+
+
+@dataclass
+class AfterCommit:
+    """커밋 뒤에 할 일(알림 다시 맞추기, 지난 날짜 포인트 재계산). 여러 변경을 한 트랜잭션으로 묶는 호출자
+    (어시스턴트의 여러 초안 확정)는 각 변경의 이 값을 모아 두었다가 한 번 커밋한 뒤 실행한다."""
+
+    user_id: int
+    event_ids: set[int] = field(default_factory=set)
+    instance_ids: list[int] = field(default_factory=list)
+    dates: list[date] = field(default_factory=list)
+
+    def run(self, db: Session) -> None:
+        sync_notifications(db, event_ids=self.event_ids, instance_ids=self.instance_ids)
+        recalculate_points_for_dates(db, self.user_id, self.dates)
+
+
+def finish_change(db: Session, action: ActionHistory, after: AfterCommit, defer: list[AfterCommit] | None) -> None:
+    """defer가 없으면 지금 커밋하고 후처리까지 한다. 있으면 flush만 하고 후처리를 defer에 넘긴다."""
+    if defer is not None:
+        db.flush()
+        defer.append(after)
+        return
+    db.commit()
+    db.refresh(action)
+    after.run(db)
 
 
 # --- 되돌리기 ------------------------------------------------------------------------

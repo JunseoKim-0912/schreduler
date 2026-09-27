@@ -12,7 +12,7 @@ from __future__ import annotations
 import difflib
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -31,11 +31,10 @@ from app.schemas.event import EventCreate
 from app.schemas.event_command import CommandResult, CommandTarget, RangeDeleteOption, TargetKind
 from app.schemas.event_parse import NewDateRangeDraft, NewLocationDraft
 from app.services import date_range_command_service as ranges
-from app.services.action_history_service import Snapshot, record_action, recalculate_points_for_dates
+from app.services.action_history_service import AfterCommit, Snapshot, finish_change, record_action
 from app.services.event_instance_service import cancel_instance, child_instances_on_same_date, set_instance_times
 from app.services.event_service import apply_event_update, build_event, remove_event, set_event_location
 from app.services.llm_client import EventSlotFillResult, LLMResponseParsingError
-from app.services.notification import sync_notifications
 from app.services.slot_fill_session import PendingAction, create_pending_action
 
 CommandIntent = Literal["delete", "update"]
@@ -56,6 +55,8 @@ class CommandDescription:
     new_end_time: str | None = None
     new_title: str | None = None
     new_importance: int | None = None
+    # 단발 일정의 날짜 옮기기 (어시스턴트만 쓴다). 시각은 그대로 두고 날짜만 바꾼다.
+    new_date: date | None = None
     # 장소는 반복 시리즈 단위 값이다. set인데 등록되지 않은 장소면 이동 시간(분)을 물어 새로 등록한다.
     location_action: Literal["set", "remove"] | None = None
     new_location_name: str | None = None
@@ -93,25 +94,28 @@ class CommandDescription:
 
     def has_changes(self) -> bool:
         return any(
-            v is not None for v in (self.new_start_time, self.new_end_time, self.new_title, self.new_importance, self.location_action)
+            v is not None
+            for v in (self.new_start_time, self.new_end_time, self.new_title, self.new_importance, self.location_action, self.new_date)
         )
 
     @property
     def location_only(self) -> bool:
         """장소만 바꾸는 요청 — 회차 단위가 아니라 시리즈 전체에 적용한다."""
         return self.location_action is not None and not any(
-            (self.new_start_time, self.new_end_time, self.new_title, self.new_importance is not None)
+            (self.new_start_time, self.new_end_time, self.new_title, self.new_importance is not None, self.new_date)
         )
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["date"] = self.date.isoformat() if self.date else None
+        data["new_date"] = self.new_date.isoformat() if self.new_date else None
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> CommandDescription:
         values = dict(data)
         values["date"] = date.fromisoformat(values["date"]) if values.get("date") else None
+        values["new_date"] = date.fromisoformat(values["new_date"]) if values.get("new_date") else None
         return cls(**values)
 
     def describe_for_prompt(self) -> str:
@@ -293,15 +297,16 @@ def _hhmm(value: str) -> time:
         raise LLMResponseParsingError(f"LLM이 채운 시각이 HH:MM 형식이 아닙니다: {value!r}") from exc
 
 
-def _new_times(desc: CommandDescription, day: date, start: datetime | None, end: datetime) -> tuple[datetime | None, datetime]:
+def new_times(desc: CommandDescription, day: date, start: datetime | None, end: datetime) -> tuple[datetime | None, datetime]:
     """시작만 바꾸면 기존 지속 시간을 유지해 종료도 민다 (5–6시 → 6–7시). 종료를 말하면 그 값을 쓴다.
-    deadline(start=None)은 마감 시각만 바꾼다."""
+    deadline(start=None)은 마감 시각만 바꾼다. new_date가 있으면 결과를 그 날짜로 옮긴다."""
+    shift = (desc.new_date - day) if desc.new_date is not None else timedelta(0)
     if start is None:
         new_deadline = desc.new_end_time or desc.new_start_time
-        return None, datetime.combine(day, _hhmm(new_deadline)) if new_deadline else end
+        return None, (datetime.combine(day, _hhmm(new_deadline)) if new_deadline else end) + shift
     new_start = datetime.combine(day, _hhmm(desc.new_start_time)) if desc.new_start_time else start
     new_end = datetime.combine(day, _hhmm(desc.new_end_time)) if desc.new_end_time else new_start + (end - start)
-    return new_start, new_end
+    return new_start + shift, new_end + shift
 
 
 def _time_range(start: datetime | None, end: datetime) -> str:
@@ -340,9 +345,17 @@ class ExecutionResult:
     message: str
 
 
-def execute(db: Session, user: User, desc: CommandDescription, targets: list[Target], source: ActionSource) -> ExecutionResult:
+def execute(
+    db: Session,
+    user: User,
+    desc: CommandDescription,
+    targets: list[Target],
+    source: ActionSource,
+    *,
+    defer: list[AfterCommit] | None = None,
+) -> ExecutionResult:
     """변경 전 스냅샷 → 변경 적용 → ActionHistory 기록을 한 트랜잭션으로 커밋하고, 지난 날짜가 영향을 받았으면
-    포인트 원장을 다시 계산한다."""
+    포인트 원장을 다시 계산한다. defer를 주면 커밋하지 않는다(finish_change)."""
     lang = user.preferred_language
     snapshot = Snapshot()
     event_ids: set[int] = set()
@@ -383,7 +396,7 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
                 location_text = _change_location(db, user, event, desc, snapshot, created, event_ids, instance_ids)
             before = (event.start_time, event.end_time)
             anchor_day = (event.start_time or event.end_time).date()
-            new_start, new_end = _new_times(desc, anchor_day, event.start_time, event.end_time)
+            new_start, new_end = new_times(desc, anchor_day, event.start_time, event.end_time)
             change_text = _describe_changes(lang, before, (new_start, new_end), event, desc)
             if location_text:
                 change_text = location_text if change_text == "-" else f"{change_text}, {location_text}"
@@ -398,7 +411,7 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
             for item in [instance, *child_instances_on_same_date(db, instance)]:
                 snapshot.add_instance(item)
             before = (instance.effective_start, instance.effective_end)
-            after = _new_times(desc, instance.date, *before)
+            after = new_times(desc, instance.date, *before)
             change_text = _describe_changes(lang, before, after, event, desc)
             if after != before:
                 for item in set_instance_times(db, instance, *after):
@@ -433,10 +446,7 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
         snapshot=snapshot,
         affected_ids={"events": sorted(event_ids), "event_instances": sorted(instance_ids), **created},
     )
-    db.commit()
-    db.refresh(action)
-    sync_notifications(db, event_ids=event_ids, instance_ids=instance_ids)
-    recalculate_points_for_dates(db, user.id, touched_dates)
+    finish_change(db, action, AfterCommit(user.id, set(event_ids), sorted(instance_ids), touched_dates), defer)
 
     message = " ".join([render_message("command.executed", lang, summary=summary), *sorted(notes)])
     return ExecutionResult(action=action, affected=affected, message=message)
@@ -504,6 +514,8 @@ def create_event_from_nl(
     data: EventCreate,
     new_date_range: NewDateRangeDraft | None = None,
     new_location: NewLocationDraft | None = None,
+    *,
+    defer: list[AfterCommit] | None = None,
 ) -> ExecutionResult:
     """자연어로 만든 초안을 확정한다. 초안에 새 반복 기간이 있으면 이벤트와 같은 트랜잭션에서 만든다(같은 이름의
     기간이 이미 있으면 그것을 쓴다). 되돌리기는 만든 이벤트(와 하위 일정)를 지우고, 같이 만든 기간도 다른 일정이
@@ -551,10 +563,9 @@ def create_event_from_nl(
             "date_ranges": [event.date_range_id] if event.date_range_id is not None else [],
         },
     )
-    db.commit()
-    db.refresh(action)
-    db.refresh(event)
-    sync_notifications(db, event_ids=[event.id])
+    finish_change(db, action, AfterCommit(user.id, {event.id}), defer)
+    if defer is None:
+        db.refresh(event)
     message = " ".join([render_message("command.executed", lang, summary=summary), *notes])
     return ExecutionResult(action=action, affected=[to_command_target(Target(event))], message=message)
 

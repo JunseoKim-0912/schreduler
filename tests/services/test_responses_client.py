@@ -17,7 +17,9 @@ from app.services.llm_client import (
     LLMResponseParsingError,
     ResponsesClient,
     build_responses_payload,
+    resolve_reasoning_effort,
     user_message,
+    validate_assistant_settings,
     with_tool_outputs,
 )
 from tests.fake_responses import FakeResponsesClient, call, calls, say
@@ -345,3 +347,41 @@ def test_fake_rejects_tools_that_were_not_offered() -> None:
 
     with pytest.raises(AssertionError, match="not offered"):
         fake.create(task="assistant", instruction_blocks=[], tools=[SEARCH_TOOL], input_items=[])
+
+
+# --- reasoning effort -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("model", "effort", "expected"),
+    [
+        ("gpt-5.6-luna", "low", "low"),
+        ("gpt-5.6-luna", "minimal", "none"),
+        ("gpt-5.6-luna", "max", "max"),
+        ("gpt-5-nano", "none", "minimal"),
+        ("gpt-5-nano-2025-08-07", "LOW", "low"),
+        ("gpt-5.4-nano", "xhigh", "xhigh"),
+        ("gpt-5.4-mini", "minimal", "none"),
+        ("some-future-model", "whatever", "whatever"),
+    ],
+)
+def test_reasoning_effort_is_validated_and_converted_per_model(model: str, effort: str, expected: str) -> None:
+    assert resolve_reasoning_effort(model, effort) == expected
+
+
+@pytest.mark.parametrize(("model", "effort"), [("gpt-5-nano", "xhigh"), ("gpt-5.4-nano", "max"), ("gpt-5.6-luna", "huge")])
+def test_unsupported_reasoning_effort_fails_clearly(model: str, effort: str) -> None:
+    with pytest.raises(LLMConfigError, match="지원하지 않습니다"):
+        resolve_reasoning_effort(model, effort)
+
+
+def test_startup_validation_uses_assistant_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "assistant_model", "gpt-5-nano")
+    monkeypatch.setattr(settings, "assistant_reasoning_effort", "none")
+    assert validate_assistant_settings() == "minimal"
+    body = build_responses_payload("assistant", ["x"], [], [])
+    assert body["reasoning"] == {"effort": "minimal"}
+
+    monkeypatch.setattr(settings, "assistant_reasoning_effort", "max")
+    with pytest.raises(LLMConfigError):
+        validate_assistant_settings()

@@ -155,6 +155,17 @@ MessageKey = Literal[
     "time.hours",
     "time.minutes",
     "time.hours_minutes",
+    "assistant.warning.crosses_midnight",
+    "assistant.warning.over_12_hours",
+    "assistant.warning.past_date",
+    "assistant.warning.start_weekday_mismatch",
+    "assistant.warning.multiple_targets",
+    "assistant.warning.range_in_use",
+    "assistant.proposal_ready",
+    "assistant.limit_with_drafts",
+    "assistant.limit_no_drafts",
+    "assistant.empty_reply",
+    "assistant.cancelled",
 ]
 
 

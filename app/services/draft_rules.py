@@ -128,8 +128,14 @@ def occurrences(rule: str, dtstart: datetime, start: date, end: date) -> list[da
 
 
 def first_occurrence(rule: str, clock: time, range_start: date, range_end: date) -> date:
-    """dtstart when no start date was given: the first occurrence inside the range, else the range start."""
-    candidates = occurrences(rule, datetime.combine(range_start, clock), range_start, range_end)
+    """dtstart when no start date was given: the first matching day inside the range, else the range start.
+
+    INTERVAL is dropped for this search: with the range start as dtstart, an every-other-week rule counts weeks
+    from the range start's week, so a range starting Thu 9/3 would skip Tue 9/8 and land on 9/15. The first
+    matching day then becomes dtstart, which anchors the rhythm on the first real occurrence.
+    """
+    every_period = ";".join(part for part in rule.split(";") if not part.startswith("INTERVAL="))
+    candidates = occurrences(every_period, datetime.combine(range_start, clock), range_start, range_end)
     return candidates[0] if candidates else range_start
 
 

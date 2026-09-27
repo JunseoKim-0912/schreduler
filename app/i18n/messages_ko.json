@@ -88,5 +88,16 @@
   "time.deadline": "{time} 마감",
   "time.hours": "{hours}시간",
   "time.minutes": "{minutes}분",
-  "time.hours_minutes": "{hours}시간 {minutes}분"
+  "time.hours_minutes": "{hours}시간 {minutes}분",
+  "assistant.warning.crosses_midnight": "자정을 넘겨 다음 날 끝나요",
+  "assistant.warning.over_12_hours": "12시간이 넘는 일정이에요",
+  "assistant.warning.past_date": "이미 지난 날짜예요",
+  "assistant.warning.start_weekday_mismatch": "반복 시작일이 반복 요일과 달라요",
+  "assistant.warning.multiple_targets": "일정 {count}개가 한꺼번에 바뀌어요",
+  "assistant.warning.range_in_use": "이 기간을 쓰는 일정이 {count}개 있어요",
+  "assistant.proposal_ready": "이렇게 할까요? 확인해 주세요.",
+  "assistant.limit_with_drafts": "시간이 오래 걸려 지금까지 만든 초안을 보여드려요. 확인해 주세요.",
+  "assistant.limit_no_drafts": "요청을 끝까지 처리하지 못했어요. 조금 더 구체적으로 말해 줄래요?",
+  "assistant.empty_reply": "무엇을 도와드릴까요?",
+  "assistant.cancelled": "제안을 취소했어요."
 }

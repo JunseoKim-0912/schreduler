@@ -964,6 +964,40 @@ RESPONSES_TIMEOUT_SECONDS = 20.0
 ResponsesTask = Literal["assistant", "assistant_probe"]
 ResponsesInputItem = dict[str, Any]
 
+# 모델별로 받는 reasoning.effort 값 (OpenAI 모델 문서 기준, 2026-09 확인). 날짜 접미사가 붙은 스냅샷 이름도
+# 접두사로 맞춘다. 목록에 없는 모델은 검증하지 않고 그대로 보낸다 (API가 판단).
+REASONING_EFFORTS_BY_MODEL: dict[str, tuple[str, ...]] = {
+    "gpt-5.6-luna": ("none", "low", "medium", "high", "xhigh", "max"),
+    "gpt-5.4-nano": ("none", "low", "medium", "high", "xhigh"),
+    "gpt-5.4-mini": ("none", "low", "medium", "high", "xhigh"),
+    "gpt-5-nano": ("minimal", "low", "medium", "high"),
+    "gpt-5-mini": ("minimal", "low", "medium", "high"),
+}
+# "추론 최소"를 뜻하는 두 이름은 모델마다 하나만 받으므로 서로 바꿔 준다.
+_LOWEST_EFFORT_ALIASES = {"none": "minimal", "minimal": "none"}
+
+
+def resolve_reasoning_effort(model: str, effort: str) -> str:
+    """모델이 받는 effort 값으로 검증·변환한다. 지원하지 않는 값이면 LLMConfigError."""
+    effort = effort.strip().lower()
+    allowed = next(
+        (values for prefix, values in sorted(REASONING_EFFORTS_BY_MODEL.items(), key=lambda kv: -len(kv[0])) if model.startswith(prefix)),
+        None,
+    )
+    if allowed is None or effort in allowed:
+        return effort
+    alias = _LOWEST_EFFORT_ALIASES.get(effort)
+    if alias in allowed:
+        return alias
+    raise LLMConfigError(
+        f"ASSISTANT_REASONING_EFFORT={effort!r}는 {model}에서 지원하지 않습니다 (가능한 값: {', '.join(allowed)})"
+    )
+
+
+def validate_assistant_settings() -> str:
+    """앱 시작 시 호출: 어시스턴트 모델과 effort 조합이 맞는지 확인하고 실제로 보낼 effort를 돌려준다."""
+    return resolve_reasoning_effort(settings.assistant_model, settings.assistant_reasoning_effort)
+
 
 class FunctionTool(BaseModel):
     name: str
@@ -1056,12 +1090,13 @@ def build_responses_payload(
     instructions = "\n\n".join(instruction_blocks)
     tool_defs = [tool.to_api() for tool in tools]
     cacheable_prefix = instructions + json.dumps(tool_defs, ensure_ascii=False, sort_keys=True)
+    model = model or settings.assistant_model
     return {
-        "model": model or settings.assistant_model,
+        "model": model,
         "instructions": instructions,
         "tools": tool_defs,
         "input": input_items,
-        "reasoning": {"effort": reasoning_effort or settings.assistant_reasoning_effort},
+        "reasoning": {"effort": resolve_reasoning_effort(model, reasoning_effort or settings.assistant_reasoning_effort)},
         "store": False,
         "include": ["reasoning.encrypted_content"],
         "prompt_cache_key": _prompt_cache_key(task, cacheable_prefix),

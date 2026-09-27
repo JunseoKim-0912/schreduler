@@ -23,9 +23,8 @@ from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
-from app.services.action_history_service import Snapshot, recalculate_points_for_dates, record_action
+from app.services.action_history_service import AfterCommit, Snapshot, finish_change, record_action
 from app.services.event_service import remove_event
-from app.services.notification import sync_notifications
 from app.services.recurrence import generate_event_instances
 
 DeleteMode = Literal["range_only", "with_events"]
@@ -160,11 +159,16 @@ def sync_range_instances(db: Session, date_range: ImportantDateRange, snapshot: 
 # --- 기록되는 변경 ----------------------------------------------------------------
 
 
-def _finish(db: Session, user: User, action: ActionHistory, event_ids: set[int], instance_ids: list[int], dates: list[date]) -> None:
-    db.commit()
-    db.refresh(action)
-    sync_notifications(db, event_ids=event_ids, instance_ids=instance_ids)
-    recalculate_points_for_dates(db, user.id, dates)
+def _finish(
+    db: Session,
+    user: User,
+    action: ActionHistory,
+    event_ids: set[int],
+    instance_ids: list[int],
+    dates: list[date],
+    defer: list[AfterCommit] | None,
+) -> None:
+    finish_change(db, action, AfterCommit(user.id, set(event_ids), list(instance_ids), list(dates)), defer)
 
 
 def build_date_range(db: Session, user_id: int, name: str, start: date, end: date) -> ImportantDateRange:
@@ -176,7 +180,16 @@ def build_date_range(db: Session, user_id: int, name: str, start: date, end: dat
     return date_range
 
 
-def create_range(db: Session, user: User, name: str, start: date, end: date, source: ActionSource) -> tuple[ImportantDateRange, ActionHistory]:
+def create_range(
+    db: Session,
+    user: User,
+    name: str,
+    start: date,
+    end: date,
+    source: ActionSource,
+    *,
+    defer: list[AfterCommit] | None = None,
+) -> tuple[ImportantDateRange, ActionHistory]:
     date_range = build_date_range(db, user.id, name, start, end)
     action = record_action(
         db,
@@ -189,8 +202,9 @@ def create_range(db: Session, user: User, name: str, start: date, end: date, sou
         snapshot=None,
         affected_ids={"created_date_ranges": [date_range.id], "date_ranges": [date_range.id]},
     )
-    _finish(db, user, action, set(), [], [])
-    db.refresh(date_range)
+    _finish(db, user, action, set(), [], [], defer)
+    if defer is None:
+        db.refresh(date_range)
     return date_range, action
 
 
@@ -211,6 +225,7 @@ def update_range(
     start: date | None = None,
     end: date | None = None,
     source: ActionSource,
+    defer: list[AfterCommit] | None = None,
 ) -> RangeUpdateResult:
     lang = user.preferred_language
     new_start, new_end = start or date_range.start_date, end or date_range.end_date
@@ -249,8 +264,9 @@ def update_range(
         },
     )
     touched = [i.id for i in [*sync.added, *sync.cancelled]]
-    _finish(db, user, action, sync.event_ids, touched, [i.date for i in [*sync.added, *sync.cancelled]])
-    db.refresh(date_range)
+    _finish(db, user, action, sync.event_ids, touched, [i.date for i in [*sync.added, *sync.cancelled]], defer)
+    if defer is None:
+        db.refresh(date_range)
     return RangeUpdateResult(date_range, action, change_text, sync)
 
 
@@ -264,7 +280,13 @@ class RangeInUseError(ConflictError):
 
 
 def delete_range(
-    db: Session, user: User, date_range: ImportantDateRange, mode: DeleteMode | None, source: ActionSource
+    db: Session,
+    user: User,
+    date_range: ImportantDateRange,
+    mode: DeleteMode | None,
+    source: ActionSource,
+    *,
+    defer: list[AfterCommit] | None = None,
 ) -> ActionHistory:
     """사용 중인 기간은 mode가 있어야 지운다.
     range_only: 기간만 지우고 일정은 이미 만들어진 마지막 회차에서 끝난다(회차·완료 기록 그대로).
@@ -308,7 +330,7 @@ def delete_range(
         snapshot=snapshot,
         affected_ids={"date_ranges": [range_id], "events": sorted(event_ids), "event_instances": sorted(instance_ids)},
     )
-    _finish(db, user, action, event_ids, instance_ids, dates)
+    _finish(db, user, action, event_ids, instance_ids, dates, defer)
     return action
 
 

@@ -88,5 +88,16 @@
   "time.deadline": "Due {time}",
   "time.hours": "{hours}h",
   "time.minutes": "{minutes}m",
-  "time.hours_minutes": "{hours}h {minutes}m"
+  "time.hours_minutes": "{hours}h {minutes}m",
+  "assistant.warning.crosses_midnight": "Ends after midnight (next day)",
+  "assistant.warning.over_12_hours": "Lasts more than 12 hours",
+  "assistant.warning.past_date": "This date has already passed",
+  "assistant.warning.start_weekday_mismatch": "The start date is not on a repeat day",
+  "assistant.warning.multiple_targets": "{count} events change at once",
+  "assistant.warning.range_in_use": "{count} events use this period",
+  "assistant.proposal_ready": "Shall I go ahead? Please check.",
+  "assistant.limit_with_drafts": "This took a while, so here is the draft so far. Please check it.",
+  "assistant.limit_no_drafts": "I couldn't finish that request. Could you say it a bit more specifically?",
+  "assistant.empty_reply": "How can I help?",
+  "assistant.cancelled": "Cancelled the proposal."
 }

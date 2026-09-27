@@ -1,4 +1,5 @@
 from app.models.action_history import ActionHistory
+from app.models.assistant import AssistantMessage, AssistantSession, AssistantTurnLog, PendingProposal
 from app.models.base import Base
 from app.models.compliance_report import ComplianceReport
 from app.models.daily_actual_log import DailyActualLog
@@ -29,6 +30,9 @@ __all__ = [
     "ActionHistory",
     "ActionSource",
     "ActionType",
+    "AssistantMessage",
+    "AssistantSession",
+    "AssistantTurnLog",
     "Base",
     "ChildEventKind",
     "ComplianceReport",
@@ -46,6 +50,7 @@ __all__ = [
     "Location",
     "NonComplianceCategory",
     "Persona",
+    "PendingProposal",
     "PersonaConversation",
     "PointsLedger",
     "SleepLog",

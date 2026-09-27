@@ -108,3 +108,50 @@ event_parse_service에 엉켜 있는 규칙을 **순수 함수 모듈**(예: `ap
 2. 되돌리기를 채팅("방금 거 취소해줘")으로도 할지. 지금은 버튼만.
 3. 사용자별 시간대 필드(User.timezone). 지금은 서버 설정 하나(America/Toronto).
 4. 장기 기억: 페르소나 대화(FR-9)의 장기 문맥 기억에는 MemMachine 도입을 검토한다 (어시스턴트 전환 이후 별도 단계). 어시스턴트의 세션·초안·확인 토큰처럼 정확해야 하는 상태는 계속 SQLite 테이블(§7)에 둔다.
+
+## 11. A단계 이후 확정 사항
+
+(2026-09-27, B단계에서 정함)
+
+### 11.1 A단계 주의사항 반영
+
+1. **격주 첫 회차.** 반복 시작일을 말하지 않으면 dtstart는 기간 시작일이 아니라 **"기간 시작일 이후 첫 해당 요일"**이다.
+   `draft_rules.first_occurrence`가 INTERVAL을 뺀 규칙으로 첫 해당 날짜를 찾고, 그 날짜가 dtstart가 되어 격주 리듬의 기준이 된다.
+   예: 목요일 9/3에 시작하는 기간의 격주 화요일 → 첫 회차 9/8 (전에는 9/15). 기존 `/events/parse` 흐름도 같은 함수를 써서 함께
+   고쳐졌다. 이미 DB에 있는 이벤트는 건드리지 않는다.
+2. **reasoning effort 검증.** `llm_client.REASONING_EFFORTS_BY_MODEL`에 모델별 허용 값을 둔다 (OpenAI 모델 문서, 2026-09 확인):
+   - gpt-5.6-luna: none, low, medium, high, xhigh, max
+   - gpt-5.4-nano / gpt-5.4-mini: none, low, medium, high, xhigh
+   - gpt-5-nano / gpt-5-mini: minimal, low, medium, high
+   "추론 최소"인 none ↔ minimal은 모델에 맞게 서로 바꿔 준다 (gpt-5-nano에 none → minimal). 그 밖에 지원하지 않는 값이면 앱
+   시작(lifespan) 때 `LLMConfigError`로 멈춘다. 목록에 없는 모델은 검증하지 않고 그대로 보낸다.
+3. **규칙 에러는 도구 에러로.** `build_rrule`·`draft_rules`의 예외(ValueError 계열)와 AppError는 500으로 새지 않고 도구 결과의
+   `errors`로 LLM에게 돌아간다. LLM이 값을 고쳐 다시 부른다.
+4. **시간 기준.** 어시스턴트 코드의 "오늘"·"현재 시각"은 전부 `core.clock.local_now()`(APP_TIMEZONE)에서 나온다. 기존 코드의
+   `date.today()`는 E단계에서 정리한다.
+
+### 11.2 저장소
+
+- 테이블: `assistant_sessions`(+ `seen_ids`: search_events가 돌려준 ID), `assistant_messages`, `pending_proposals`(+ `warnings`),
+  `assistant_turn_logs`(+ `model`, `stop_reason`). 시각은 앱 시간대의 naive 값.
+- `assistant_messages`의 assistant 행은 Responses API 응답의 `output` 원본 전체(암호화된 reasoning 포함)를 그대로 저장한다.
+  요청은 `store=false` + `include: ["reasoning.encrypted_content"]`. (문서상 stateless 모드에서는 기본으로 붙지만 include도 받는다.)
+- 모든 조회는 `X-User-Id` 사용자의 세션만 본다. 다른 사용자의 세션·토큰은 404.
+
+### 11.3 대상 ID 규칙 (§3 보완)
+
+- 수정·삭제 도구의 `target_ids`는 **이번 세션에서 search_events가 돌려준 ID만** 받는다 (`assistant_sessions.seen_ids`).
+  DB에 실제로 있는 ID라도 검색으로 찾지 않았으면 `unknown_id` 에러로 돌려준다.
+
+### 11.4 문맥 규칙 (§6 보완)
+
+- **한 턴 안의 도구 루프:** 직전 응답의 `output` 전체(암호화된 reasoning 포함)를 다음 입력에 그대로 다시 넣는다.
+- **턴과 턴 사이:** 최근 20개 항목(사용자 말, 어시스턴트 말, 도구 호출, 도구 결과)만 넣고 reasoning 항목은 뺀다. 도구 결과는
+  1,500자에서 자른다. reasoning 없이 보내는 function_call은 원래 `id`(fc_…)를 떼고 `call_id`만 남긴다 — id가 있으면 API가
+  짝이 되는 reasoning 항목을 요구한다. 잘려서 짝이 맞지 않는 호출·결과는 버린다.
+- 입력 순서: 고정 지시(instructions) → 도구 정의 → [응답 언어 + 반복 기간·장소 목록] → [현재 시각 + 14일 날짜표] → 최근 대화 →
+  [대기 중인 제안] → 사용자 발화. 고정부(지시+도구)는 약 3,300토큰이라 캐시 최소 길이(1,024)를 넘는다.
+
+### 11.5 C단계 후보 모델
+
+`gpt-5.6-luna`(현재 기본), `gpt-5.4-nano`, `gpt-5.4-mini`, `gpt-5-nano` × reasoning effort 조합을 평가 세트(§8)로 비교한다.

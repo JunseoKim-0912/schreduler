@@ -93,8 +93,14 @@ def test_first_occurrence_and_preview_keep_biweekly_rhythm_from_dtstart() -> Non
     rule = rules.build_rrule("WEEKLY", ["TU"], 2)
     range_start, range_end = date(2026, 9, 3), date(2026, 12, 8)
 
-    # dtstart is the range start (Thu 9/3), whose week holds Tue 9/1, so every other week lands on 9/15, not 9/8
-    assert rules.first_occurrence(rule, time(9), range_start, range_end) == date(2026, 9, 15)
+    # no start date given: the first Tuesday after the range start (Thu 9/3) is the first occurrence
+    first = rules.first_occurrence(rule, time(9), range_start, range_end)
+    assert first == date(2026, 9, 8)
+    assert rules.preview_dates(rule, datetime.combine(first, time(9)), range_start, range_end) == [
+        date(2026, 9, 8),
+        date(2026, 9, 22),
+        date(2026, 10, 6),
+    ]
     dtstart = datetime(2026, 9, 22, 9)  # "9/22부터 격주"
     assert rules.preview_dates(rule, dtstart, range_start, range_end) == [
         date(2026, 9, 22),
