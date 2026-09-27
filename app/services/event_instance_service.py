@@ -102,6 +102,7 @@ def _instance_read(event: Event, instance: EventInstance) -> EventInstanceRead:
         start_time=instance.effective_start,
         end_time=instance.effective_end,
         time_overridden=instance.start_time_override is not None or instance.end_time_override is not None,
+        location_name=event.location.name if event.location else None,
     )
 
 
@@ -122,6 +123,7 @@ def _single_event_read(event: Event) -> EventInstanceRead:
         start_time=event.start_time,
         end_time=event.end_time,
         time_overridden=False,
+        location_name=event.location.name if event.location else None,
     )
 
 

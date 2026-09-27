@@ -78,6 +78,13 @@ _COMMAND_FIELDS: dict[str, dict[str, object]] = {
     "new_end_time": {"type": ["string", "null"], "description": "24시간제 HH:MM"},
     "new_title": {"type": ["string", "null"]},
     "new_importance": {"type": ["integer", "null"], "enum": [1, 2, 3, 4, 5, 6, None]},
+    "location_action": {"type": ["string", "null"], "enum": ["set", "remove", None], "description": "장소를 넣거나 바꾸면 set, 빼면 remove"},
+    "new_location_name": {"type": ["string", "null"], "description": "넣거나 바꿀 장소 이름"},
+    "target_weekday": {
+        "type": ["string", "null"],
+        "enum": ["MO", "TU", "WE", "TH", "FR", "SA", "SU", None],
+        "description": "'월요일의 ○○'처럼 요일로 대상을 가리킬 때",
+    },
 }
 
 # FR-2 슬롯필링 결과의 JSON 스키마. frequency/by_day는 RRULE FREQ/BYDAY 값과 그대로
@@ -227,6 +234,9 @@ class EventSlotFillResult(BaseModel):
     new_end_time: str | None = None
     new_title: str | None = None
     new_importance: Importance | None = None
+    location_action: Literal["set", "remove"] | None = None
+    new_location_name: str | None = None
+    target_weekday: Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"] | None = None
 
     @property
     def is_complete(self) -> bool:
@@ -323,6 +333,9 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "target_date(YYYY-MM-DD, '오늘'·'내일'·'이번 주 금요일'은 오늘 날짜 기준으로 계산)를 적는다. "
     "'전부/모두/다'면 target_all=true. '이번만/그날만'이면 target_scope=instance, '반복 전체/매번/앞으로 "
     "전부'면 series, 알 수 없으면 null.\n"
+    "- 장소: '장소 넣어줘/바꿔줘 ○○'면 location_action=set, new_location_name에 말한 이름(등록된 장소가 비슷하면 그 "
+    "이름). 이름 없이 '장소 추가해줘'만 말하면 location_action=set, new_location_name=null. '장소 빼줘'면 remove. "
+    "'월요일의 ○○'처럼 요일로 가리키면 target_weekday에 그 요일(MO~SU)을 적고 target_date는 null로 둔다.\n"
     "- update면 바꿀 값만 new_start_time/new_end_time(HH:MM)/new_title/new_importance에 채우고 "
     "나머지는 null로 둔다. 시작 시각만 말하면 new_end_time은 null로 둔다(지속 시간은 백엔드가 유지한다).\n"
     "- create와 unknown이면 target_* 는 null(target_all은 false), new_* 는 null이다.\n"

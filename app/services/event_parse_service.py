@@ -541,8 +541,29 @@ def _handle_command(db: Session, user: User, session: SlotFillSession, desc: Com
             command=command_result(desc.intent, status, candidates=resolution.candidates),
         )
 
+    location_question = _location_question(db, user, desc)
+    if location_question is not None:
+        session.command = desc.to_dict()
+        return EventParseResponse(
+            **base,
+            is_complete=False,
+            message=location_question,
+            command=command_result(desc.intent, "needs_clarification", targets=resolution.targets),
+        )
+
     session.command = None
     session.command_candidates = []
+    series_days = _multi_weekday_days(desc, resolution.targets, user.preferred_language)
+    if series_days is not None:
+        # 장소는 시리즈 단위라, 여러 요일로 반복되는 일정의 한 요일만 가리켰으면 전체에 적용된다는 걸 확인받는다.
+        pending, _ = request_confirmation(user, desc, resolution.targets)
+        message = render_message("command.location_applies_to_series", user.preferred_language, days=series_days)
+        return EventParseResponse(
+            **base,
+            is_complete=False,
+            message=message,
+            command=command_result(desc.intent, "needs_confirmation", targets=resolution.targets, pending=pending),
+        )
     if len(resolution.targets) == 1:
         result = execute(db, user, desc, resolution.targets, ActionSource.NL)
         return EventParseResponse(
@@ -559,6 +580,40 @@ def _handle_command(db: Session, user: User, session: SlotFillSession, desc: Com
         message=message,
         command=command_result(desc.intent, "needs_confirmation", targets=resolution.targets, pending=pending),
     )
+
+
+def _location_question(db: Session, user: User, desc: CommandDescription) -> str | None:
+    """장소를 넣으려는데 이름이 없거나(두 턴에 걸친 '장소 추가해줘'), 처음 보는 장소라 이동 시간을 모르면 물을 말."""
+    if desc.location_action != "set":
+        return None
+    lang = user.preferred_language
+    if not desc.new_location_name:
+        return render_message("command.ask_location_name", lang)
+    if desc.new_location_minutes is None and find_location(db, user.id, desc.new_location_name) is None:
+        return render_message("command.ask_location_minutes", lang, name=desc.new_location_name)
+    return None
+
+
+def _awaits_location_minutes(db: Session, user: User, desc: CommandDescription) -> bool:
+    return (
+        desc.location_action == "set"
+        and bool(desc.new_location_name)
+        and desc.new_location_minutes is None
+        and find_location(db, user.id, desc.new_location_name) is None
+    )
+
+
+def _multi_weekday_days(desc: CommandDescription, targets: list[Target], language: str) -> str | None:
+    """요일(또는 날짜)로 가리킨 장소 변경인데 대상이 여러 요일로 반복되면, 그 요일들 ('월·수')."""
+    if desc.location_action is None or not (desc.target_weekday or desc.date):
+        return None
+    for target in targets:
+        rule = target.event.recurrence_rule or ""
+        match = re.search(r"BYDAY=([A-Z,]+)", rule)
+        days = match.group(1).split(",") if match else []
+        if len(days) > 1:
+            return "·".join(render_message(f"weekday.{code}", language) for code in days)
+    return None
 
 
 def _handle_range_command(db: Session, user: User, session: SlotFillSession, result: EventSlotFillResult) -> EventParseResponse:
@@ -907,6 +962,13 @@ def _parse_turn(
     LLM이 의도(create/delete/update/unknown)를 먼저 분류한다. create는 기존 슬롯필링(부족하면 되묻고, 다
     채워지면 초안 + 확인 토큰), delete/update는 event_command_service가 대상을 찾아 실행하거나 되묻는다.
     """
+    if session.command is not None:
+        pending_desc = CommandDescription.from_dict(session.command)
+        minutes = parse_minutes(utterance) if _awaits_location_minutes(db, user, pending_desc) else None
+        if minutes is not None:  # "Galbraith 304까지 이동 시간이 몇 분인가요?"에 대한 답은 LLM 없이
+            pending_desc.new_location_minutes = minutes
+            return _handle_command(db, user, session, pending_desc)
+
     if session.command is None and session.draft_pending:
         response = _handle_draft_turn(db, user, session, utterance, http_client)
         if response is not None:

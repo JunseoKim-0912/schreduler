@@ -264,6 +264,7 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
       ["반복", item.is_recurring ? describeRecurrence(item.recurrence_rule) : "반복 안 함"],
       ["상태", statusLabel(item.status) + (isOverdue(item, new Date()) ? " (마감 지남)" : "")],
     ];
+    rows.push(["장소", item.location_name ?? "없음"]);
     if (item.child_kind) rows.push(["종류", `${CHILD_KIND_LABELS[item.child_kind] ?? item.child_kind} (하위 일정)`]);
     if (item.time_overridden) rows.push(["참고", "이 회차만 시간이 바뀌었어요"]);
 

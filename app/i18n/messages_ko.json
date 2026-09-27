@@ -6,7 +6,7 @@
   "command.ambiguous": "여러 일정이 해당돼요: {candidates}. 어느 것인가요? (모두라면 '전부'라고 말해 주세요)",
   "command.ask_scope": "'{title}'은(는) 반복 일정이에요. 이번 한 번만 바꿀까요, 반복 전체를 바꿀까요?",
   "command.ask_date": "'{title}'의 몇 월 며칠 회차인지 알려 주세요.",
-  "command.nothing_to_update": "무엇을 어떻게 바꿀지 알려 주세요. 예: '6시로 옮겨줘'",
+  "command.nothing_to_update": "무엇을 바꿀지 알려 주세요. 바꿀 수 있는 것: 시간, 제목, 중요도, 장소, 마감일.",
   "command.confirm": "{count}개 일정이 영향을 받아요: {targets}. 진행할까요?",
   "command.ask_meridiem": "오전 {hour}시인가요, 오후 {hour}시인가요?",
   "command.ask_event_date": "몇 월 며칠 일정인가요?",
@@ -69,5 +69,10 @@
   "weekday.TH": "목",
   "weekday.FR": "금",
   "weekday.SA": "토",
-  "weekday.SU": "일"
+  "weekday.SU": "일",
+  "command.ask_location_name": "어느 장소로 할까요?",
+  "command.ask_location_minutes": "{name}까지 이동 시간이 몇 분인가요?",
+  "command.location_applies_to_series": "장소는 반복 일정 전체({days})에 적용돼요. 진행할까요?",
+  "change.location": "장소 {before}→{after}",
+  "change.no_location": "없음"
 }

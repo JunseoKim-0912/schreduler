@@ -27,3 +27,4 @@ class EventInstanceRead(BaseModel):
     start_time: datetime | None  # deadline이면 null
     end_time: datetime  # deadline이면 마감 일시
     time_overridden: bool  # 이 회차만 시간이 바뀌었는지
+    location_name: str | None = None  # 장소 (반복 시리즈 단위 값)

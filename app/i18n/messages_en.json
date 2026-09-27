@@ -6,7 +6,7 @@
   "command.ambiguous": "Several events match: {candidates}. Which one? (Say 'all' for every one.)",
   "command.ask_scope": "'{title}' repeats. Change just one occurrence, or the whole series?",
   "command.ask_date": "Which date of '{title}'?",
-  "command.nothing_to_update": "What should I change? e.g. 'Move it to 6'",
+  "command.nothing_to_update": "Tell me what to change. You can change the time, title, importance, place, or deadline.",
   "command.confirm": "{count} events will be affected: {targets}. Go ahead?",
   "command.ask_meridiem": "Is that {hour} AM or {hour} PM?",
   "command.ask_event_date": "What date is it on?",
@@ -69,5 +69,10 @@
   "weekday.TH": "Thursday",
   "weekday.FR": "Friday",
   "weekday.SA": "Saturday",
-  "weekday.SU": "Sunday"
+  "weekday.SU": "Sunday",
+  "command.ask_location_name": "Which place?",
+  "command.ask_location_minutes": "How many minutes does it take to get to {name}?",
+  "command.location_applies_to_series": "The place applies to the whole series ({days}). Go ahead?",
+  "change.location": "place {before}→{after}",
+  "change.no_location": "none"
 }

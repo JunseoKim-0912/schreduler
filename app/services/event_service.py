@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.child_events.service import create_child_event, list_child_events
+from app.child_events.service import create_child_event, get_travel_child_event, list_child_events
 from app.core.exceptions import InvalidInputError
+from app.models.enums import EventInstanceStatus, EventType
 from app.models.event import Event
+from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
 from app.models.location import Location
 from app.models.user import User
@@ -72,6 +76,55 @@ def list_events(db: Session, user_id: int | None = None) -> list[Event]:
     return list(db.execute(stmt).scalars().all())
 
 
+@dataclass
+class LocationChange:
+    """장소를 바꾼 결과: 새로 만든 이동 child, 상태가 바뀐 child 회차, 새로 생긴 child 회차 (되돌리기·알림용)."""
+
+    created_child: Event | None = None
+    changed_instances: list[EventInstance] = field(default_factory=list)
+    created_instances: list[EventInstance] = field(default_factory=list)
+
+
+def set_event_location(db: Session, event: Event, location: Location | None, today: date | None = None) -> LocationChange:
+    """이벤트의 장소를 바꾸고 이동시간 하위 일정(FR-5)을 맞춘다 (커밋하지 않음). 장소는 반복 시리즈 단위 값이다.
+
+    - 연결: 이동 child가 없으면 새로 만든다(반복이면 같은 규칙·기간으로 회차도).
+    - 변경: 이동 child의 시각을 새 장소의 이동 시간으로 다시 계산하고, 앞으로의 회차 중 부모 회차가 살아 있는데
+      취소돼 있던 것(장소를 뺐다가 다시 넣은 경우)은 되살린다.
+    - 삭제: 연결을 끊고 앞으로 남은 이동 child 회차만 취소한다. 지난 기록은 그대로 둔다.
+    """
+    today = today or date.today()
+    result = LocationChange()
+    event.location = location
+    child = get_travel_child_event(db, event.id)
+    if location is None or event.event_type == EventType.DEADLINE:
+        if child is not None:
+            child.location = None
+            for instance in child.instances:
+                if instance.date >= today and instance.status == EventInstanceStatus.PENDING:
+                    instance.status = EventInstanceStatus.CANCELLED
+                    result.changed_instances.append(instance)
+        return result
+
+    db.flush()
+    if child is None:
+        child = create_child_event(db, event)
+        result.created_child = child
+        return result
+
+    child.location = location
+    child.start_time = event.start_time - timedelta(minutes=location.default_travel_minutes)
+    child.end_time = event.start_time
+    parent_active = {i.date for i in event.instances if i.status != EventInstanceStatus.CANCELLED}
+    for instance in child.instances:
+        if instance.date >= today and instance.status == EventInstanceStatus.CANCELLED and instance.date in parent_active:
+            instance.status = EventInstanceStatus.PENDING
+            result.changed_instances.append(instance)
+    if child.is_recurring and child.recurrence_rule and child.date_range_id is not None:
+        result.created_instances = generate_event_instances(db, child)
+    return result
+
+
 def apply_event_update(db: Session, event: Event, changes: dict[str, Any]) -> None:
     """검증 후 변경을 적용한다 (커밋하지 않음). 시작 시각이 바뀌면 하위 일정도 같은 만큼 옮긴다."""
     if changes.get("parent_event_id") == event.id:
@@ -87,9 +140,12 @@ def apply_event_update(db: Session, event: Event, changes: dict[str, Any]) -> No
         changes.get("recurrence_rule", event.recurrence_rule),
     )
 
+    changes = dict(changes)
+    location_given = "location_id" in changes
+    location_id = changes.pop("location_id", None)
     old_start = event.start_time
-    for field, value in changes.items():
-        setattr(event, field, value)
+    for name, value in changes.items():
+        setattr(event, name, value)
 
     # 이동시간·준비 하위 일정은 부모 시작 시각에 붙어 있으므로 같은 만큼 민다 (FR-5).
     children = list_child_events(db, event.id)
@@ -101,6 +157,8 @@ def apply_event_update(db: Session, event: Event, changes: dict[str, Any]) -> No
             child.end_time += delta
     for item in [event, *children]:
         follow_single_instance(db, item)
+    if location_given and location_id != event.location_id and event.parent_event_id is None:
+        set_event_location(db, event, db.get(Location, location_id) if location_id is not None else None)
 
 
 def update_event(db: Session, event_id: int, data: EventUpdate) -> Event | None:

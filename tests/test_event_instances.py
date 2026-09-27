@@ -134,6 +134,7 @@ def test_lists_instances_in_range_with_event_info_in_time_order(client, engine, 
         "start_time": "2026-09-26T17:00:00",
         "end_time": "2026-09-26T18:30:00",
         "time_overridden": False,
+        "location_name": None,
     }
     assert task_item["event_type"] == "deadline"
     assert task_item["start_time"] is None and task_item["end_time"] == "2026-09-24T23:59:00"

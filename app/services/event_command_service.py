@@ -32,7 +32,7 @@ from app.schemas.event_parse import NewDateRangeDraft, NewLocationDraft
 from app.services import date_range_command_service as ranges
 from app.services.action_history_service import Snapshot, record_action, recalculate_points_for_dates
 from app.services.event_instance_service import cancel_instance, child_instances_on_same_date, set_instance_times
-from app.services.event_service import apply_event_update, build_event, remove_event
+from app.services.event_service import apply_event_update, build_event, remove_event, set_event_location
 from app.services.llm_client import EventSlotFillResult, LLMResponseParsingError
 from app.services.notification import sync_notifications
 from app.services.slot_fill_session import PendingAction, create_pending_action
@@ -55,6 +55,11 @@ class CommandDescription:
     new_end_time: str | None = None
     new_title: str | None = None
     new_importance: int | None = None
+    # 장소는 반복 시리즈 단위 값이다. set인데 등록되지 않은 장소면 이동 시간(분)을 물어 새로 등록한다.
+    location_action: Literal["set", "remove"] | None = None
+    new_location_name: str | None = None
+    new_location_minutes: int | None = None
+    target_weekday: str | None = None
 
     @classmethod
     def from_llm(cls, result: EventSlotFillResult) -> CommandDescription:
@@ -68,6 +73,9 @@ class CommandDescription:
             new_end_time=result.new_end_time,
             new_title=result.new_title,
             new_importance=int(result.new_importance) if result.new_importance is not None else None,
+            location_action=result.location_action,
+            new_location_name=result.new_location_name,
+            target_weekday=result.target_weekday,
         )
 
     def merged(self, newer: CommandDescription) -> CommandDescription:
@@ -83,7 +91,16 @@ class CommandDescription:
         return CommandDescription(**values)
 
     def has_changes(self) -> bool:
-        return any(v is not None for v in (self.new_start_time, self.new_end_time, self.new_title, self.new_importance))
+        return any(
+            v is not None for v in (self.new_start_time, self.new_end_time, self.new_title, self.new_importance, self.location_action)
+        )
+
+    @property
+    def location_only(self) -> bool:
+        """장소만 바꾸는 요청 — 회차 단위가 아니라 시리즈 전체에 적용한다."""
+        return self.location_action is not None and not any(
+            (self.new_start_time, self.new_end_time, self.new_title, self.new_importance is not None)
+        )
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -99,7 +116,10 @@ class CommandDescription:
     def describe_for_prompt(self) -> str:
         """다음 턴 LLM 프롬프트의 '진행 중인 요청'."""
         parts = [f"intent={self.intent}"]
-        for key in ("title", "date", "scope", "new_start_time", "new_end_time", "new_title", "new_importance"):
+        for key in (
+            "title", "date", "scope", "new_start_time", "new_end_time", "new_title", "new_importance",
+            "location_action", "new_location_name", "new_location_minutes", "target_weekday",
+        ):
             value = getattr(self, key)
             if value is not None:
                 parts.append(f"{key}={value}")
@@ -188,7 +208,7 @@ def resolve(db: Session, user: User, desc: CommandDescription) -> Resolution:
             return Resolution(
                 "not_found", render_message("command.not_found_on_date", lang, title=desc.title, date=_format_date(desc.date))
             )
-        if desc.scope == "series":
+        if desc.scope == "series" or desc.location_only:
             unique = {t.event.id: t.event for t in targets}
             targets = [Target(event) for event in unique.values()]
         if len({t.event.id for t in targets}) > 1 and not desc.all:
@@ -198,7 +218,7 @@ def resolve(db: Session, user: User, desc: CommandDescription) -> Resolution:
     if len(events) > 1 and not desc.all:
         return _ambiguous([Target(event) for event in events], lang)
 
-    if len(events) == 1 and not desc.all and _is_recurring(events[0]):
+    if len(events) == 1 and not desc.all and _is_recurring(events[0]) and not desc.location_only:
         if desc.scope is None:
             return Resolution("needs_clarification", render_message("command.ask_scope", lang, title=events[0].title))
         if desc.scope == "instance":
@@ -290,6 +310,7 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
     summaries: list[str] = []
     notes: set[str] = set()
     affected = [to_command_target(t) for t in targets]
+    created: dict[str, list[int]] = {"created_children": [], "created_instances": [], "created_locations": []}
 
     for target in targets:
         event, instance = target.event, target.instance
@@ -316,10 +337,15 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
         elif instance is None:  # 반복 전체(또는 단발성 이벤트) 수정
             snapshot.add_event_with_children(event)
             event_ids.update(child.id for child in event.child_events)
+            location_text = None
+            if desc.location_action is not None:
+                location_text = _change_location(db, user, event, desc, snapshot, created, event_ids, instance_ids)
             before = (event.start_time, event.end_time)
             anchor_day = (event.start_time or event.end_time).date()
             new_start, new_end = _new_times(desc, anchor_day, event.start_time, event.end_time)
             change_text = _describe_changes(lang, before, (new_start, new_end), event, desc)
+            if location_text:
+                change_text = location_text if change_text == "-" else f"{change_text}, {location_text}"
             changes = _series_field_changes(desc)
             if (new_start, new_end) != before:
                 changes.update({"start_time": new_start, "end_time": new_end})
@@ -364,7 +390,7 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
         source=source,
         summary_text=summary,
         snapshot=snapshot,
-        affected_ids={"events": sorted(event_ids), "event_instances": sorted(instance_ids)},
+        affected_ids={"events": sorted(event_ids), "event_instances": sorted(instance_ids), **created},
     )
     db.commit()
     db.refresh(action)
@@ -373,6 +399,40 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
 
     message = " ".join([render_message("command.executed", lang, summary=summary), *sorted(notes)])
     return ExecutionResult(action=action, affected=affected, message=message)
+
+
+def _change_location(
+    db: Session,
+    user: User,
+    event: Event,
+    desc: CommandDescription,
+    snapshot: Snapshot,
+    created: dict[str, list[int]],
+    event_ids: set[int],
+    instance_ids: set[int],
+) -> str:
+    """장소를 넣거나 바꾸거나 뺀다. 되돌릴 수 있게 이동 child와 그 회차의 이전 상태를 스냅샷에 남긴다."""
+    lang = user.preferred_language
+    for child in event.child_events:
+        for instance in child.instances:
+            snapshot.add_instance(instance)
+    before = event.location.name if event.location else render_message("change.no_location", lang)
+    location = None
+    if desc.location_action == "set" and desc.new_location_name:
+        location = find_location(db, user.id, desc.new_location_name)
+        if location is None:
+            location = Location(user_id=user.id, name=desc.new_location_name, default_travel_minutes=desc.new_location_minutes or 0)
+            db.add(location)
+            db.flush()
+            created["created_locations"].append(location.id)
+    change = set_event_location(db, event, location)
+    if change.created_child is not None:
+        created["created_children"].append(change.created_child.id)
+        event_ids.add(change.created_child.id)
+    created["created_instances"].extend(i.id for i in change.created_instances)
+    instance_ids.update(i.id for i in [*change.changed_instances, *change.created_instances])
+    after = location.name if location else render_message("change.no_location", lang)
+    return render_message("change.location", lang, before=before, after=after)
 
 
 def find_location(db: Session, user_id: int, name: str) -> Location | None:

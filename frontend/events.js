@@ -42,6 +42,10 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   const rangesStatus = document.getElementById("ranges-status");
   const rangesRefreshButton = document.getElementById("ranges-refresh");
 
+  const locationList = document.getElementById("location-list");
+  const locationsStatus = document.getElementById("locations-status");
+  const locationsRefreshButton = document.getElementById("locations-refresh");
+
   const actionList = document.getElementById("action-list");
   const actionsStatus = document.getElementById("actions-status");
   const actionsRefreshButton = document.getElementById("actions-refresh");
@@ -574,6 +578,107 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     }
   }
 
+  // --- 장소 ---------------------------------------------------------------------
+
+  function setLocationsStatus(text, state = "ok") {
+    setStatus(locationsStatus, text);
+    locationsStatus.dataset.state = state;
+  }
+
+  function renderLocation(location) {
+    const item = el("li", { className: "list-item range-item" });
+
+    function showSummary() {
+      const edit = rangeButton("수정");
+      const remove = rangeButton("삭제");
+      edit.addEventListener("click", showEditForm);
+      remove.addEventListener("click", showDeleteConfirm);
+      item.replaceChildren(
+        el("div", { className: "list-main" }, [
+          el("div", { className: "list-title" }, [el("span", { text: location.name })]),
+          el("div", { className: "list-meta", text: `이동 ${location.default_travel_minutes}분` }),
+        ]),
+        el("div", { className: "actions" }, [edit, remove]),
+      );
+    }
+
+    function showEditForm() {
+      const name = el("input", { attrs: { type: "text", value: location.name, maxlength: "100", "aria-label": "장소 이름" } });
+      const minutes = el("input", {
+        attrs: { type: "number", min: "0", value: String(location.default_travel_minutes), "aria-label": "이동 시간(분)" },
+      });
+      const save = rangeButton("저장", { primary: true });
+      const cancel = rangeButton("취소");
+      cancel.addEventListener("click", showSummary);
+      save.addEventListener("click", async () => {
+        save.disabled = cancel.disabled = true;
+        try {
+          await apiFetch(`/locations/${location.id}`, {
+            method: "PUT",
+            body: { name: name.value.trim(), default_travel_minutes: Number(minutes.value) },
+            showError: bannerUnless(422),
+          });
+          setLocationsStatus(`'${name.value.trim()}' 장소를 수정했어요.`);
+          await dataChanged();
+        } catch (error) {
+          save.disabled = cancel.disabled = false;
+          if (error.status === 422) setLocationsStatus(error.message, "error");
+        }
+      });
+      item.replaceChildren(
+        el("div", { className: "range-form" }, [
+          el("label", {}, [el("span", { text: "이름" }), name]),
+          el("label", {}, [el("span", { text: "이동 시간(분)" }), minutes]),
+        ]),
+        el("div", { className: "actions" }, [save, cancel]),
+      );
+      name.focus();
+    }
+
+    function showDeleteConfirm() {
+      const confirmButton = rangeButton("삭제", { primary: true });
+      const cancel = rangeButton("취소");
+      cancel.addEventListener("click", showSummary);
+      confirmButton.addEventListener("click", async () => {
+        confirmButton.disabled = cancel.disabled = true;
+        try {
+          await apiFetch(`/locations/${location.id}`, { method: "DELETE", showError: bannerUnless(409) });
+          setLocationsStatus(`'${location.name}' 장소를 삭제했어요.`);
+          await refreshLocations();
+        } catch (error) {
+          confirmButton.disabled = cancel.disabled = false;
+          // 이 장소를 쓰는 일정이 있으면 409 — 서버 문구를 그대로 보여준다.
+          if (error.status === 409) setLocationsStatus(`${error.detail} — 일정에서 장소를 먼저 빼 주세요.`, "error");
+        }
+      });
+      item.replaceChildren(el("p", { className: "range-confirm", text: "이 장소를 삭제할까요?" }), el("div", { className: "actions" }, [confirmButton, cancel]));
+      confirmButton.focus();
+    }
+
+    showSummary();
+    return item;
+  }
+
+  async function refreshLocations() {
+    const userId = getUserId();
+    if (!userId) {
+      locationList.replaceChildren();
+      setLocationsStatus("사용자 ID를 입력하면 장소가 보여요.");
+      return;
+    }
+    locationsRefreshButton.disabled = true;
+    try {
+      const locations = await apiFetch(`/locations?user_id=${encodeURIComponent(userId)}`);
+      locationList.replaceChildren(...locations.map(renderLocation));
+      if (!locations.length) setLocationsStatus("아직 등록된 장소가 없어요.");
+      else if (locationsStatus.textContent === "아직 등록된 장소가 없어요.") setLocationsStatus("");
+    } catch {
+      setLocationsStatus("장소를 불러오지 못했어요.", "error");
+    } finally {
+      locationsRefreshButton.disabled = false;
+    }
+  }
+
   // --- 이벤트 목록 --------------------------------------------------------------
 
   function renderEvent(event) {
@@ -615,7 +720,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   }
 
   async function refresh() {
-    await Promise.all([refreshEvents(), refreshActions(), refreshRanges()]);
+    await Promise.all([refreshEvents(), refreshActions(), refreshRanges(), refreshLocations()]);
   }
 
   // 실행·되돌리기 뒤: 이 탭의 목록과 최근 변경, 그리고 할 일·포인트 탭까지 다시 불러온다.
@@ -637,6 +742,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   refreshButton.addEventListener("click", refreshEvents);
   actionsRefreshButton.addEventListener("click", refreshActions);
   rangesRefreshButton.addEventListener("click", refreshRanges);
+  locationsRefreshButton.addEventListener("click", refreshLocations);
 
   resetConversation();
   return {
@@ -658,6 +764,8 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       setActionsStatus("");
       rangeList.replaceChildren();
       setRangesStatus("");
+      locationList.replaceChildren();
+      setLocationsStatus("");
     },
   };
 }

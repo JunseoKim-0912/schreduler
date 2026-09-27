@@ -198,12 +198,29 @@ def _undo_create(db: Session, action: ActionHistory) -> list[date]:
             db.delete(date_range)
         elif not action.affected_ids.get("created_events"):
             raise ConflictError(render_message("undo.range_in_use", user_language(db, action)))
-    # 일정과 함께 등록한 장소도 다른 일정이 쓰지 않으면 지운다.
+    _delete_unused_created_locations(db, action)
+    return touched_dates
+
+
+def _delete_unused_created_locations(db: Session, action: ActionHistory) -> None:
+    """변경과 함께 등록한 장소는 다른 일정이 쓰지 않으면 지운다."""
+    db.flush()
     for location_id in action.affected_ids.get("created_locations", []):
         location = db.get(Location, location_id)
         if location is not None and db.execute(select(Event.id).where(Event.location_id == location_id).limit(1)).first() is None:
             db.delete(location)
-    return touched_dates
+
+
+def _remove_created_children(db: Session, action: ActionHistory) -> list[date]:
+    """수정하면서 새로 만든 이동 child(장소를 넣은 경우)는 스냅샷에 없으므로 되돌릴 때 지운다."""
+    dates: list[date] = []
+    for event_id in action.affected_ids.get("created_children", []):
+        child = db.get(Event, event_id)
+        if child is not None:
+            dates.extend(i.date for i in child.instances)
+            db.delete(child)
+    db.flush()
+    return dates
 
 
 def user_language(db: Session, action: ActionHistory) -> str:
@@ -244,7 +261,9 @@ def undo_action(db: Session, user: User, action_id: int) -> ActionHistory:
     if action.action_type == ActionType.CREATE:
         touched_dates = _undo_create(db, action)
     else:
-        touched_dates = _delete_created_instances(db, action) + _restore(db, action.snapshot_before)
+        touched_dates = _remove_created_children(db, action) + _delete_created_instances(db, action)
+        touched_dates += _restore(db, action.snapshot_before)
+        _delete_unused_created_locations(db, action)
 
     action.undone_at = datetime.now()
     db.commit()
