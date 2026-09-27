@@ -5,6 +5,7 @@ import {
   describeAction,
   describeCandidate,
   describeCommandTarget,
+  describeDraftRepeat,
   describeEventTime,
   describeRecurrence,
   formatDate,
@@ -49,7 +50,6 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   let draft = null;
   let draftToken = null;
   let sending = false;
-  const dateRangeNames = new Map();
 
   // 409(되돌리기 순서, 확인 대기 중 대상 변경)와 410(확인 토큰 만료)은 배너 대신 화면 안에서 직접 안내한다.
   const bannerUnless = (...statuses) => (error) => !statuses.includes(error.status);
@@ -222,26 +222,10 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     setStatus(chatStatus, "");
   }
 
-  async function dateRangeName(id) {
-    if (id === null || id === undefined) return "지정 안 함 (반복 회차가 생성되지 않아요)";
-    if (!dateRangeNames.has(id)) {
-      try {
-        const range = await apiFetch(`/date-ranges/${id}`, { showError: false });
-        dateRangeNames.set(id, `${range.name} (${range.start_date} ~ ${range.end_date})`);
-      } catch {
-        dateRangeNames.set(id, `#${id}`);
-      }
-    }
-    return dateRangeNames.get(id);
-  }
 
-  async function describeDraftRecurrence(value) {
-    if (!value.is_recurring) return "반복 안 함 (한 번만)";
-    const range = value.new_date_range;
-    const period = range
-      ? `${range.name} (${formatShortDate(range.start_date)}~${formatShortDate(range.end_date)}, 새로 만듦)`
-      : await dateRangeName(value.date_range_id);
-    return `${describeRecurrence(value.recurrence_rule)} · ${period}`;
+  function describeDraftRecurrence(value) {
+    const text = describeDraftRepeat(value);
+    return value.new_date_range ? `${text} (기간 새로 만듦)` : text;
   }
 
   function describeDraftLocation(value) {
@@ -260,7 +244,10 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       ["date", draft.is_recurring ? "시작일" : "날짜", formatDate(day)],
       ["time", "시간", deadline ? `${formatTime(draft.end_time)} 마감` : `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
       ["importance", "중요도", importanceLabel(draft.importance)],
-      ["recurrence", "반복", await describeDraftRecurrence(draft)],
+      ["recurrence", "반복", describeDraftRecurrence(draft)],
+      ...(draft.is_recurring && draft.preview_dates?.length
+        ? [["recurrence", "처음 회차", draft.preview_dates.map(formatShortDate).join(", ")]]
+        : []),
       ["location", "장소", describeDraftLocation(draft)],
     ];
     draftFields.replaceChildren(

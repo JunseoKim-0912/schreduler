@@ -42,7 +42,8 @@ _NATIVE_QUESTION_LANGUAGE_RULES: dict[Language, str] = {
 DEFAULT_PERSONA_BLOCK = "[페르소나]\n일정 관리 앱의 다정한 코치. 나무라지 않고 공감하며 격려한다."
 
 SlotName = Literal[
-    "title", "date", "frequency", "by_day", "start_time", "end_time", "importance", "date_range_id"
+    "title", "date", "frequency", "by_day", "interval", "recurrence_start", "start_time", "end_time", "importance",
+    "date_range_id",
 ]
 
 SLOT_NAMES: tuple[SlotName, ...] = (
@@ -50,6 +51,8 @@ SLOT_NAMES: tuple[SlotName, ...] = (
     "date",
     "frequency",
     "by_day",
+    "interval",
+    "recurrence_start",
     "start_time",
     "end_time",
     "importance",
@@ -102,6 +105,11 @@ _EVENT_SLOT_JSON_SCHEMA = {
                     "enum": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"],
                 },
                 "description": "frequency가 WEEKLY일 때 반복 요일들 (예: ['MO'])",
+            },
+            "interval": {"type": ["integer", "null"], "description": "반복 간격. 격주·2주마다는 2 (기본 1)"},
+            "recurrence_start": {
+                "type": ["string", "null"],
+                "description": "반복 일정의 첫 회차 날짜 YYYY-MM-DD(연도를 말하지 않았으면 MM-DD)",
             },
             "start_time": {
                 "type": ["string", "null"],
@@ -176,7 +184,8 @@ class NewDateRangeSlot(BaseModel):
 
 # 되묻는 질문이 가리키는 항목. 슬롯필링 슬롯 외에, 초안을 고치다가 새 장소의 이동 시간을 물을 때 location을 쓴다.
 QuestionSlot = Literal[
-    "title", "date", "frequency", "by_day", "start_time", "end_time", "importance", "date_range_id", "location"
+    "title", "date", "frequency", "by_day", "interval", "recurrence_start", "start_time", "end_time", "importance",
+    "date_range_id", "location",
 ]
 
 
@@ -194,6 +203,8 @@ class EventSlotFillResult(BaseModel):
     date: str | None = None  # YYYY-MM-DD, 연도를 말하지 않았으면 MM-DD (event_parse_service가 날짜로 정한다)
     frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None = None
     by_day: list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None = None
+    interval: int | None = None
+    recurrence_start: str | None = None
     start_time: str | None = None
     end_time: str | None = None
     importance: Importance | None = None
@@ -258,12 +269,18 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "- 반복 여부: 사용자가 '매일', '매주', '월수금마다', '격주'처럼 반복을 직접 말했을 때만 반복 일정이다. "
     "반복을 말하지 않았거나 '반복 없이', '한 번만', '이번만'처럼 답하면 단발 일정이다. 단발 일정이면 "
     "frequency, by_day, date_range_id를 모두 null로 두고 missing_slots에 넣지 않으며, 반복 여부를 묻지 않는다.\n"
-    "- date는 일정 날짜다. 단발 일정에는 꼭 필요하고, 반복 일정은 첫 날짜를 말했을 때만 적는다. "
+    "- date는 단발 일정의 날짜다(반복 일정의 첫 날짜는 date가 아니라 recurrence_start에 적는다). "
     "'오늘', '내일', '다음 주 금요일'처럼 상대적인 표현은 오늘 날짜 기준으로 계산해 YYYY-MM-DD로 적는다. "
     "'10월 1일'처럼 연도 없이 말하면 연도를 붙이지 말고 MM-DD(예: 10-01)로 적는다. 단발 일정인데 날짜를 "
     "모르면 date를 missing_slots에 넣고 묻는다.\n"
     "- frequency는 반복 일정일 때만 DAILY/WEEKLY/MONTHLY/YEARLY 중 하나로 적는다. '매일'이면 DAILY, "
     "'매주'면 WEEKLY다.\n"
+    "- interval은 반복 간격이다(기본 1). '2주마다', '격주', '한 주 걸러'는 WEEKLY에 interval 2, '3주마다'는 3, "
+    "'이틀마다'는 DAILY에 2, '두 달마다'는 MONTHLY에 2다. '매주 화요일'과 '2주마다'를 함께 말하면 모순이 아니라 "
+    "'격주 화요일'(WEEKLY, by_day [\"TU\"], interval 2)이므로 되묻지 않는다. 서로 다른 요일이나 다른 일정을 가리켜 정말 "
+    "애매할 때만 묻는다.\n"
+    "- recurrence_start는 반복 일정의 첫 회차 날짜다('9/22부터' → 09-22). 날짜 형식은 date와 같다. 말하지 않으면 null로 "
+    "두고 묻지 않는다(앱이 반복 기간 시작 뒤 첫 해당 요일로 정한다).\n"
     "- by_day는 frequency가 WEEKLY일 때 반복 요일들을 MO/TU/WE/TH/FR/SA/SU "
     "코드의 배열로 담는다 (예: '매주 월요일'이면 [\"MO\"], '매주 화, 목'이면 "
     "[\"TU\", \"TH\"]). DAILY/MONTHLY/YEARLY면 보통 필요 없으니 빈 배열로 둔다.\n"
@@ -338,6 +355,8 @@ _DRAFT_EDIT_JSON_SCHEMA = {
                 "type": ["array", "null"],
                 "items": {"type": "string", "enum": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]},
             },
+            "interval": {"type": ["integer", "null"], "description": "반복 간격 (매주로=1, 격주로=2)"},
+            "recurrence_start": {"type": ["string", "null"], "description": "반복 첫 회차 날짜"},
             "date_range_id": {"type": ["integer", "null"]},
             "new_date_range": _EVENT_SLOT_JSON_SCHEMA["schema"]["properties"]["new_date_range"],
             "location_name": {"type": ["string", "null"]},
@@ -346,7 +365,8 @@ _DRAFT_EDIT_JSON_SCHEMA = {
         },
         "required": [
             "decision", "title", "event_type", "date", "start_time", "end_time", "duration_minutes", "importance",
-            "importance_none", "recurrence", "frequency", "by_day", "date_range_id", "new_date_range",
+            "importance_none", "recurrence", "frequency", "by_day", "interval", "recurrence_start", "date_range_id",
+            "new_date_range",
             "location_name", "travel_minutes", "unsupported",
         ],
         "additionalProperties": False,
@@ -369,6 +389,8 @@ class DraftEditResult(BaseModel):
     recurrence: Literal["set", "remove"] | None = None
     frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None = None
     by_day: list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None = None
+    interval: int | None = None
+    recurrence_start: str | None = None
     date_range_id: int | None = None
     new_date_range: NewDateRangeSlot | None = None
     location_name: str | None = None
@@ -389,7 +411,8 @@ _DRAFT_EDIT_INSTRUCTIONS = (
     "길이를 말하면 duration_minutes에 적는다. date는 YYYY-MM-DD, 연도를 말하지 않았으면 MM-DD.\n"
     "- event_type: '마감으로'면 deadline(마감 시각은 end_time), '일반 일정으로'면 scheduled.\n"
     "- importance: 1~5, 'MAX'는 6. '중요도 없음'이면 importance_none=true.\n"
-    "- 반복: '매주 수요일로 반복해줘'면 recurrence=set, frequency, by_day. '반복 빼줘'면 recurrence=remove. 반복 기간을 "
+    "- 반복: '매주 수요일로 반복해줘'면 recurrence=set, frequency, by_day. '반복 빼줘'면 recurrence=remove. '매주로 바꿔줘'는 "
+    "interval 1, '격주로'는 interval 2(recurrence는 null). '10/6부터'처럼 첫 회차를 바꾸면 recurrence_start. 반복 기간을 "
     "함께 말하면 등록된 기간 후보의 id를 date_range_id에, 새 기간이면 new_date_range에 {name, start_date, end_date}를 적는다.\n"
     "- 장소: '장소는 Bahen이야'면 location_name에 말한 이름을 그대로(등록된 장소 목록에 비슷한 이름이 있으면 그 이름을) 적는다. "
     "이동 시간을 말하면 travel_minutes(분)에 적는다.\n"

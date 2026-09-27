@@ -128,6 +128,14 @@ MessageKey = Literal[
     "draft.ask_travel_minutes",
     "draft.new_location",
     "draft.ask_frequency",
+    "draft.start_weekday_mismatch",
+    "weekday.MO",
+    "weekday.TU",
+    "weekday.WE",
+    "weekday.TH",
+    "weekday.FR",
+    "weekday.SA",
+    "weekday.SU",
 ]
 
 

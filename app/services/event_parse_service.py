@@ -32,7 +32,7 @@ from app.services.llm_client import (
     fill_event_slots_for_user,
 )
 from app.services.common import require
-from app.services.recurrence import build_recurrence_rule
+from app.services.recurrence import build_recurrence_rule, occurrences
 from app.services.event_command_service import (
     CommandDescription,
     Target,
@@ -215,12 +215,72 @@ def _enforce_date_range_rules(db: Session, session: SlotFillSession, user: User)
         if session.new_date_range is not None or session.date_range_id is not None:
             _drop_slots(session, ("date_range_id",))
 
+    _check_start_weekday(db, session, user)
     if _is_recurring(session) and "date_range_id" in session.missing_slots:
         session.clarifying_questions = [
             _repeat_until_question(db, user) if q.slot == "date_range_id" else q for q in session.clarifying_questions
         ]
         if not any(q.slot == "date_range_id" for q in session.clarifying_questions):
             session.clarifying_questions.append(_repeat_until_question(db, user))
+
+
+_WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+
+
+def _first_matching_day(value: str, by_day: list[str] | None, frequency: str | None) -> str:
+    try:
+        day = resolve_event_date(value, date.today())
+    except LLMResponseParsingError:
+        return value
+    if frequency == "WEEKLY" and by_day:
+        while _WEEKDAY_CODES[day.weekday()] not in by_day:
+            day += timedelta(days=1)
+    return day.isoformat()
+
+
+def _range_bounds(db: Session, session: SlotFillSession, user: User) -> tuple[str | None, date | None, date | None]:
+    """반복 기간의 (이름, 시작일, 종료일). 새 기간이면 확정 전 값으로."""
+    if session.new_date_range is not None:
+        new_range = _resolve_new_range(db, session, user)
+        return new_range.name, new_range.start_date, new_range.end_date
+    if session.date_range_id is not None:
+        date_range = db.get(ImportantDateRange, session.date_range_id)
+        if date_range is not None:
+            return date_range.name, date_range.start_date, date_range.end_date
+    return None, None, None
+
+
+def _recurrence_start_date(db: Session, session: SlotFillSession, user: User) -> date | None:
+    """말한 반복 시작일. 연도가 없으면 반복 기간(없으면 올해)의 연도로 본다 — '9/22부터'가 내년이 되지 않게."""
+    if not session.recurrence_start:
+        return None
+    _, range_start, _ = _range_bounds(db, session, user)
+    try:
+        return ranges.parse_day(session.recurrence_start, (range_start or date.today()).year)
+    except InvalidInputError:
+        return None
+
+
+def _check_start_weekday(db: Session, session: SlotFillSession, user: User) -> None:
+    """'9/23부터 매주 화요일'처럼 시작일이 반복 요일과 맞지 않으면 첫 회차를 한 번 되묻는다."""
+    if session.start_weekday_asked or session.frequency != "WEEKLY" or not session.by_day:
+        return
+    start = _recurrence_start_date(db, session, user)
+    if start is None or _WEEKDAY_CODES[start.weekday()] in session.by_day:
+        return
+    lang = user.preferred_language
+    session.start_weekday_asked = True
+    _ask(
+        session,
+        "recurrence_start",
+        render_message(
+            "draft.start_weekday_mismatch",
+            lang,
+            date=ranges.format_day(start),
+            weekday=render_message(f"weekday.{_WEEKDAY_CODES[start.weekday()]}", lang),
+            days="·".join(render_message(f"weekday.{code}", lang) for code in session.by_day),
+        ),
+    )
 
 
 def _resolve_new_range(db: Session, session: SlotFillSession, user: User) -> NewDateRangeDraft:
@@ -252,8 +312,12 @@ def _enforce_create_rules(session: SlotFillSession, utterance: str, known_before
     if session.event_type == "deadline":
         _drop_slots(session, ("start_time",))
     if _is_recurring(session):
-        # 반복 일정의 첫 날짜는 선택이다(말하지 않으면 반복 기간의 시작일부터). LLM이 물으려 해도 묻지 않는다.
+        # 반복 일정의 첫 날짜는 선택이다(말하지 않으면 반복 기간 시작 뒤 첫 해당 요일). LLM이 물으려 해도 묻지 않는다.
+        if session.recurrence_start is None and session.date:
+            # 단발 날짜를 반복으로 바꾼 경우: 그 날짜 이후 첫 반복 요일부터 (요일이 달라 되묻지 않게)
+            session.recurrence_start = _first_matching_day(session.date, session.by_day, session.frequency)
         _drop_slots(session, ("date",))
+    _drop_slots(session, ("interval", "recurrence_start"))
 
     new_start = session.start_time and "start_time" not in session.missing_slots and "start_time" not in known_before
     if new_start and not session.meridiem_asked:
@@ -297,12 +361,21 @@ def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> Eve
         )
 
     new_range = _resolve_new_range(db, session, user) if recurring and session.new_date_range else None
-    if session.date:
-        day = resolve_event_date(session.date, date.today())
-    elif new_range is not None:
-        day = new_range.start_date
+    rule = build_recurrence_rule(session.frequency, session.by_day, session.interval) if recurring else None
+    range_name, range_start, range_end = _range_bounds(db, session, user) if recurring else (None, None, None)
+    preview: list[date] = []
+    if recurring:
+        # 첫 회차(= 반복 기준일 dtstart): 말한 시작일, 없으면 반복 기간 시작 뒤 첫 해당 요일.
+        day = _recurrence_start_date(db, session, user)
+        clock = _parse_hhmm(session.end_time if deadline else session.start_time)
+        if day is None and range_start is not None:
+            candidates = occurrences(rule, datetime.combine(range_start, clock), range_start, range_end)
+            day = candidates[0] if candidates else range_start
+        day = day or _resolve_anchor_date(db, session.date_range_id)
+        if range_start is not None:
+            preview = occurrences(rule, datetime.combine(day, clock), range_start, range_end)[:3]
     else:
-        day = _resolve_anchor_date(db, session.date_range_id)
+        day = resolve_event_date(session.date, date.today())
     start_time = None if deadline else datetime.combine(day, _parse_hhmm(session.start_time))
     end_time = datetime.combine(day, _parse_hhmm(session.end_time))
     if start_time is not None and end_time <= start_time:  # 23:00–00:30처럼 자정을 넘기면 다음 날 끝난다
@@ -316,12 +389,15 @@ def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> Eve
         end_time=end_time,
         importance=session.importance,
         is_recurring=recurring,
-        recurrence_rule=build_recurrence_rule(session.frequency, session.by_day) if recurring else None,
+        recurrence_rule=rule,
         date_range_id=session.date_range_id if recurring and new_range is None else None,
         new_date_range=new_range,
         location_id=session.location_id,
         location_name=session.location_name or (new_location or {}).get("name"),
         new_location=NewLocationDraft(**new_location) if new_location else None,
+        date_range_name=range_name,
+        date_range_end=range_end,
+        preview_dates=preview,
     )
 
 
@@ -598,7 +674,8 @@ def _minutes_between(start: str, end: str) -> int:
     return int(delta.total_seconds() // 60) % (24 * 60)
 
 
-_EDITABLE = ("title", "date", "start_time", "end_time", "importance", "frequency", "by_day", "date_range_id",
+_EDITABLE = ("title", "date", "start_time", "end_time", "importance", "frequency", "by_day", "interval",
+             "recurrence_start", "date_range_id",
              "new_date_range", "event_type", "location_id", "location_name", "new_location")
 
 
@@ -665,6 +742,7 @@ def _apply_draft_edit(db: Session, user: User, session: SlotFillSession, edit: D
         session.one_off = False
         session.frequency = edit.frequency or ("WEEKLY" if edit.by_day else None)
         session.by_day = edit.by_day
+        session.interval = edit.interval or 1
         if session.frequency is None:
             _ask(session, "frequency", render_message("draft.ask_frequency", lang))
         if edit.new_date_range is not None:
@@ -680,6 +758,13 @@ def _apply_draft_edit(db: Session, user: User, session: SlotFillSession, edit: D
         else:
             session.date_range_id, session.new_date_range = edit.date_range_id, None
         _enforce_date_range_rules(db, session, user)
+
+    if edit.recurrence != "set" and _is_recurring(session):
+        if edit.interval:
+            session.interval = edit.interval
+        if edit.recurrence_start:
+            session.recurrence_start, session.start_weekday_asked = edit.recurrence_start, False
+            _check_start_weekday(db, session, user)
 
     # 장소: 등록된 장소면 연결하고, 처음 보는 곳이면 이동 시간을 물어 확정할 때 새로 등록한다.
     if edit.location_name:

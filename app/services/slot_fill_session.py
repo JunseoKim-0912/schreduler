@@ -27,6 +27,8 @@ class SlotFillSession:
     date: str | None = None  # YYYY-MM-DD 또는 연도 없는 MM-DD
     frequency: str | None = None
     by_day: list[str] | None = None
+    interval: int | None = None  # 반복 간격 (2면 격주)
+    recurrence_start: str | None = None  # 반복 일정의 첫 회차 날짜 (YYYY-MM-DD 또는 MM-DD)
     start_time: str | None = None
     end_time: str | None = None
     importance: Importance | None = None
@@ -44,6 +46,8 @@ class SlotFillSession:
     # "8시"처럼 오전/오후가 애매해 되묻는 중인 시(1~11). 한 번만 묻는다.
     meridiem_hour: int | None = None
     meridiem_asked: bool = False
+    # 반복 시작일이 반복 요일과 맞지 않아 되물었는지 (한 번만 묻는다)
+    start_weekday_asked: bool = False
     # 같은 대화의 최근 말(사용자·앱). 다음 LLM 호출에 넘겨 이미 답한 것을 다시 묻지 않게 한다.
     history: list[tuple[Literal["user", "assistant"], str]] = field(default_factory=list)
     # 확인 카드에서 말로 고칠 수 있는 항목 (슬롯필링 슬롯이 아니라 초안 단계에서만 바뀐다)

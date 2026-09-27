@@ -61,5 +61,13 @@
   "draft.ask_start_time": "몇 시에 시작하나요?",
   "draft.ask_travel_minutes": "'{name}'은(는) 처음 보는 장소예요. 이동 시간이 몇 분인가요?",
   "draft.new_location": "장소 '{name}'(이동 {minutes}분)도 새로 등록해요.",
-  "draft.ask_frequency": "얼마나 자주 반복할까요? 예: 매주 수요일"
+  "draft.ask_frequency": "얼마나 자주 반복할까요? 예: 매주 수요일",
+  "draft.start_weekday_mismatch": "{date}은(는) {weekday}요일이에요. {days}요일 반복이라면 첫 회차를 언제로 할까요?",
+  "weekday.MO": "월",
+  "weekday.TU": "화",
+  "weekday.WE": "수",
+  "weekday.TH": "목",
+  "weekday.FR": "금",
+  "weekday.SA": "토",
+  "weekday.SU": "일"
 }

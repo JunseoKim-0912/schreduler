@@ -67,6 +67,10 @@ class EventDraft(BaseModel):
     new_date_range: NewDateRangeDraft | None = None
     location_id: int | None = None
     location_name: str | None = None  # 화면 표시용 (POST /events는 무시한다)
+    # 반복 일정 표시용: 반복 기간 이름·종료일과 처음 3개 회차 날짜 (POST /events는 무시한다)
+    date_range_name: str | None = None
+    date_range_end: date | None = None
+    preview_dates: list[date] = []
     # 등록되지 않은 장소를 말했을 때. 확인하면 이벤트와 같은 트랜잭션에서 등록하고 이동시간 하위 일정이 생긴다.
     new_location: NewLocationDraft | None = None
 

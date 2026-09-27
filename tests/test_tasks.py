@@ -216,7 +216,7 @@ def test_overdue_flag(
 def test_recurring_task_shows_oldest_unfinished_then_advances(client: TestClient, engine, user_id: int) -> None:
     date_range_id = _date_range(engine, user_id, date(2026, 9, 1), date(2026, 9, 30))
     task = _create_task(
-        client, user_id, end_time="2026-09-18T18:00:00", recurrence_rule="FREQ=WEEKLY;BYDAY=FR", date_range_id=date_range_id
+        client, user_id, end_time="2026-09-04T18:00:00", recurrence_rule="FREQ=WEEKLY;BYDAY=FR", date_range_id=date_range_id
     )
     [listed] = client.get("/tasks", headers=_headers(user_id)).json()
     assert (listed["due_at"], listed["overdue"]) == ("2026-09-04T18:00:00", True)

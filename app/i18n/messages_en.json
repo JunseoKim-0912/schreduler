@@ -61,5 +61,13 @@
   "draft.ask_start_time": "What time does it start?",
   "draft.ask_travel_minutes": "'{name}' is a new place. How many minutes does it take to get there?",
   "draft.new_location": "The place '{name}' ({minutes} min away) will be registered too.",
-  "draft.ask_frequency": "How often should it repeat? e.g. every Wednesday"
+  "draft.ask_frequency": "How often should it repeat? e.g. every Wednesday",
+  "draft.start_weekday_mismatch": "{date} is a {weekday}. For a {days} repeat, which date should be the first one?",
+  "weekday.MO": "Monday",
+  "weekday.TU": "Tuesday",
+  "weekday.WE": "Wednesday",
+  "weekday.TH": "Thursday",
+  "weekday.FR": "Friday",
+  "weekday.SA": "Saturday",
+  "weekday.SU": "Sunday"
 }

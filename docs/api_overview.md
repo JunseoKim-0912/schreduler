@@ -97,6 +97,9 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 
 반복 규칙 `recurrence_rule`은 RFC 5545 RRULE 문자열이다. 예: 매주 화요일 `FREQ=WEEKLY;BYDAY=TU`, 매일 `FREQ=DAILY`.
 `is_recurring: true`면 `recurrence_rule`이 필수이고, 실제 반복 회차는 `date_range_id`로 지정한 기간 안에서만 생성된다.
+반복의 기준일은 일정의 `start_time`(마감이면 `end_time`) 날짜다 — 그 날짜가 첫 회차이고, 회차는 기간 안이면서 그 날짜 이후만 생긴다.
+격주는 `INTERVAL=2`(예: `FREQ=WEEKLY;INTERVAL=2;BYDAY=TU`)이며, 리듬은 기준일이 속한 주로 정해져 기간을 늘리거나 줄여도 어긋나지 않는다.
+자연어 초안(`draft`)에는 표시용으로 `date_range_name`, `date_range_end`, 처음 3개 회차 `preview_dates`가 함께 온다.
 
 ---
 

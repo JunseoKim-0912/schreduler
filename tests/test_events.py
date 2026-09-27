@@ -169,6 +169,8 @@ def test_creating_recurring_event_generates_instances_within_date_range(
         json=_payload(
             user_id,
             title="월요일 수업",
+            start_time="2026-09-07T09:00:00",  # 첫 회차(= 반복 기준일)는 기간 안 첫 월요일
+            end_time="2026-09-07T10:00:00",
             is_recurring=True,
             recurrence_rule="FREQ=WEEKLY;BYDAY=MO",  # 매주 월요일
             date_range_id=date_range_id,
@@ -263,6 +265,8 @@ def test_creating_recurring_event_with_location_auto_creates_child_and_its_insta
             location_id=location_id,
             is_recurring=True,
             recurrence_rule="FREQ=WEEKLY;BYDAY=MO",  # 매주 월요일
+            start_time="2026-09-07T09:00:00",
+            end_time="2026-09-07T10:00:00",
             date_range_id=date_range_id,
         ),
     )

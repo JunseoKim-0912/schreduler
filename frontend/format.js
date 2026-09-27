@@ -68,7 +68,9 @@ export function describeRecurrence(rule) {
   if (!freq) return rule;
 
   const interval = Number(fields.INTERVAL ?? 1);
-  let text = interval > 1 ? `${interval}${freq.unit}마다` : freq.every;
+  let text = freq.every;
+  if (interval === 2 && fields.FREQ === "WEEKLY") text = "격주";
+  else if (interval > 1) text = `${interval}${freq.unit}마다`;
   if (fields.BYDAY) {
     const days = fields.BYDAY.split(",").map((day) => BYDAY_NAMES[day] ?? day);
     text += ` ${days.join("·")}`;
@@ -150,4 +152,15 @@ const ACTION_SOURCE_LABELS = { nl: "자연어", ui: "목록에서 삭제" };
 
 export function describeAction(action) {
   return [ACTION_SOURCE_LABELS[action.source] ?? action.source, formatDateTime(action.created_at)].filter(Boolean).join(" · ");
+}
+
+// 확인 카드의 반복 설명: "격주 화요일 09:00–12:00, 9/22부터 Lecture period 종료(12/8)까지"
+export function describeDraftRepeat(draft) {
+  if (!draft.is_recurring) return "반복 안 함 (한 번만)";
+  const rule = describeRecurrence(draft.recurrence_rule).replace(/ ([월화수목금토일](?:·[월화수목금토일])*)$/, " $1요일");
+  const time =
+    draft.event_type === "deadline" ? `${formatTime(draft.end_time)} 마감` : `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`;
+  const start = formatShortDate(draft.start_time ?? draft.end_time);
+  const until = draft.date_range_name ? `${draft.date_range_name} 종료(${formatShortDate(draft.date_range_end)})까지` : "";
+  return `${rule} ${time}, ${start}부터${until ? ` ${until}` : ""}`;
 }

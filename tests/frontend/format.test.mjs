@@ -8,6 +8,7 @@ import {
   describeCandidate,
   describeCommandTarget,
   describeEventTime,
+  describeDraftRepeat,
   describeRecurrence,
   describeStreakBonus,
   formatDate,
@@ -45,7 +46,9 @@ describe("반복 규칙", () => {
     ["FREQ=DAILY", "매일"],
     ["FREQ=WEEKLY;BYDAY=TU", "매주 화"],
     ["FREQ=WEEKLY;BYDAY=TU,TH", "매주 화·목"],
-    ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR", "2주마다 금"],
+    ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR", "격주 금"],
+    ["FREQ=WEEKLY;INTERVAL=3;BYDAY=TU", "3주마다 화"],
+    ["FREQ=DAILY;INTERVAL=2", "2일마다"],
     ["FREQ=MONTHLY;COUNT=3", "매월 (3회)"],
     ["FREQ=HOURLY", "FREQ=HOURLY"],
   ];
@@ -144,5 +147,20 @@ describe("반복 기간", () => {
     assert.equal(formatShortDate("2026-09-01"), "9/1");
     assert.equal(formatShortDate("2026-12-20"), "12/20");
     assert.equal(formatShortDate(null), "");
+  });
+});
+
+describe("확인 카드 반복 설명", () => {
+  test("격주 화요일, 시작일과 기간 종료일", () => {
+    const draft = {
+      is_recurring: true, recurrence_rule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", event_type: "scheduled",
+      start_time: "2026-09-22T09:00:00", end_time: "2026-09-22T12:00:00",
+      date_range_name: "Lecture period", date_range_end: "2026-12-08",
+    };
+    assert.equal(describeDraftRepeat(draft), "격주 화요일 09:00–12:00, 9/22부터 Lecture period 종료(12/8)까지");
+  });
+
+  test("단발 일정", () => {
+    assert.equal(describeDraftRepeat({ is_recurring: false }), "반복 안 함 (한 번만)");
   });
 });
