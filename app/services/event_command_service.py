@@ -24,10 +24,11 @@ from app.models.enums import ActionSource, ActionType, EventInstanceStatus, Impo
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
+from app.models.location import Location
 from app.models.user import User
 from app.schemas.event import EventCreate
 from app.schemas.event_command import CommandResult, CommandTarget, RangeDeleteOption, TargetKind
-from app.schemas.event_parse import NewDateRangeDraft
+from app.schemas.event_parse import NewDateRangeDraft, NewLocationDraft
 from app.services import date_range_command_service as ranges
 from app.services.action_history_service import Snapshot, record_action, recalculate_points_for_dates
 from app.services.event_instance_service import cancel_instance, child_instances_on_same_date, set_instance_times
@@ -374,6 +375,12 @@ def execute(db: Session, user: User, desc: CommandDescription, targets: list[Tar
     return ExecutionResult(action=action, affected=affected, message=message)
 
 
+def find_location(db: Session, user_id: int, name: str) -> Location | None:
+    """이름으로 장소를 찾는다(대소문자·공백 무시)."""
+    key = _norm(name)
+    return next((loc for loc in db.execute(select(Location).where(Location.user_id == user_id)).scalars() if _norm(loc.name) == key), None)
+
+
 def delete_event_from_ui(db: Session, event: Event) -> ActionHistory:
     """목록의 삭제 버튼(DELETE /events/{id}). 되돌릴 수 있게 source=ui로 기록한다."""
     user = db.get(User, event.user_id)
@@ -391,7 +398,11 @@ def delete_instance_from_ui(db: Session, instance: EventInstance) -> ActionHisto
 
 
 def create_event_from_nl(
-    db: Session, user: User, data: EventCreate, new_date_range: NewDateRangeDraft | None = None
+    db: Session,
+    user: User,
+    data: EventCreate,
+    new_date_range: NewDateRangeDraft | None = None,
+    new_location: NewLocationDraft | None = None,
 ) -> ExecutionResult:
     """자연어로 만든 초안을 확정한다. 초안에 새 반복 기간이 있으면 이벤트와 같은 트랜잭션에서 만든다(같은 이름의
     기간이 이미 있으면 그것을 쓴다). 되돌리기는 만든 이벤트(와 하위 일정)를 지우고, 같이 만든 기간도 다른 일정이
@@ -407,6 +418,15 @@ def create_event_from_nl(
             if new_date_range.auto_named:
                 notes.append(render_message("range.auto_named", lang, name=date_range.name))
         data = data.model_copy(update={"date_range_id": date_range.id})
+    created_location = None
+    if new_location is not None:
+        location = find_location(db, user.id, new_location.name)
+        if location is None:
+            location = Location(user_id=user.id, name=new_location.name, default_travel_minutes=new_location.default_travel_minutes)
+            db.add(location)
+            db.flush()
+            created_location = location
+        data = data.model_copy(update={"location_id": location.id})
 
     event = build_event(db, data)
     if created_range is not None:
@@ -426,6 +446,7 @@ def create_event_from_nl(
             "events": sorted(e.id for e in all_events),
             "event_instances": sorted(i.id for e in all_events for i in e.instances),
             "created_date_ranges": [created_range.id] if created_range is not None else [],
+            "created_locations": [created_location.id] if created_location is not None else [],
             "date_ranges": [event.date_range_id] if event.date_range_id is not None else [],
         },
     )
@@ -458,7 +479,14 @@ def execute_pending(db: Session, user: User, pending: PendingAction, option: Ran
     if pending.kind == "create":
         draft = dict(pending.payload["draft"])
         new_range = draft.pop("new_date_range", None)
-        return create_event_from_nl(db, user, EventCreate(**draft), NewDateRangeDraft(**new_range) if new_range else None)
+        new_location = draft.pop("new_location", None)
+        return create_event_from_nl(
+            db,
+            user,
+            EventCreate(**draft),
+            NewDateRangeDraft(**new_range) if new_range else None,
+            NewLocationDraft(**new_location) if new_location else None,
+        )
     if pending.kind == "delete_range":
         if option is None:
             raise InvalidInputError("option is required: range_only or with_events")

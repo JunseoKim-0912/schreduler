@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import Importance
+from app.models.enums import EventType, Importance
 from app.schemas.common import NonEmptyStr
 from app.schemas.event_command import CommandResult
-from app.services.llm_client import ClarifyingQuestion, Intent, SlotName
+from app.services.llm_client import ClarifyingQuestion, Intent, QuestionSlot
 
 
 class EventParseRequest(BaseModel):
@@ -36,6 +37,13 @@ class NewDateRangeDraft(BaseModel):
     auto_named: bool = False  # 사용자가 이름을 말하지 않아 앱이 붙인 이름
 
 
+class NewLocationDraft(BaseModel):
+    """초안과 함께 확정할 때 새로 등록할 장소. 같은 이름의 장소가 그사이 생겼으면 그것을 쓴다."""
+
+    name: str
+    default_travel_minutes: int
+
+
 class EventDraft(BaseModel):
     """모든 슬롯이 채워졌을 때 반환하는 완성된 이벤트 초안.
 
@@ -48,7 +56,8 @@ class EventDraft(BaseModel):
 
     user_id: int
     title: str
-    start_time: datetime
+    event_type: EventType = EventType.SCHEDULED
+    start_time: datetime | None  # deadline이면 null이고 end_time이 마감 일시다
     end_time: datetime
     importance: Importance | None
     is_recurring: bool = True
@@ -56,13 +65,21 @@ class EventDraft(BaseModel):
     date_range_id: int | None
     # 등록된 기간 대신 새 반복 기간을 쓸 때. 확인(POST /events/commands/confirm)하면 이벤트와 같은 트랜잭션에서 만든다.
     new_date_range: NewDateRangeDraft | None = None
+    location_id: int | None = None
+    location_name: str | None = None  # 화면 표시용 (POST /events는 무시한다)
+    # 등록되지 않은 장소를 말했을 때. 확인하면 이벤트와 같은 트랜잭션에서 등록하고 이동시간 하위 일정이 생긴다.
+    new_location: NewLocationDraft | None = None
+
+
+# 확인 카드에서 고친 항목 (카드의 행 단위). 바로 앞 초안과 비교한다.
+DraftField = Literal["title", "event_type", "date", "time", "importance", "recurrence", "location"]
 
 
 class EventParseResponse(BaseModel):
     session_id: str
     is_complete: bool
     next_question: ClarifyingQuestion | None = None
-    missing_slots: list[SlotName] = []
+    missing_slots: list[QuestionSlot] = []
     draft: EventDraft | None = None
     # v3.6: 발화 의도. create면 위 필드들(기존 슬롯필링)을, delete/update면 command를 본다.
     intent: Intent = "create"
@@ -70,3 +87,5 @@ class EventParseResponse(BaseModel):
     message: str | None = None
     # 삭제·수정 결과, 또는 일정 초안(create)의 확인 대기 정보
     command: CommandResult | None = None
+    # 확인 카드에서 말로 초안을 고쳤을 때 바뀐 항목 (강조 표시용)
+    draft_changes: list[DraftField] = []

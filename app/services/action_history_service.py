@@ -27,6 +27,7 @@ from app.models.enums import ActionSource, ActionType
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
+from app.models.location import Location
 from app.models.user import User
 from app.services.event_service import remove_event
 from app.services.notification import sync_notifications
@@ -197,6 +198,11 @@ def _undo_create(db: Session, action: ActionHistory) -> list[date]:
             db.delete(date_range)
         elif not action.affected_ids.get("created_events"):
             raise ConflictError(render_message("undo.range_in_use", user_language(db, action)))
+    # 일정과 함께 등록한 장소도 다른 일정이 쓰지 않으면 지운다.
+    for location_id in action.affected_ids.get("created_locations", []):
+        location = db.get(Location, location_id)
+        if location is not None and db.execute(select(Event.id).where(Event.location_id == location_id).limit(1)).first() is None:
+            db.delete(location)
     return touched_dates
 
 

@@ -209,7 +209,10 @@ def test_parse_event_multiturn_completes_with_draft(
         "is_recurring": True,
         "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO",
         "date_range_id": date_range_id,
-        "new_date_range": None,
+        "new_date_range": None,        "event_type": "scheduled",
+        "location_id": None,
+        "location_name": None,
+        "new_location": None,
     }
 
     # 2턴째 요청에 1턴에서 알아낸 title이 "이미 확정된 슬롯"으로 같이 넘어갔는지 확인
@@ -597,7 +600,10 @@ def test_one_off_without_recurrence_mention_becomes_one_off_draft_without_asking
         "is_recurring": False,
         "recurrence_rule": None,
         "date_range_id": None,
-        "new_date_range": None,
+        "new_date_range": None,        "event_type": "scheduled",
+        "location_id": None,
+        "location_name": None,
+        "new_location": None,
     }
     assert body["command"]["affected"][0]["is_recurring"] is False
     instructions = sent[0]["messages"][0]["content"]

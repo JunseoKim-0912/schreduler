@@ -1098,3 +1098,15 @@ select:focus-visible {
 .command-card .button {
   white-space: nowrap;
 }
+
+/* 확인 카드에서 말로 고친 항목 */
+.draft-fields .is-changed {
+  background: #fff4c2;
+}
+
+.draft-fields dt.is-changed::after {
+  content: " · 바뀜";
+  color: #7a5b00;
+  font-size: 11px;
+  font-weight: 600;
+}

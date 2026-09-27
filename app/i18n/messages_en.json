@@ -50,5 +50,16 @@
   "change.range_dates": "dates {before}→{after}",
   "change.range_name": "name {before}→{after}",
   "change.range_instances": "{added} occurrences added, {cancelled} cancelled",
-  "undo.range_in_use": "Some events still use this period, so it can't be undone."
+  "undo.range_in_use": "Some events still use this period, so it can't be undone.",
+  "draft.updated": "I updated the draft. Create it like this?",
+  "draft.unchanged": "The draft is unchanged. Create it like this?",
+  "draft.unsupported": "{items} can't be set yet.",
+  "draft.unclear": "Tell me what to change, e.g. 'Move it to 7' or 'Importance 5'. Say 'OK' to create it as is.",
+  "draft.cancelled": "Cancelled. Nothing was created.",
+  "draft.end_before_start": "The end time is before the start ({start}). When does it end?",
+  "draft.end_equals_start": "The end time is the same as the start ({start}). When does it end?",
+  "draft.ask_start_time": "What time does it start?",
+  "draft.ask_travel_minutes": "'{name}' is a new place. How many minutes does it take to get there?",
+  "draft.new_location": "The place '{name}' ({minutes} min away) will be registered too.",
+  "draft.ask_frequency": "How often should it repeat? e.g. every Wednesday"
 }

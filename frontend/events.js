@@ -211,9 +211,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   // 대화 상태만 끝낸다(말풍선은 남긴다). 다음 입력은 새 요청으로 시작된다.
   function endConversation() {
     sessionId = null;
-    draft = null;
-    draftToken = null;
-    confirmBox.hidden = true;
+    hideDraft();
     resetInput();
   }
 
@@ -237,29 +235,50 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     return dateRangeNames.get(id);
   }
 
-  async function showDraft(newDraft) {
+  async function describeDraftRecurrence(value) {
+    if (!value.is_recurring) return "반복 안 함 (한 번만)";
+    const range = value.new_date_range;
+    const period = range
+      ? `${range.name} (${formatShortDate(range.start_date)}~${formatShortDate(range.end_date)}, 새로 만듦)`
+      : await dateRangeName(value.date_range_id);
+    return `${describeRecurrence(value.recurrence_rule)} · ${period}`;
+  }
+
+  function describeDraftLocation(value) {
+    if (value.new_location) return `${value.new_location.name} (새로 등록, 이동 ${value.new_location.default_travel_minutes}분)`;
+    return value.location_name ?? "없음";
+  }
+
+  // 확인 카드: 고칠 수 있는 항목을 전부 보여주고, 방금 말로 고친 항목(changes)은 강조한다.
+  async function showDraft(newDraft, changes = []) {
     draft = newDraft;
-    const rows = draft.is_recurring
-      ? [
-          ["제목", draft.title],
-          ["시간", `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
-          ["시작일", formatDate(draft.start_time)],
-          ["반복", describeRecurrence(draft.recurrence_rule)],
-          ["반복 기간", await dateRangeName(draft.date_range_id)],
-          ["중요도", importanceLabel(draft.importance)],
-        ]
-      : [
-          ["제목", draft.title],
-          ["날짜", formatDate(draft.start_time)],
-          ["시간", `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
-          ["반복", "반복 안 함 (한 번만)"],
-          ["중요도", importanceLabel(draft.importance)],
-        ];
-    draftFields.replaceChildren(...rows.flatMap(([label, value]) => [el("dt", { text: label }), el("dd", { text: value })]));
+    const deadline = draft.event_type === "deadline";
+    const day = draft.start_time ?? draft.end_time;
+    const rows = [
+      ["title", "제목", draft.title],
+      ["event_type", "종류", deadline ? "마감 일정" : "일반 일정"],
+      ["date", draft.is_recurring ? "시작일" : "날짜", formatDate(day)],
+      ["time", "시간", deadline ? `${formatTime(draft.end_time)} 마감` : `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
+      ["importance", "중요도", importanceLabel(draft.importance)],
+      ["recurrence", "반복", await describeDraftRecurrence(draft)],
+      ["location", "장소", describeDraftLocation(draft)],
+    ];
+    draftFields.replaceChildren(
+      ...rows.flatMap(([key, label, value]) => {
+        const className = changes.includes(key) ? "is-changed" : undefined;
+        return [el("dt", { className, text: label }), el("dd", { className, text: value })];
+      }),
+    );
     confirmBox.hidden = false;
-    input.disabled = true;
-    sendButton.disabled = true;
-    createButton.focus();
+    // 카드가 떠 있어도 입력창은 쓸 수 있다 — 여기서 한 말은 이 초안을 고치는 말로 처리된다.
+    input.placeholder = "고칠 내용을 말해 주세요 (예: 7시로 바꿔줘, 중요도 3)";
+    input.focus();
+  }
+
+  function hideDraft() {
+    draft = null;
+    draftToken = null;
+    confirmBox.hidden = true;
   }
 
   async function handleParseResult(result) {
@@ -268,9 +287,23 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     if (result.is_complete && result.draft) {
       draftToken = command?.confirmation_token ?? null;
       addMessage("assistant", result.message ?? "이 내용으로 만들까요?");
-      await showDraft(result.draft);
+      await showDraft(result.draft, result.draft_changes ?? []);
       return;
     }
+    // 카드에서 "좋아"/"취소"라고 말한 경우: 버튼을 누른 것과 같다.
+    if (command?.action === "create" && command.status === "executed") {
+      addResult(result.message, command.action_id);
+      endConversation();
+      await dataChanged();
+      return;
+    }
+    if (command?.status === "cancelled") {
+      endConversation();
+      addMessage("assistant", result.message);
+      return;
+    }
+    // 초안을 고치다가 더 물어볼 게 생기면(반복 기간, 이동 시간 등) 지금 카드는 맞지 않으므로 내린다.
+    if (draft && !result.is_complete && result.next_question) hideDraft();
     if (command && (command.action !== "create" || command.target_kind === "date_range")) {
       await handleCommand(result.message, command);
       return;
@@ -311,10 +344,8 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       }
     } finally {
       sending = false;
-      if (!draft) {
-        sendButton.disabled = false;
-        input.focus();
-      }
+      sendButton.disabled = false;
+      input.focus();
     }
   }
 

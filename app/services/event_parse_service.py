@@ -8,17 +8,27 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import InvalidInputError, NotFoundError
 from app.i18n import render_message
-from app.models.enums import ActionSource
+from app.models.enums import ActionSource, EventType
 from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
 from app.schemas.event_command import CommandResult, CommandTarget
-from app.schemas.event_parse import EventDraft, EventParseRequest, EventParseResponse, NewDateRangeDraft
+from app.schemas.event import EventCreate
+from app.schemas.event_parse import (
+    DraftField,
+    EventDraft,
+    EventParseRequest,
+    EventParseResponse,
+    NewDateRangeDraft,
+    NewLocationDraft,
+)
 from app.services import date_range_command_service as ranges
 from app.services.llm_client import (
     ClarifyingQuestion,
+    DraftEditResult,
     EventSlotFillResult,
     LLMResponseParsingError,
     SlotName,
+    fill_draft_edit_for_user,
     fill_event_slots_for_user,
 )
 from app.services.common import require
@@ -27,12 +37,21 @@ from app.services.event_command_service import (
     CommandDescription,
     Target,
     command_result,
+    create_event_from_nl,
     execute,
+    find_location,
     request_confirmation,
     resolve,
     to_command_target,
 )
-from app.services.slot_fill_session import SlotFillSession, create_pending_action, create_session, get_session
+from app.services.slot_fill_session import (
+    SlotFillSession,
+    create_pending_action,
+    create_session,
+    delete_session,
+    discard_pending_action,
+    get_session,
+)
 
 
 def _parse_hhmm(value: str) -> time:
@@ -65,6 +84,22 @@ def ambiguous_hours(utterance: str) -> set[int]:
     if _MERIDIEM_WORD.search(utterance):
         return set()
     return {int(h) for h in _CLOCK_HOUR.findall(utterance) if 1 <= int(h) <= 11}
+
+
+_MINUTES = re.compile(r"(\d+)\s*(분|min)|(\d+(?:\.\d+)?)\s*시간(?:\s*(\d+)\s*분)?|^\s*(\d+)\s*$", re.IGNORECASE)
+
+
+def parse_minutes(utterance: str) -> int | None:
+    """'20분', '1시간 30분', '15' 같은 이동 시간 답을 분으로."""
+    match = _MINUTES.search(utterance)
+    if match is None:
+        return None
+    minutes, _, hours, extra, bare = match.groups()
+    if minutes:
+        return int(minutes)
+    if hours:
+        return round(float(hours) * 60) + int(extra or 0)
+    return int(bare)
 
 
 def meridiem_answer(utterance: str) -> bool | None:
@@ -126,6 +161,12 @@ def _answer_locally(session: SlotFillSession, utterance: str) -> bool:
     """일정 추가 중 되물은 질문에 대한 짧은 답(오전/오후, 단발)은 LLM을 부르지 않고 처리한다. 처리했으면 True."""
     if session.command is not None or not session.known_slots():
         return False
+    if session.awaiting_travel_minutes:
+        minutes = parse_minutes(utterance)
+        if minutes is not None:
+            session.new_location = {**session.new_location, "default_travel_minutes": minutes}
+            session.clarifying_questions = [q for q in session.clarifying_questions if q.slot != "location"]
+        return True  # 알아듣지 못하면 같은 질문을 다시 한다
     if session.meridiem_hour is not None:
         pm = meridiem_answer(utterance)
         if pm is not None:
@@ -208,6 +249,8 @@ def _enforce_create_rules(session: SlotFillSession, utterance: str, known_before
     if session.one_off:
         _make_one_off(session)
         session.new_date_range = None
+    if session.event_type == "deadline":
+        _drop_slots(session, ("start_time",))
     if _is_recurring(session):
         # 반복 일정의 첫 날짜는 선택이다(말하지 않으면 반복 기간의 시작일부터). LLM이 물으려 해도 묻지 않는다.
         _drop_slots(session, ("date",))
@@ -246,9 +289,10 @@ def _resolve_anchor_date(db: Session, date_range_id: int | None) -> date:
 
 def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> EventDraft:
     recurring = session.frequency is not None
-    if not session.title or not session.start_time or not session.end_time or not (recurring or session.date):
+    deadline = session.event_type == "deadline"
+    if not session.title or not session.end_time or not (deadline or session.start_time) or not (recurring or session.date):
         raise LLMResponseParsingError(
-            "세션이 is_complete인데 필수 슬롯(title/start_time/end_time, 단발이면 date) 중 "
+            "세션이 is_complete인데 필수 슬롯(title/end_time, 일반 일정이면 start_time, 단발이면 date) 중 "
             f"일부가 비어 있습니다: {session!r}"
         )
 
@@ -259,14 +303,15 @@ def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> Eve
         day = new_range.start_date
     else:
         day = _resolve_anchor_date(db, session.date_range_id)
-    start_time = datetime.combine(day, _parse_hhmm(session.start_time))
+    start_time = None if deadline else datetime.combine(day, _parse_hhmm(session.start_time))
     end_time = datetime.combine(day, _parse_hhmm(session.end_time))
-    if end_time <= start_time:  # 23:00–00:30처럼 자정을 넘기면 다음 날 끝난다
+    if start_time is not None and end_time <= start_time:  # 23:00–00:30처럼 자정을 넘기면 다음 날 끝난다
         end_time += timedelta(days=1)
-
+    new_location = session.new_location
     return EventDraft(
         user_id=session.user_id,
         title=session.title,
+        event_type=EventType.DEADLINE if deadline else EventType.SCHEDULED,
         start_time=start_time,
         end_time=end_time,
         importance=session.importance,
@@ -274,15 +319,63 @@ def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> Eve
         recurrence_rule=build_recurrence_rule(session.frequency, session.by_day) if recurring else None,
         date_range_id=session.date_range_id if recurring and new_range is None else None,
         new_date_range=new_range,
+        location_id=session.location_id,
+        location_name=session.location_name or (new_location or {}).get("name"),
+        new_location=NewLocationDraft(**new_location) if new_location else None,
     )
 
 
-def _to_response(db: Session, session: SlotFillSession, user: User) -> EventParseResponse:
+def _ask_end_if_same_as_start(session: SlotFillSession, language: str) -> None:
+    """시작과 끝이 같은 시각이면 24시간짜리 일정이 되지 않게 끝나는 시각을 되묻는다."""
+    if session.event_type == "deadline" or not session.start_time or not session.end_time:
+        return
+    if _parse_hhmm(session.start_time) == _parse_hhmm(session.end_time):
+        _ask(session, "end_time", render_message("draft.end_equals_start", language, start=session.start_time))
+        session.end_time = None
+
+
+def _ask(session: SlotFillSession, slot: SlotName, question: str) -> None:
+    session.missing_slots = [slot, *[s for s in session.missing_slots if s != slot]]
+    session.clarifying_questions = [ClarifyingQuestion(slot=slot, question=question), *[q for q in session.clarifying_questions if q.slot != slot]]
+
+
+_DRAFT_FIELD_KEYS: dict[DraftField, tuple[str, ...]] = {
+    "title": ("title",),
+    "event_type": ("event_type",),
+    "importance": ("importance",),
+    "recurrence": ("is_recurring", "recurrence_rule", "date_range_id", "new_date_range"),
+    "location": ("location_id", "location_name", "new_location"),
+}
+
+
+def _draft_changes(before: dict[str, object] | None, draft: EventDraft) -> list[DraftField]:
+    """바로 앞에 보여준 초안과 비교해 카드에서 강조할 항목."""
+    if before is None:
+        return []
+    after = draft.model_dump(mode="json")
+    changes: list[DraftField] = [field for field, keys in _DRAFT_FIELD_KEYS.items() if any(before.get(k) != after.get(k) for k in keys)]
+
+    def split(data: dict[str, object]) -> tuple[str, tuple[str, str]]:
+        start, end = data.get("start_time") or "", data.get("end_time") or ""
+        return (start or end)[:10], (start[11:16], end[11:16])
+
+    (before_day, before_times), (after_day, after_times) = split(before), split(after)
+    if before_day != after_day:
+        changes.append("date")
+    if before_times != after_times:
+        changes.append("time")
+    return changes
+
+
+def _to_response(db: Session, session: SlotFillSession, user: User, notice: str | None = None) -> EventParseResponse:
+    lang = user.preferred_language
+    if session.is_complete:
+        _ask_end_if_same_as_start(session, lang)
     if session.is_complete:
         draft = _build_event_draft(db, session, user)
-        lang = user.preferred_language
-        message = render_message("command.confirm_create", lang)
-        if draft.new_date_range is not None:
+        edited = session.last_draft is not None
+        message = render_message("draft.updated" if edited else "command.confirm_create", lang)
+        if draft.new_date_range is not None and not edited:
             new_range = draft.new_date_range
             message = render_message(
                 "command.confirm_create_with_range",
@@ -293,18 +386,35 @@ def _to_response(db: Session, session: SlotFillSession, user: User) -> EventPars
             )
             if new_range.auto_named:
                 message += " " + render_message("range.auto_named", lang, name=new_range.name)
+        if draft.new_location is not None:
+            message += " " + render_message(
+                "draft.new_location", lang, name=draft.new_location.name, minutes=draft.new_location.default_travel_minutes
+            )
+        if notice:
+            message = f"{notice} {message}"
         # v3.6: 초안은 클라이언트가 확인하면 POST /events/commands/confirm으로 서버가 만든다 (되돌리기 기록 포함).
-        pending = create_pending_action(user.id, "create", {"draft": draft.model_dump(mode="json")})
+        # 초안을 고쳤으면 이전 카드의 토큰은 버린다 — 옛 초안이 만들어지지 않게.
+        discard_pending_action(session.pending_token)
+        payload = draft.model_dump(mode="json")
+        pending = create_pending_action(user.id, "create", {"draft": payload})
+        changes = _draft_changes(session.last_draft, draft)
+        session.pending_token, session.last_draft = pending.token, payload
         return EventParseResponse(
             session_id=session.session_id,
             is_complete=True,
             draft=draft,
+            draft_changes=changes,
             message=message,
             command=CommandResult(
                 action="create",
                 status="needs_confirmation",
                 affected=[
-                    CommandTarget(event_id=None, title=draft.title, date=draft.start_time.date(), is_recurring=draft.is_recurring)
+                    CommandTarget(
+                        event_id=None,
+                        title=draft.title,
+                        date=(draft.start_time or draft.end_time).date(),
+                        is_recurring=draft.is_recurring,
+                    )
                 ],
                 affected_count=1,
                 confirmation_token=pending.token,
@@ -312,8 +422,14 @@ def _to_response(db: Session, session: SlotFillSession, user: User) -> EventPars
             ),
         )
 
+    # 되묻는 동안에는 이전 확인 카드가 맞지 않으므로 토큰을 버린다. 답을 받아 다시 완성되면 새 카드를 보여준다.
+    discard_pending_action(session.pending_token)
+    session.pending_token = None
     missing = list(session.missing_slots)
-    if session.meridiem_hour is not None:
+    if session.awaiting_travel_minutes:
+        next_question = next(q for q in session.clarifying_questions if q.slot == "location")
+        missing = ["location", *missing]
+    elif session.meridiem_hour is not None:
         hour = session.meridiem_hour
         next_question = ClarifyingQuestion(
             slot="start_time", question=render_message("command.ask_meridiem", user.preferred_language, hour=hour)
@@ -326,6 +442,7 @@ def _to_response(db: Session, session: SlotFillSession, user: User) -> EventPars
         is_complete=False,
         next_question=next_question,
         missing_slots=missing,
+        message=notice,
     )
 
 
@@ -445,6 +562,223 @@ def _handle_range_command(db: Session, user: User, session: SlotFillSession, res
     return reply(message, command)
 
 
+# --- 확인 대기 중인 초안 고치기 ------------------------------------------------------
+
+# "좋아", "응 만들어줘", "그대로 해" / "취소", "안 만들래"는 LLM을 부르지 않고 [만들기]/[취소]와 같이 처리한다.
+_CONFIRM_REPLY = re.compile(
+    r"(?P<yes>응|어|네|넵|예|그래|좋아요?|좋습니다|오케이|ok|okay|yes|ㅇㅇ|ㅇㅋ)?[\s,]*"
+    r"(?P<act>(?:그대로\s*)?(?:해|만들어|진행해|등록해|추가해)\s*(?:줘|주세요|요)?)?",
+    re.IGNORECASE,
+)
+_CANCEL_REPLY = re.compile(
+    r"취소(?:해|할게|할래)?(?:\s*(?:줘|주세요|요))?|안\s*만들(?:래|어|게)(?:요)?|만들지\s*(?:마|말아)(?:\s*(?:줘|요))?"
+    r"|그만(?:둘래|할래|해)?(?:줘)?|됐어(?:요)?|필요\s*없어(?:요)?",
+)
+
+
+def _bare(utterance: str) -> str:
+    return re.sub(r"[\s.!~]+$", "", utterance.strip())
+
+
+def is_confirm_reply(utterance: str) -> bool:
+    match = _CONFIRM_REPLY.fullmatch(_bare(utterance))
+    return bool(match and (match.group("yes") or match.group("act")))
+
+
+def is_cancel_reply(utterance: str) -> bool:
+    return _CANCEL_REPLY.fullmatch(_bare(utterance)) is not None
+
+
+def _add_minutes(hhmm: str, minutes: int) -> str:
+    return (datetime.combine(date.today(), _parse_hhmm(hhmm)) + timedelta(minutes=minutes)).strftime("%H:%M")
+
+
+def _minutes_between(start: str, end: str) -> int:
+    delta = datetime.combine(date.today(), _parse_hhmm(end)) - datetime.combine(date.today(), _parse_hhmm(start))
+    return int(delta.total_seconds() // 60) % (24 * 60)
+
+
+_EDITABLE = ("title", "date", "start_time", "end_time", "importance", "frequency", "by_day", "date_range_id",
+             "new_date_range", "event_type", "location_id", "location_name", "new_location")
+
+
+def _apply_draft_edit(db: Session, user: User, session: SlotFillSession, edit: DraftEditResult) -> bool:
+    """LLM이 준 '바뀐 항목'을 세션에 합치고 다시 검증한다. 하나라도 바뀌었으면 True.
+    더 알아야 할 것(반복 기간, 새 장소의 이동 시간, 앞뒤가 바뀐 시각)은 되물을 질문으로 남긴다."""
+    lang = user.preferred_language
+    before = {name: getattr(session, name) for name in _EDITABLE}
+    last_start = (session.last_draft or {}).get("start_time") or (session.last_draft or {}).get("end_time")
+
+    if edit.title:
+        session.title = edit.title
+    if edit.importance_none:
+        session.importance = None
+    elif edit.importance is not None:
+        session.importance = edit.importance
+    if edit.date:
+        try:
+            resolve_event_date(edit.date, date.today())
+            session.date = edit.date
+        except LLMResponseParsingError:
+            pass
+
+    # 종류: 마감은 시작 시각 없이 마감 시각(end_time)만 쓴다.
+    if edit.event_type == "deadline" and session.event_type != "deadline":
+        session.event_type = "deadline"
+        session.end_time = edit.end_time or edit.start_time or session.end_time
+        session.start_time = None
+    elif edit.event_type == "scheduled" and session.event_type != "scheduled":
+        session.event_type = "scheduled"
+        session.start_time = edit.start_time
+        if not session.start_time:
+            _ask(session, "start_time", render_message("draft.ask_start_time", lang))
+
+    # 시간: 시작만 바꾸면 길이를 유지한다. 길이를 말하면 끝을 다시 계산한다.
+    if session.event_type == "deadline":
+        if edit.end_time or edit.start_time:
+            session.end_time = edit.end_time or edit.start_time
+    elif session.start_time or edit.start_time:
+        old_start, old_end = session.start_time, session.end_time
+        start = edit.start_time or old_start
+        if edit.duration_minutes:
+            end = _add_minutes(start, edit.duration_minutes)
+        elif edit.end_time:
+            end = edit.end_time
+        elif edit.start_time and old_start and old_end:
+            end = _add_minutes(start, _minutes_between(old_start, old_end))
+        else:
+            end = old_end
+        session.start_time = start
+        if edit.end_time and not edit.duration_minutes and _parse_hhmm(edit.end_time) <= _parse_hhmm(start):
+            session.end_time = None
+            _ask(session, "end_time", render_message("draft.end_before_start", lang, start=start))
+        else:
+            session.end_time = end
+
+    # 반복: 추가하면 필요한 것(주기, 반복 기간)만 이어서 묻는다. 빼면 지금 초안 날짜의 단발 일정이 된다.
+    if edit.recurrence == "remove":
+        if not session.date and last_start:
+            session.date = str(last_start)[:10]
+        _make_one_off(session)
+        session.new_date_range = None
+    elif edit.recurrence == "set":
+        session.one_off = False
+        session.frequency = edit.frequency or ("WEEKLY" if edit.by_day else None)
+        session.by_day = edit.by_day
+        if session.frequency is None:
+            _ask(session, "frequency", render_message("draft.ask_frequency", lang))
+        if edit.new_date_range is not None:
+            session.new_date_range, session.date_range_id = edit.new_date_range.model_dump(), None
+        elif edit.date_range_id is not None:
+            session.date_range_id, session.new_date_range = edit.date_range_id, None
+        elif session.date_range_id is None and session.new_date_range is None:
+            _ask(session, "date_range_id", _repeat_until_question(db, user).question)
+        _enforce_date_range_rules(db, session, user)
+    elif _is_recurring(session) and (edit.date_range_id is not None or edit.new_date_range is not None):
+        if edit.new_date_range is not None:
+            session.new_date_range, session.date_range_id = edit.new_date_range.model_dump(), None
+        else:
+            session.date_range_id, session.new_date_range = edit.date_range_id, None
+        _enforce_date_range_rules(db, session, user)
+
+    # 장소: 등록된 장소면 연결하고, 처음 보는 곳이면 이동 시간을 물어 확정할 때 새로 등록한다.
+    if edit.location_name:
+        location = find_location(db, user.id, edit.location_name)
+        if location is not None:
+            session.location_id, session.location_name, session.new_location = location.id, location.name, None
+        else:
+            session.location_id, session.location_name = None, None
+            session.new_location = {"name": edit.location_name, "default_travel_minutes": edit.travel_minutes}
+            if edit.travel_minutes is None:
+                session.clarifying_questions = [
+                    ClarifyingQuestion(slot="location", question=render_message("draft.ask_travel_minutes", lang, name=edit.location_name)),
+                    *[q for q in session.clarifying_questions if q.slot != "location"],
+                ]
+    elif edit.travel_minutes and session.new_location is not None:
+        session.new_location = {**session.new_location, "default_travel_minutes": edit.travel_minutes}
+
+    return any(getattr(session, name) != value for name, value in before.items())
+
+
+def _current_draft_response(session: SlotFillSession, message: str) -> EventParseResponse:
+    """초안을 바꾸지 않았을 때: 지금 카드(같은 토큰)를 그대로 다시 보여준다."""
+    draft = EventDraft.model_validate(session.last_draft)
+    return EventParseResponse(
+        session_id=session.session_id,
+        is_complete=True,
+        draft=draft,
+        message=message,
+        command=CommandResult(
+            action="create",
+            status="needs_confirmation",
+            affected=[
+                CommandTarget(
+                    event_id=None, title=draft.title, date=(draft.start_time or draft.end_time).date(), is_recurring=draft.is_recurring
+                )
+            ],
+            affected_count=1,
+            confirmation_token=session.pending_token,
+        ),
+    )
+
+
+def _confirm_draft(db: Session, user: User, session: SlotFillSession) -> EventParseResponse:
+    """[만들기]와 같다: 지금 초안을 만든다(새 기간·장소도 같은 트랜잭션에서)."""
+    draft = _build_event_draft(db, session, user)
+    discard_pending_action(session.pending_token)
+    session.pending_token = None
+    data = EventCreate(**draft.model_dump(exclude={"new_date_range", "new_location", "location_name"}))
+    result = create_event_from_nl(db, user, data, draft.new_date_range, draft.new_location)
+    delete_session(session.session_id)
+    return EventParseResponse(
+        session_id=session.session_id,
+        is_complete=False,
+        message=result.message,
+        command=command_result("create", "executed", affected=result.affected, action_id=result.action.id),
+    )
+
+
+def _cancel_draft(session: SlotFillSession, user: User) -> EventParseResponse:
+    discard_pending_action(session.pending_token)
+    session.pending_token = None
+    delete_session(session.session_id)
+    return EventParseResponse(
+        session_id=session.session_id,
+        is_complete=False,
+        message=render_message("draft.cancelled", user.preferred_language),
+        command=CommandResult(action="create", status="cancelled"),
+    )
+
+
+def _handle_draft_turn(
+    db: Session, user: User, session: SlotFillSession, utterance: str, http_client: httpx.Client | None
+) -> EventParseResponse | None:
+    """확인 카드가 떠 있을 때 들어온 말은 먼저 '지금 초안을 고치는 말'로 본다. 다른 일정을 분명히 가리키는
+    명령이면 None을 돌려줘 기존 삭제·수정 흐름으로 넘긴다."""
+    lang = user.preferred_language
+    if is_confirm_reply(utterance):
+        return _confirm_draft(db, user, session)
+    if is_cancel_reply(utterance):
+        return _cancel_draft(session, user)
+
+    edit = fill_draft_edit_for_user(
+        db, user.id, utterance, draft=session.last_draft or {}, history=session.history, http_client=http_client
+    )
+    if edit.decision == "confirm":
+        return _confirm_draft(db, user, session)
+    if edit.decision == "cancel":
+        return _cancel_draft(session, user)
+    if edit.decision == "other_event_command":
+        return None
+
+    notice = render_message("draft.unsupported", lang, items=", ".join(edit.unsupported)) if edit.unsupported else None
+    if not _apply_draft_edit(db, user, session, edit):
+        if notice:
+            return _current_draft_response(session, f"{notice} {render_message('draft.unchanged', lang)}")
+        return _current_draft_response(session, render_message("draft.unclear", lang))
+    return _to_response(db, session, user, notice=notice)
+
+
 def _pending_command_prompt(session: SlotFillSession) -> str | None:
     if session.command is None:
         return None
@@ -488,6 +822,16 @@ def _parse_turn(
     LLM이 의도(create/delete/update/unknown)를 먼저 분류한다. create는 기존 슬롯필링(부족하면 되묻고, 다
     채워지면 초안 + 확인 토큰), delete/update는 event_command_service가 대상을 찾아 실행하거나 되묻는다.
     """
+    if session.command is None and session.draft_pending:
+        response = _handle_draft_turn(db, user, session, utterance, http_client)
+        if response is not None:
+            return response
+        # 다른 일정을 분명히 가리킨 삭제·수정: 초안(카드와 토큰)은 그대로 두고 기존 명령으로 처리한다.
+        result = fill_event_slots_for_user(db, user.id, utterance, history=session.history, http_client=http_client)
+        if result.target_kind == "event" and result.intent in ("delete", "update"):
+            return _handle_command(db, user, session, CommandDescription.from_llm(result))
+        return _current_draft_response(session, render_message("draft.unclear", user.preferred_language))
+
     if _answer_locally(session, utterance):
         return _to_response(db, session, user)
 

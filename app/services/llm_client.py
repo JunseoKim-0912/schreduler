@@ -18,6 +18,7 @@ from app.i18n import Language, non_compliance_category_label, to_language
 from app.models.enums import Importance, NonComplianceCategory
 from app.models.event import Event
 from app.models.important_date_range import ImportantDateRange
+from app.models.location import Location
 from app.models.user import User
 from app.schemas.persona import PersonaRead
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
 
-PromptTask = Literal["event_slot_fill", "compliance_feedback", "daily_checkin"]
+PromptTask = Literal["event_slot_fill", "draft_edit", "compliance_feedback", "daily_checkin"]
 LANGUAGE_NAMES: dict[Language, str] = {"ko": "한국어(Korean)", "en": "영어(English)"}
 
 # 지시문·요약이 한국어여도 모델이 따라 쓰지 않도록, 대상 언어로 쓴 지시를 한 번 더 붙인다.
@@ -173,8 +174,14 @@ class NewDateRangeSlot(BaseModel):
     end_date: str
 
 
+# 되묻는 질문이 가리키는 항목. 슬롯필링 슬롯 외에, 초안을 고치다가 새 장소의 이동 시간을 물을 때 location을 쓴다.
+QuestionSlot = Literal[
+    "title", "date", "frequency", "by_day", "start_time", "end_time", "importance", "date_range_id", "location"
+]
+
+
 class ClarifyingQuestion(BaseModel):
-    slot: SlotName
+    slot: QuestionSlot
     question: str
 
 
@@ -305,6 +312,134 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "- '진행 중인 요청'이 함께 주어지면 이전 턴의 삭제·수정 요청이다. 사용자의 답을 반영해 같은 intent로 "
     "target_*/new_* 를 다시 채운다(번호로 고르면 그 후보의 제목과 날짜를 적는다)."
 )
+
+
+DraftDecision = Literal["edit", "confirm", "cancel", "other_event_command", "unclear"]
+
+# 확인 대기 중인 초안을 고치는 말. 바뀐 항목만 채우고 나머지는 null(바꾸지 않음)이다.
+_DRAFT_EDIT_JSON_SCHEMA = {
+    "name": "draft_edit",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "decision": {"type": "string", "enum": ["edit", "confirm", "cancel", "other_event_command", "unclear"]},
+            "title": {"type": ["string", "null"]},
+            "event_type": {"type": ["string", "null"], "enum": ["scheduled", "deadline", None]},
+            "date": {"type": ["string", "null"], "description": "YYYY-MM-DD, 연도를 말하지 않았으면 MM-DD"},
+            "start_time": {"type": ["string", "null"], "description": "24시간제 HH:MM"},
+            "end_time": {"type": ["string", "null"], "description": "24시간제 HH:MM (마감이면 마감 시각)"},
+            "duration_minutes": {"type": ["integer", "null"]},
+            "importance": {"type": ["integer", "null"], "enum": [1, 2, 3, 4, 5, 6, None]},
+            "importance_none": {"type": "boolean", "description": "중요도를 '없음'으로 바꿀 때 true"},
+            "recurrence": {"type": ["string", "null"], "enum": ["set", "remove", None]},
+            "frequency": {"type": ["string", "null"], "enum": ["DAILY", "WEEKLY", "MONTHLY", "YEARLY", None]},
+            "by_day": {
+                "type": ["array", "null"],
+                "items": {"type": "string", "enum": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]},
+            },
+            "date_range_id": {"type": ["integer", "null"]},
+            "new_date_range": _EVENT_SLOT_JSON_SCHEMA["schema"]["properties"]["new_date_range"],
+            "location_name": {"type": ["string", "null"]},
+            "travel_minutes": {"type": ["integer", "null"]},
+            "unsupported": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": [
+            "decision", "title", "event_type", "date", "start_time", "end_time", "duration_minutes", "importance",
+            "importance_none", "recurrence", "frequency", "by_day", "date_range_id", "new_date_range",
+            "location_name", "travel_minutes", "unsupported",
+        ],
+        "additionalProperties": False,
+    },
+}
+
+
+class DraftEditResult(BaseModel):
+    """확인 대기 중인 초안에 대한 한 마디. 값이 null이면 그 항목은 바꾸지 않는다."""
+
+    decision: DraftDecision = "edit"
+    title: str | None = None
+    event_type: Literal["scheduled", "deadline"] | None = None
+    date: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
+    duration_minutes: int | None = None
+    importance: Importance | None = None
+    importance_none: bool = False
+    recurrence: Literal["set", "remove"] | None = None
+    frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None = None
+    by_day: list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None = None
+    date_range_id: int | None = None
+    new_date_range: NewDateRangeSlot | None = None
+    location_name: str | None = None
+    travel_minutes: int | None = None
+    unsupported: list[str] = Field(default_factory=list)
+
+
+_DRAFT_EDIT_INSTRUCTIONS = (
+    "너는 일정 관리 앱에서 사용자가 '이 내용으로 만들까요?' 확인 카드를 보고 있을 때 한 말을 해석한다. 사용자의 말은 "
+    "기본적으로 지금 보고 있는 초안을 고치는 말이다. JSON으로만 답한다.\n"
+    "- decision: 초안을 고치는 말이면 edit. '좋아', '응 만들어줘', '그대로 해'처럼 이대로 만들라는 말이면 confirm. "
+    "'취소', '안 만들래'면 cancel. '기존 물리 퀴즈를 지워줘'처럼 '등록된 일정 제목' 중 다른 일정을 분명히 가리켜 지우거나 "
+    "바꾸라는 말일 때만 other_event_command다. '바꿔줘', '빼줘'만으로는 다른 일정이 아니라 초안을 고치는 말이다. 무엇을 "
+    "바꿀지 알 수 없으면 unclear.\n"
+    "- 바뀐 항목만 채우고 나머지는 null(importance_none은 false, unsupported는 빈 배열)로 둔다. 초안 전체를 다시 쓰지 않는다.\n"
+    "- 시간: start_time/end_time은 24시간제 HH:MM. 오전/오후를 말하지 않으면 현재 초안 시각과 같은 오전/오후로 본다 "
+    "(현재 20:00인 초안에 '7시로'는 19:00). 시작만 바꾸면 end_time은 null로 둔다(길이는 앱이 유지한다). '2시간으로'처럼 "
+    "길이를 말하면 duration_minutes에 적는다. date는 YYYY-MM-DD, 연도를 말하지 않았으면 MM-DD.\n"
+    "- event_type: '마감으로'면 deadline(마감 시각은 end_time), '일반 일정으로'면 scheduled.\n"
+    "- importance: 1~5, 'MAX'는 6. '중요도 없음'이면 importance_none=true.\n"
+    "- 반복: '매주 수요일로 반복해줘'면 recurrence=set, frequency, by_day. '반복 빼줘'면 recurrence=remove. 반복 기간을 "
+    "함께 말하면 등록된 기간 후보의 id를 date_range_id에, 새 기간이면 new_date_range에 {name, start_date, end_date}를 적는다.\n"
+    "- 장소: '장소는 Bahen이야'면 location_name에 말한 이름을 그대로(등록된 장소 목록에 비슷한 이름이 있으면 그 이름을) 적는다. "
+    "이동 시간을 말하면 travel_minutes(분)에 적는다.\n"
+    "- 이 앱이 초안에서 바꿀 수 있는 것은 제목, 날짜, 시간, 종류(일반/마감), 중요도, 반복과 반복 기간, 장소뿐이다. 메모, 알림 "
+    "시각, 참석자, 색상처럼 그 밖의 것을 요청하면 그 항목 이름을 사용자 언어로 unsupported에 넣는다.\n"
+    "- '최근 대화'가 함께 주어지면 같은 대화에서 앱이 물은 것과 사용자가 답한 것이다. 이미 말한 내용은 다시 묻지 않고 반영한다."
+)
+
+
+def _build_locations_block(location_names: list[str]) -> str:
+    return f"등록된 장소: {json.dumps(location_names, ensure_ascii=False)}"
+
+
+def fill_draft_edit_for_user(
+    db: Session,
+    user_id: int,
+    utterance: str,
+    *,
+    draft: dict[str, object],
+    history: list["ConversationTurn"] | None = None,
+    reference_date: date | None = None,
+    http_client: httpx.Client | None = None,
+) -> DraftEditResult:
+    """확인 카드가 떠 있을 때 들어온 말을 '초안에서 바뀐 항목'으로 받는다. 합치기·검증은 호출부(백엔드)가 한다."""
+    user = db.get(User, user_id)
+    lines = [
+        f"오늘 날짜: {(reference_date or date.today()).isoformat()}",
+        f"현재 초안: {json.dumps(draft, ensure_ascii=False, default=str)}",
+    ]
+    if history:
+        lines.append("최근 대화:")
+        lines.extend(f"{_SPEAKERS[role]}: {text}" for role, text in history)
+    lines.append(f"사용자 발화: {utterance}")
+    payload = _build_payload(
+        "draft_edit",
+        [
+            _DRAFT_EDIT_INSTRUCTIONS,
+            _build_question_language_block(to_language(user.preferred_language if user else "ko")),
+            _build_date_ranges_block(get_date_range_options(db, user_id)),
+            _build_event_titles_block(get_event_titles(db, user_id)),
+            _build_locations_block(get_location_names(db, user_id)),
+        ],
+        "\n".join(lines),
+        response_format={"type": "json_schema", "json_schema": _DRAFT_EDIT_JSON_SCHEMA},
+    )
+    raw_content = _call_chat_completion(payload, http_client)
+    try:
+        return DraftEditResult.model_validate(json.loads(raw_content))
+    except Exception as exc:  # JSON 오류, pydantic ValidationError 등
+        raise LLMResponseParsingError(f"LLM 초안 수정 응답이 예상한 형식이 아닙니다: {raw_content!r}") from exc
 
 
 def _prompt_cache_key(task: PromptTask, cacheable_prefix: str) -> str:
@@ -723,6 +858,10 @@ def fill_event_slots_for_user(
         history=history,
         http_client=http_client,
     )
+
+
+def get_location_names(db: Session, user_id: int) -> list[str]:
+    return sorted(db.execute(select(Location.name).where(Location.user_id == user_id)).scalars())
 
 
 def get_event_titles(db: Session, user_id: int) -> list[str]:

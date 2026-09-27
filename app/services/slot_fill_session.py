@@ -46,6 +46,14 @@ class SlotFillSession:
     meridiem_asked: bool = False
     # 같은 대화의 최근 말(사용자·앱). 다음 LLM 호출에 넘겨 이미 답한 것을 다시 묻지 않게 한다.
     history: list[tuple[Literal["user", "assistant"], str]] = field(default_factory=list)
+    # 확인 카드에서 말로 고칠 수 있는 항목 (슬롯필링 슬롯이 아니라 초안 단계에서만 바뀐다)
+    event_type: Literal["scheduled", "deadline"] = "scheduled"
+    location_id: int | None = None
+    location_name: str | None = None
+    new_location: dict[str, Any] | None = None  # {name, default_travel_minutes(None이면 아직 모름)}
+    # 확인 카드가 떠 있는 초안: 그 확인 토큰과 초안(바뀐 항목 비교용). 새 초안을 보여주면 이전 토큰은 버린다.
+    pending_token: str | None = None
+    last_draft: dict[str, Any] | None = None
 
     def remember(self, role: Literal["user", "assistant"], text: str | None) -> None:
         if text:
@@ -53,7 +61,16 @@ class SlotFillSession:
 
     @property
     def is_complete(self) -> bool:
-        return not self.missing_slots and self.meridiem_hour is None
+        return not self.missing_slots and self.meridiem_hour is None and not self.awaiting_travel_minutes
+
+    @property
+    def awaiting_travel_minutes(self) -> bool:
+        return self.new_location is not None and self.new_location.get("default_travel_minutes") is None
+
+    @property
+    def draft_pending(self) -> bool:
+        """확인 카드가 떠 있는 상태 (완성된 초안을 보여줬고 아직 만들거나 취소하지 않았다)."""
+        return self.pending_token is not None and self.is_complete
 
     def known_slots(self) -> dict[str, object]:
         """missing_slots에 없는(=이미 확정된) 슬롯만 {슬롯명: 값}으로 반환한다.
@@ -171,6 +188,13 @@ def take_pending_action(token: str, user_id: int, *, needs_option: bool = False)
     if pending.expires_at <= datetime.now():
         raise ExpiredError("confirmation token expired — please make the request again")
     return pending
+
+
+def discard_pending_action(token: str | None) -> None:
+    if token is None:
+        return
+    with _lock:
+        _pending_actions.pop(token, None)
 
 
 def clear_all_pending_actions() -> None:

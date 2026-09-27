@@ -117,6 +117,17 @@ MessageKey = Literal[
     "change.range_name",
     "change.range_instances",
     "undo.range_in_use",
+    "draft.updated",
+    "draft.unchanged",
+    "draft.unsupported",
+    "draft.unclear",
+    "draft.cancelled",
+    "draft.end_before_start",
+    "draft.end_equals_start",
+    "draft.ask_start_time",
+    "draft.ask_travel_minutes",
+    "draft.new_location",
+    "draft.ask_frequency",
 ]
 
 

@@ -141,6 +141,16 @@ POST /events/commands/confirm {"user_id": 1, "token": "<command.confirmation_tok
   `message`로 알려 준다. 같은 이름의 기간이 이미 있으면 새로 만들지 않고 그것을 쓴다.
   `new_date_range`가 있는 초안은 `POST /events`가 아니라 `POST /events/commands/confirm`으로 확정해야 한다.
 - 같은 `session_id` 안에서는 앞서 답한 내용을 서버가 기억해 다시 묻지 않는다.
+- **확인 카드에서 말로 고치기**: 초안이 나온 뒤 같은 `session_id`로 보낸 말은 그 초안을 고치는 말로 처리된다
+  (기존 일정의 수정·삭제로 분류되지 않는다 — "기존 물리 퀴즈를 지워줘"처럼 다른 일정을 분명히 가리킬 때만 예외).
+  - 시간("7시로", 시작만 바꾸면 길이 유지 / "2시간으로"), 날짜, 종류(일반/마감), 중요도, 제목, 반복 추가·제거, 장소를 고칠 수 있다.
+    고치면 새 `draft`와 새 `confirmation_token`이 오고(이전 토큰은 무효), `draft_changes`에 바뀐 항목
+    (`title`, `event_type`, `date`, `time`, `importance`, `recurrence`, `location`)이 온다.
+  - 반복을 추가하면 반복 기간을, 등록되지 않은 장소면 이동 시간(`next_question.slot: "location"`)을 이어서 묻는다.
+    끝나는 시각이 시작보다 빠르거나 같으면 끝나는 시각을 되묻는다. 새 장소는 새 반복 기간처럼 확정할 때 함께 등록된다.
+  - "좋아", "응 만들어줘"는 [만들기]와 같고(`command.status: "executed"`, `action_id`), "취소", "안 만들래"는
+    [취소]와 같다(`command.status: "cancelled"`).
+  - 메모·알림 시각처럼 지원하지 않는 항목은 "지금은 ○○은(는) 설정할 수 없어요"라고 알려 주고 초안은 그대로 둔다.
 - LLM을 호출하므로 응답이 수 초 걸릴 수 있다. 로딩 표시와 `500`/`502` 처리를 넣는다.
 
 ### 3.2.1 자연어로 일정 삭제·수정
@@ -271,11 +281,12 @@ GET /points/summary
 `EventCreate`: `user_id`, `title`, `event_type`(기본 `scheduled`), `start_time`(`deadline`이면 `null`), `end_time`,
 `importance?`, `is_recurring?`, `recurrence_rule?`, `date_range_id?`, `parent_event_id?`, `child_kind?`, `location_id?`
 
-`EventParseResponse`: `session_id`, `intent`, `is_complete`, `draft?`, `next_question?`, `missing_slots`, `message?`, `command?`
+`EventParseResponse`: `session_id`, `intent`, `is_complete`, `draft?`, `draft_changes[]`, `next_question?`, `missing_slots`, `message?`, `command?`
 
 `CommandResult`(`command`): `action`, `status`, `target_kind`, `scope?`, `affected[]`, `affected_count`, `candidates[]`, `confirmation_token?`, `expires_at?`, `options[]`, `action_id?`
 
-`EventDraft`(`draft`): `EventCreate`와 같은 필드 + `new_date_range?`(`{name, start_date, end_date, auto_named}`)
+`EventDraft`(`draft`): `EventCreate`와 같은 필드(`event_type`, `start_time?`, `location_id?` 포함) + `location_name?`(표시용),
+`new_date_range?`(`{name, start_date, end_date, auto_named}`), `new_location?`(`{name, default_travel_minutes}`)
 
 > `scheduled` → `deadline`으로 바꿀 때는 `{"event_type": "deadline", "start_time": null}`을 함께 보낸다(하나만 보내면 422).
 

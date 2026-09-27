@@ -50,5 +50,16 @@
   "change.range_dates": "기간 {before}→{after}",
   "change.range_name": "이름 {before}→{after}",
   "change.range_instances": "회차 {added}개 추가·{cancelled}개 취소",
-  "undo.range_in_use": "이 기간을 쓰는 일정이 있어 되돌릴 수 없어요."
+  "undo.range_in_use": "이 기간을 쓰는 일정이 있어 되돌릴 수 없어요.",
+  "draft.updated": "초안을 고쳤어요. 이 내용으로 만들까요?",
+  "draft.unchanged": "초안은 그대로예요. 이 내용으로 만들까요?",
+  "draft.unsupported": "지금은 {items}은(는) 설정할 수 없어요.",
+  "draft.unclear": "초안에서 무엇을 바꿀지 알려 주세요. 예: '7시로 바꿔줘', '중요도 5로'. 이대로 만들려면 '좋아'라고 해 주세요.",
+  "draft.cancelled": "취소했어요. 아무것도 만들지 않았어요.",
+  "draft.end_before_start": "끝나는 시각이 시작({start})보다 빨라요. 몇 시에 끝나나요?",
+  "draft.end_equals_start": "끝나는 시각이 시작({start})과 같아요. 몇 시에 끝나나요?",
+  "draft.ask_start_time": "몇 시에 시작하나요?",
+  "draft.ask_travel_minutes": "'{name}'은(는) 처음 보는 장소예요. 이동 시간이 몇 분인가요?",
+  "draft.new_location": "장소 '{name}'(이동 {minutes}분)도 새로 등록해요.",
+  "draft.ask_frequency": "얼마나 자주 반복할까요? 예: 매주 수요일"
 }

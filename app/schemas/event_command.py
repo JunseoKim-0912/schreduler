@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from app.schemas.common import NonEmptyStr
 
 CommandAction = Literal["create", "delete", "update"]
-CommandStatus = Literal["executed", "needs_confirmation", "needs_clarification", "not_found"]
+CommandStatus = Literal["executed", "needs_confirmation", "needs_clarification", "not_found", "cancelled"]
 TargetKind = Literal["event", "date_range"]
 # 사용 중인 반복 기간을 지울 때 고르는 처리: 기간만(일정은 이미 만들어진 마지막 회차에서 끝남) / 일정도 함께
 RangeDeleteOption = Literal["range_only", "with_events"]
