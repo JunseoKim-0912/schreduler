@@ -1,0 +1,2214 @@
+{
+ "model": "gpt-5-nano",
+ "effort_requested": "low",
+ "effort_sent": "low",
+ "run_at": "2026-09-27T18:55:28",
+ "wall_seconds": 57.4,
+ "prices": {
+  "input": 0.05,
+  "cached": 0.005,
+  "output": 0.4,
+  "source": "https://developers.openai.com/api/docs/models/gpt-5-nano",
+  "checked": "2026-09-27"
+ },
+ "summary": {
+  "cases": 30,
+  "passed": 21,
+  "pass_rate": 0.7,
+  "categories": {
+   "격주": {
+    "passed": 2,
+    "total": 2,
+    "rate": 1.0
+   },
+   "기간": {
+    "passed": 1,
+    "total": 3,
+    "rate": 0.3333333333333333
+   },
+   "기타": {
+    "passed": 4,
+    "total": 5,
+    "rate": 0.8
+   },
+   "다국어": {
+    "passed": 2,
+    "total": 3,
+    "rate": 0.6666666666666666
+   },
+   "마감": {
+    "passed": 1,
+    "total": 2,
+    "rate": 0.5
+   },
+   "삭제": {
+    "passed": 0,
+    "total": 3,
+    "rate": 0.0
+   },
+   "수정": {
+    "passed": 1,
+    "total": 3,
+    "rate": 0.3333333333333333
+   },
+   "오전오후": {
+    "passed": 5,
+    "total": 5,
+    "rate": 1.0
+   },
+   "장소": {
+    "passed": 2,
+    "total": 2,
+    "rate": 1.0
+   },
+   "확인안전": {
+    "passed": 3,
+    "total": 4,
+    "rate": 0.75
+   }
+  },
+  "meets_criteria": false,
+  "turns": 37,
+  "avg_llm_calls": 2.2162162162162162,
+  "avg_input_tokens": 8763.108108108108,
+  "avg_cached_tokens": 7143.783783783784,
+  "avg_output_tokens": 778.918918918919,
+  "avg_reasoning_tokens": 480.86486486486484,
+  "avg_latency_ms": 5374.621621621622,
+  "avg_cost_usd": 0.0004282527027027027
+ },
+ "results": [
+  {
+   "id": "biweekly_lab_from_0922",
+   "tags": [
+    "격주"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "ECE360 Lab 매주 화요일 9-12시 Lecture period 동안 9/22일부터 2주마다 중요도 4",
+     "reply": "다음으로 제안합니다. 이 초안은 아직 저장되지 않았고 확인이 필요합니다.\n\n- 무엇: ECE360 Lab\n- 언제: 매주 화요일 09:00–12:00, 시작일 2026-09-22, 간격 2주\n- 장소: Bahen Centre (예상 이동 10분)\n- 기간/범위: Lecture Period (2026-09-03 ~ 2026-12-08)\n- 중요도: 4\n- 추정값: 시작/종료 시각, 반복 규칙, 위치 정보 포함\n- 경고: 없음\n\n다음의 초안을 사용하려면 이 토큰으로 승인해 주세요: d1\n\n좋아요, 이렇게 진행할까요?",
+     "proposal": {
+      "token": "O3cBd7M8lMg8jErIDYqlLQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "ECE360 Lab",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T09:00:00",
+        "end_time": "2026-10-06T12:00:00",
+        "time_display": "오전 9:00 – 오후 12:00 (3시간)",
+        "importance": 4,
+        "recurring": true,
+        "recurrence_start": "2026-09-22",
+        "recurrence_rule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [
+         "2026-10-06",
+         "2026-10-20",
+         "2026-11-03"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "start_time",
+         "end_time",
+         "recurrence",
+         "date_range",
+         "location",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7521,
+     "cached_tokens": 6784,
+     "output_tokens": 937,
+     "reasoning_tokens": 576,
+     "latency_ms": 5789,
+     "cost_usd": 0.00044557000000000006,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "biweekly_without_start_thursday_range",
+   "tags": [
+    "격주"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "ECE297 튜토리얼 격주 화요일 오후 2-4시, Lecture Period 동안",
+     "reply": "다음과 같이 초안으로 제안했습니다. 확인해 주세요.\n\n- 제목: ECE297 Tutorial\n- 일정: 격주 화요일 오후 2:00–4:00 (2시간), Lecture Period 동안\n- 위치: Bahen Centre (이동 10분)\n- 시작/반복: 첫 회차 2026-10-06 화요일부터 시작, 2주 간격으로 반복\n- 참고: 종료 시각 16:00으로 추정, 장소 이동 시간 포함\n- 예상 차수: 2026-10-06, 2026-10-20, 2026-11-03 등\n\n원하시는 대로 수정하거나 이대로 저장해도 괜찮은가요? 승인하려면 “좋아”라고 말씀해 주세요. 필요하면 날짜나 시간, 위치를 조정해 드립니다. 초안 토큰: d1",
+     "proposal": {
+      "token": "GrIDKnqlVNbeU5GvhC0wFQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "ECE297 Tutorial",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T14:00:00",
+        "end_time": "2026-10-06T16:00:00",
+        "time_display": "오후 2:00 – 오후 4:00 (2시간)",
+        "importance": null,
+        "recurring": true,
+        "recurrence_start": "2026-09-08",
+        "recurrence_rule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [
+         "2026-10-06",
+         "2026-10-20",
+         "2026-11-03"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "recurrence",
+         "date_range",
+         "location"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7532,
+     "cached_tokens": 3712,
+     "output_tokens": 945,
+     "reasoning_tokens": 576,
+     "latency_ms": 5647,
+     "cost_usd": 0.00058756,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "study_11_to_1",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 2일 11:00-1:00 스터디 추가해줘",
+     "reply": "다음 초안을 제안했어요.\n\n- 무엇: 스터디\n- 언제: 2026-10-02 11:00–13:00 (2시간)\n- 장소: Bahen Centre (이동 10분)\n- 추정된 값: 시작/종료 시간, 장소 반영\n- 주의: 현재 저장되지 않음. 승인은 필요합니다.\n\n확인해서 저장할까요? 이 초안을 승인하려면 아래 토큰으로 답해 주세요.\n토큰: d1",
+     "proposal": {
+      "token": "gRykyVUSX-FUcX8Cjqt_7g",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-02",
+        "start_time": "2026-10-02T11:00:00",
+        "end_time": "2026-10-02T13:00:00",
+        "time_display": "오전 11:00 – 오후 1:00 (2시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "start_time",
+         "end_time",
+         "location"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7384,
+     "cached_tokens": 3200,
+     "output_tokens": 866,
+     "reasoning_tokens": 576,
+     "latency_ms": 5577,
+     "cost_usd": 0.0005716,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "utkesa_meeting_one_hour",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 1일 8시에 \"UTKESA 썸포차 이벤트 미팅\" 1시간동안 추가해줘",
+     "reply": "다음으로 제안드려요.\n\n- 제목: UTKESA 썸포차 이벤트 미팅\n- 일시: 2026-10-01 08:00~09:00 (1시간)\n- 장소: Bahen Centre (이동 10분)\n- 비고/추정치: end_time 09:00으로 추정, 위치 이동 시간 10분 포함\n\n진행하시겠어요? 이 초안을 확정하려면 토큰을 보내 주세요: token d1으로 확인해 드립니다. (다른 수정이 필요하면 바로 알려 주세요.)",
+     "proposal": {
+      "token": "Ne7lFwcFLlocgg96yD0zbA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "UTKESA 썸포차 이벤트 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-01",
+        "start_time": "2026-10-01T08:00:00",
+        "end_time": "2026-10-01T09:00:00",
+        "time_display": "오전 8:00 – 오전 9:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7249,
+     "cached_tokens": 6656,
+     "output_tokens": 593,
+     "reasoning_tokens": 320,
+     "latency_ms": 4111,
+     "cost_usd": 0.00030013,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "sleep_overnight",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "밤 11시부터 새벽 7시까지 수면",
+     "reply": "다음으로 제안합니다.\n\n- 무엇: Sleep(수면)\n- 언제: 매일 밤 23:00부터 다음 날 07:00까지 (자정 경과)\n- 추정치/경고: 자정을 넘겨 8시간 수면으로 설정. 다다음 주 경고: 자정 넘김\n\n참고: 이 초안은 2026-09-01 ~ 2026-12-20의 \"2026-2학기\" 기간 동안 반복됩니다. 초안_id: d1\n\n괜찮으면 승인해 주세요. 필요하면 시간이나 기간을 수정해 다시 제안하겠습니다.",
+     "proposal": {
+      "token": "zXQAD_uc8YV20DP31U9pgg",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "Sleep",
+        "event_type": "scheduled",
+        "date": "2026-09-27",
+        "start_time": "2026-09-27T23:00:00",
+        "end_time": "2026-09-28T07:00:00",
+        "time_display": "오후 11:00 – 오전 7:00 (다음 날) (8시간)",
+        "importance": null,
+        "recurring": true,
+        "recurrence_start": "2026-09-01",
+        "recurrence_rule": "FREQ=DAILY",
+        "date_range": {
+         "id": 1,
+         "name": "2026-2학기",
+         "start_date": "2026-09-01",
+         "end_date": "2026-12-20",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-09-27",
+         "2026-09-28",
+         "2026-09-29"
+        ],
+        "warnings": [
+         {
+          "code": "crosses_midnight",
+          "message": "자정을 넘겨 다음 날 끝나요"
+         }
+        ],
+        "inferred_fields": [
+         "start_time",
+         "end_time",
+         "recurrence",
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": [
+       {
+        "draft_id": "d1",
+        "code": "crosses_midnight",
+        "message": "자정을 넘겨 다음 날 끝나요"
+       }
+      ]
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event",
+      "propose_create_event"
+     ],
+     "tool_errors": [
+      "propose_create_event:date_range_required"
+     ],
+     "llm_calls": 3,
+     "input_tokens": 12053,
+     "cached_tokens": 10112,
+     "output_tokens": 1188,
+     "reasoning_tokens": 704,
+     "latency_ms": 8315,
+     "cost_usd": 0.00062281,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "lunch_11_1",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 3일 11-1 점심 약속",
+     "reply": "다음 초안으로 제안할까요?\n- 제목: 점심 약속\n- 날짜/시간: 2026-10-03, 11:00–13:00 (오전 11:00 – 오후 1:00, 2시간)\n- 위치: 아직 지정 없음\n- 추정/참고: end_time, date가 추론됨\n\n확인하려면 아래 토큰으로 승인해 주세요: d1\n\n참고: 이 초안은 아직 저장되지 않았고, 사용자가 승인해야 실제로 저장됩니다. 필요 시 장소도 함께 정할 수 있어요.",
+     "proposal": {
+      "token": "VTVAEQ2DfpnPbO_jdHe44A",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "점심 약속",
+        "event_type": "scheduled",
+        "date": "2026-10-03",
+        "start_time": "2026-10-03T11:00:00",
+        "end_time": "2026-10-03T13:00:00",
+        "time_display": "오전 11:00 – 오후 1:00 (2시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "date"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7329,
+     "cached_tokens": 6784,
+     "output_tokens": 712,
+     "reasoning_tokens": 384,
+     "latency_ms": 4925,
+     "cost_usd": 0.00034597,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "library_930_to_12_tomorrow",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "내일 9시 반부터 12시까지 도서관에서 공부",
+     "reply": "다음 초안 제안드립니다:\n\n- 무엇: 도서관에서 공부\n- 언제: 2026-09-28, 09:30–12:00\n- 장소: 도서관 (이동 15분 추정)\n- 비고: 2시간 30분 공부 예정\n\n확정하시려면 “좋아”, “네”, “승인해줘” 등으로 말씀해 주세요. 수정이 필요하면 바로 수정 제안으로 다시 드립니다.",
+     "proposal": {
+      "token": "YlrlTNF37j3U3IK64D3IbA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "도서관에서 공부",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T09:30:00",
+        "end_time": "2026-09-28T12:00:00",
+        "time_display": "오전 9:30 – 오후 12:00 (2시간 30분)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": null,
+         "name": "도서관",
+         "travel_minutes": 15,
+         "is_new": true
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "date",
+         "start_time",
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7243,
+     "cached_tokens": 6656,
+     "output_tokens": 545,
+     "reasoning_tokens": 320,
+     "latency_ms": 3696,
+     "cost_usd": 0.00028063,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "mat389_deadline_2330",
+   "tags": [
+    "마감"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "9/29 화요일 11:30 pm에 MAT389 과제 제출날이야",
+     "reply": "다음 초안을 제안했어요.\n\n- 무엇: MAT389 과제 제출 마감\n- 언제: 2026-09-29, 마감 23:30\n- 경고/참고: 시작 시각 없음(마감 시간만 설정), 반복 없음\n\n이대로 만들까요? 이 초안을 확정하려면 아래 토큰으로 승인해 주세요.\n토큰: d1\n\n다르게 수정하고 싶으면 구체적으로 알려주시면 새 초안을 다시 제안드려요.",
+     "proposal": {
+      "token": "t2mycJ9kIFWNBoVClc-4Iw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "MAT389 과제 제출",
+        "event_type": "deadline",
+        "date": "2026-09-29",
+        "start_time": null,
+        "end_time": "2026-09-29T23:30:00",
+        "time_display": "오후 11:30 마감",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "date",
+         "date_range",
+         "location"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7338,
+     "cached_tokens": 6912,
+     "output_tokens": 773,
+     "reasoning_tokens": 512,
+     "latency_ms": 4945,
+     "cost_usd": 0.00036506000000000006,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "friday_lab_report_deadline",
+   "tags": [
+    "마감"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 1: no card matches create_event: date=2026-10-04≠2026-10-02"
+   ],
+   "turns": [
+    {
+     "say": "금요일까지 ECE360 랩 리포트 제출해야 해",
+     "reply": "다음 초안을 제안드려요:\n\n- 무엇: ECE360 Lab Report Due(마감)\n- 언제: 2026-10-04 (금요일) 23:59까지\n- 중요도: 4\n- 장소: 없음\n- 비고: 마감 시간으로 설정됨\n\n이대로 만들까요? 확인해 주시면 승인 토큰(d1)으로 진행하겠습니다. (원한다면 시간대나 제목을 더 다듬어 드려요.)",
+     "proposal": {
+      "token": "O0na_Y_2cOJkhBtEi6IjCQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "ECE360 Lab Report Due",
+        "event_type": "deadline",
+        "date": "2026-10-04",
+        "start_time": null,
+        "end_time": "2026-10-04T23:59:00",
+        "time_display": "오후 11:59 마감",
+        "importance": 4,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "date",
+         "end_time",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7386,
+     "cached_tokens": 6400,
+     "output_tokens": 813,
+     "reasoning_tokens": 512,
+     "latency_ms": 5870,
+     "cost_usd": 0.00040650000000000007,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "no card matches create_event: date=2026-10-04≠2026-10-02"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "dentist_next_tuesday_from_sunday",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "다음 주 화요일 3시 치과",
+     "reply": "다음과 같이 초안을 제안합니다. 확인 후 저장합니다.\n\n- 무엇: 치과 약속\n- 언제: 2026-09-29 오후 3:00–4:00 (1시간)\n- 위치: Dentist Clinic (새로운 장소, 이동 시간 추정 15분)\n- 추가 정보: 중요도 3, 반복 없음\n\n다음 단계로 저장하려면 \"저장해줘\"처럼 확인해 주세요. 원하시면 시간이나 장소를 조정한 새로운 초안을 다시 제안해드립니다.",
+     "proposal": {
+      "token": "dW70z6F9DdXIGIHI0CZvdg",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "치과 약속",
+        "event_type": "scheduled",
+        "date": "2026-09-29",
+        "start_time": "2026-09-29T15:00:00",
+        "end_time": "2026-09-29T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": 3,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": null,
+         "name": "Dentist Clinic",
+         "travel_minutes": 15,
+         "is_new": true
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "date",
+         "start_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7419,
+     "cached_tokens": 3200,
+     "output_tokens": 867,
+     "reasoning_tokens": 576,
+     "latency_ms": 5461,
+     "cost_usd": 0.00057375,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "dentist_next_tuesday_from_wednesday",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "다음 주 화요일 3시 치과",
+     "reply": "다음 주 화요일 오후 3시에 치과 약속 초안을 제안했어요.\n\n- 내용: 치과 약속\n- 날짜/시간: 2026-10-06, 15:00–16:00 (1시간)\n- 장소: 치과 (추정 이동 시간 20분)\n- 비고: end_time은 추정으로 16:00으로 넣었습니다.\n\n확인해 주시면 이 초안을 확정하고 저장합니다. 수정이 필요하면 어떻게 변경할지 알려 주세요. 승인하려면 \"좋아\"라고 답해주세요. 승인 토큰: d1",
+     "proposal": {
+      "token": "Af7Qto98txnEWmfJ1BTmUQ",
+      "expires_at": "2026-09-30 10:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "치과",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T15:00:00",
+        "end_time": "2026-10-06T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": null,
+         "name": "치과",
+         "travel_minutes": 20,
+         "is_new": true
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7356,
+     "cached_tokens": 5888,
+     "output_tokens": 791,
+     "reasoning_tokens": 448,
+     "latency_ms": 5222,
+     "cost_usd": 0.00041924000000000003,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "one_off_no_repeat",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 10일 토요일 오후 2시 동아리 모임, 반복 없이 한 번만",
+     "reply": "이대로 만들까요?\n\n- 무엇: 동아리 모임\n- 언제: 2026-10-10, 14:00–15:00\n- 추정 값: end_time 15:00 (1시간 예상)\n- 경고: 없음\n- 장소: Bahen Centre (이동 10분)\n\n현재 초안이 준비되었어요. 승인하거나 수정할 부분이 있으면 알려주세요.",
+     "proposal": {
+      "token": "Eo-Rdk9pTQIQtFLIdDdJ1Q",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "동아리 모임",
+        "event_type": "scheduled",
+        "date": "2026-10-10",
+        "start_time": "2026-10-10T14:00:00",
+        "end_time": "2026-10-10T15:00:00",
+        "time_display": "오후 2:00 – 오후 3:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7311,
+     "cached_tokens": 6400,
+     "output_tokens": 702,
+     "reasoning_tokens": 448,
+     "latency_ms": 4600,
+     "cost_usd": 0.00035835,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "lecture_end_date_new_range",
+   "tags": [
+    "기간"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 2: no card matches create_event: date_range.end=2026-12-20≠2026-12-08"
+   ],
+   "turns": [
+    {
+     "say": "매주 월수 오전 10시 물리 강의 추가해줘",
+     "reply": "다음 초안으로 제안됐습니다. 승인하면 바로 저장하지 않고 확정 대기 상태가 됩니다.\n\n- 무엇: 물리 강의\n- 언제: 매주 월요일과 수요일 오전 10:00–11:00, 첫 시작일 2026-09-28\n- 장소: Bahen Centre(이동 10분)\n- 반복: 2026-2학기 기간 내 주간 반복\n- 추정 값: 시작 시간 10:00으로 추정, 종료 시간은 11:00으로 자동 설정\n- 경고/주의: 현재 경고 없음\n\n다음 중 하나로 답해 주세요.\n- 이렇게 만들까요? (확정하려면 “네”라고 답변)\n- 수정이 필요하면 어떤 부분을 바꿀지 말해 주세요. (예: 시작 시간, 종료 시간, 요일, 위치 등)\n\n참고: 이 초안의 draft_id는 d1입니다. 승인 시 이 초안이 저장됩니다.",
+     "proposal": {
+      "token": "6GPfX-QS_8hfUVjrKLEvRw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "물리 강의",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T10:00:00",
+        "end_time": "2026-09-28T11:00:00",
+        "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+        "importance": null,
+        "recurring": true,
+        "recurrence_start": "2026-09-28",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO,WE",
+        "date_range": {
+         "id": 1,
+         "name": "2026-2학기",
+         "start_date": "2026-09-01",
+         "end_date": "2026-12-20",
+         "is_new": false
+        },
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [
+         "2026-09-28",
+         "2026-09-30",
+         "2026-10-05"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "start_time",
+         "recurrence",
+         "location",
+         "date_range",
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event",
+      "propose_create_event"
+     ],
+     "tool_errors": [
+      "propose_create_event:date_range_required"
+     ],
+     "llm_calls": 3,
+     "input_tokens": 11971,
+     "cached_tokens": 9344,
+     "output_tokens": 1245,
+     "reasoning_tokens": 640,
+     "latency_ms": 7727,
+     "cost_usd": 0.00067607,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "Lecture End Date는 12월 8일이니깐 2학기 시작부터 그때까지로 등록해줘",
+     "reply": "다음처럼 바꿔 달라는 요청으로 반영하려 했지만 초안 저장은 아직 완료되지 않았습니다.\n\n- 변경 내용: 2026-2학기 강의의 종료일을 2026-12-08로 설정\n- 반영 현황: 초안(d1)에서 종료일 끝값이 2026-12-20으로 남아 있어 아직 백엔드에 저장되지 않은 상태입니다.\n- 현재 초안 요약:\n  - 무엇: 물리 강의\n  - 언제: 매주 월요일/수요일 10:00–11:00, 첫 시작 2026-09-28\n  - 장소: Bahen Centre\n  - 반복: 2026-2학기\n  - 종료일 제안: 2026-12-08 (현재 반영 중이지만 저장되지 않음)\n\n승인하시면 이 초안을 저장하고 반영하겠습니다. 수정 없이 그대로 확정하려면 “네, 저장해줘”라고 답해 주세요. 수정이 필요하면 어떤 부분을 어떻게 바꿀지 알려 주세요.",
+     "proposal": {
+      "token": "Sq2pO7E-0hXuLe-NN7EmPw",
+      "expires_at": "2026-09-27 14:31:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "물리 강의",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T10:00:00",
+        "end_time": "2026-09-28T11:00:00",
+        "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+        "importance": null,
+        "recurring": true,
+        "recurrence_start": "2026-09-28",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO,WE",
+        "date_range": {
+         "id": 1,
+         "name": "2026-2학기",
+         "start_date": "2026-09-01",
+         "end_date": "2026-12-20",
+         "is_new": false
+        },
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [
+         "2026-09-28",
+         "2026-09-30",
+         "2026-10-05"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event",
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 17167,
+     "cached_tokens": 14336,
+     "output_tokens": 1618,
+     "reasoning_tokens": 1024,
+     "latency_ms": 10153,
+     "cost_usd": 0.00086043,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "no card matches create_event: date_range.end=2026-12-20≠2026-12-08"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "weekly_lecture_inferred_range",
+   "tags": [
+    "기간"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 1: no card matches create_event: importance=None≠3"
+   ],
+   "turns": [
+    {
+     "say": "매주 월수 오전 10시 MAT389 강의 추가해줘",
+     "reply": "다음 초안으로 제안합니다. 확인해 주세요.\n\n- 사건: MAT389 강의\n- 일정: 매주 월요일 및 수요일 오전 10:00–11:00 (추정, 끝 시간 11:00으로 설정)\n- 반복: 주간, Lecture Period에 속하는 반복 기간 사용\n- 위치: Bahen Centre (이동 10분 추정)\n- 초안 ID: d1\n\n확인해서 승인할까요? 승인 시에만 저장됩니다. 필요 시 시간이나 장소를 조정해 드릴게요.",
+     "proposal": {
+      "token": "DttFGIn8mKQgAmKnK7eDwg",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "MAT389 강의",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T10:00:00",
+        "end_time": "2026-09-28T11:00:00",
+        "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+        "importance": null,
+        "recurring": true,
+        "recurrence_start": "2026-09-07",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO,WE",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [
+         "2026-09-28",
+         "2026-09-30",
+         "2026-10-05"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "start_time",
+         "recurrence",
+         "date_range",
+         "location",
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7580,
+     "cached_tokens": 6400,
+     "output_tokens": 890,
+     "reasoning_tokens": 576,
+     "latency_ms": 5908,
+     "cost_usd": 0.000447,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "no card matches create_event: importance=None≠3"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "range_end_update",
+   "tags": [
+    "기간"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "Lecture Period 종료일을 12월 11일로 바꿔줘",
+     "reply": "다음으로 초안 제안합니다:\n- 대상: Lecture Period의 종료일을 2026-12-11로 변경\n- 변경 전/후: end_date 2026-12-08 → 2026-12-11\n- 반복 범위: range_only로 유지(기존 일정에 영향은 이 기간에만 적용)\n\n확인해 승인해주시면 반영하겠습니다. 수정이 필요하면 같이 알려주세요.",
+     "proposal": {
+      "token": "w76pk9zpqNi50C9Y8l57PQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "update_range",
+        "action": "update",
+        "range_id": 2,
+        "name": "Lecture Period",
+        "events_using": 1,
+        "new_name": null,
+        "before": {
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08"
+        },
+        "start_date": "2026-09-03",
+        "end_date": "2026-12-11",
+        "warnings": [],
+        "inferred_fields": [
+         "end_date"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_date_range"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 11154,
+     "cached_tokens": 10496,
+     "output_tokens": 738,
+     "reasoning_tokens": 512,
+     "latency_ms": 5486,
+     "cost_usd": 0.00038058,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "location_monday_lecture",
+   "tags": [
+    "장소"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "월요일의 ECE360 Lecture에 장소 넣어줘 \"Galbraith 304\"",
+     "reply": "다음과 같이 초안을 제안할게요.\n\n- 일정: ECE360 Lecture (월요일, Lecture Period 중 반복)\n- 변경 내용: 장소를 Galbraith 304로 설정\n- 추정 및 반영: travel_minutes = 15분으로 추정(새 장소이므로 inferred_fields에 반영)\n\n초안_id: d1\n\n승인해 주시면 이 초안을 저장하고 적용하겠습니다. 수정할 부분이 있으면 함께 알려주세요.",
+     "proposal": {
+      "token": "1iws24uVJIMFHLfdgtGTmA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "update_event",
+        "scope": "series",
+        "targets": [
+         {
+          "event_id": 1,
+          "instance_id": null,
+          "title": "ECE360 Lecture",
+          "date": "2026-09-07",
+          "recurring": true,
+          "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+          "location": null
+         }
+        ],
+        "changes": {
+         "title": null,
+         "date": null,
+         "start_time": null,
+         "end_time": null,
+         "importance": null,
+         "location": {
+          "action": "set",
+          "id": null,
+          "name": "Galbraith 304",
+          "travel_minutes": 15,
+          "is_new": true
+         }
+        },
+        "warnings": [],
+        "inferred_fields": [
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_update_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 11077,
+     "cached_tokens": 9728,
+     "output_tokens": 728,
+     "reasoning_tokens": 384,
+     "latency_ms": 5388,
+     "cost_usd": 0.00040729,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "existing_location_study",
+   "tags": [
+    "장소"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 6일 오후 3시 스터디 Bahen Centre에서",
+     "reply": "다음 초안을 제안했어요.\n\n- 무엇: 스터디\n- 언제: 2026-10-06, 오후 3:00 – 오후 4:00 (1시간)\n- 장소: Bahen Centre\n- 예상 경로 시간: 이동 10분\n- 비고: end_time 자동 채움으로 16:00으로 추정되어 포함됐습니다.\n\n확인해 주시겠어요? 승인하려면 “좋아”라고 말씀해 주세요(토큰: d1). 변경이 필요하면 구체적으로 알려 주세요.",
+     "proposal": {
+      "token": "aCTiaKXg1MOLBYEX6O8dKQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T15:00:00",
+        "end_time": "2026-10-06T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7297,
+     "cached_tokens": 6784,
+     "output_tokens": 771,
+     "reasoning_tokens": 512,
+     "latency_ms": 5145,
+     "cost_usd": 0.00036797,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "delete_physics_quiz",
+   "tags": [
+    "삭제"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 1: expected a proposal, got none"
+   ],
+   "turns": [
+    {
+     "say": "물리 퀴즈 없애줘",
+     "reply": "다음으로 삭제 제안드려요. 현재 “물리 퀴즈”는 매주 토요일 17:00–18:00로 반복되는 시나리오로 보이네요.\n\n제안 옵션\n- 시리즈 전체 삭제: 2026-10-03부터 2026-11-21까지의 모든 물리 퀴즈를 한꺼번에 지웁니다.\n- 특정 회차만 삭제: 2026-10-03, 2026-10-10, ... 각 회차별로 선택적으로 삭제합니다.\n\n선택해 주세요:\n1) 시리즈 전체 삭제로 진행할까요?\n2) 특정 회차만 지울까요? 원하시는 날짜를 알려주시면 목록에서 해당 회차를 추려 드려요.\n\n참고: 반복 일정은 장소가 없고, 시리즈 전체 삭제 시 이후 해당 시간대의 같은 요일/시간대의 미래 반복도 자동으로 남지 않습니다. 삭제는 아직 확정이 아니며, 확인해주셔야 실행됩니다.",
+     "proposal": null,
+     "executed": [],
+     "tools": [
+      "search_events"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7602,
+     "cached_tokens": 6656,
+     "output_tokens": 602,
+     "reasoning_tokens": 320,
+     "latency_ms": 4107,
+     "cost_usd": 0.00032138,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "expected a proposal, got none"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "delete_all_followup",
+   "tags": [
+    "삭제"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 2: DB changed before confirmation: ['events', 'event_instances']",
+    "turn 2: expected a proposal, got none"
+   ],
+   "turns": [
+    {
+     "say": "물리 퀴즈 없애줘",
+     "reply": "다음과 같이 초안을 제안했어요.\n\n- 무엇을: 물리 퀴즈(반복 일정) 삭제\n- 범위: 시리즈 전체(매주 토요일 17:00–18:00, 1시간)\n- 현재 상태: 백엔드에 초안 저장됨(실행은 아직 아님)\n\n승인해 주시겠어요? 승인하려면 \"네\", \"좋아\", \"yes\" 같은 말을 보내고, 필요하면 수정도 같이 말씀해 주세요.",
+     "proposal": {
+      "token": "o2mU5R9FgrkgIpfkBMueSg",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "delete_event",
+        "scope": "series",
+        "targets": [
+         {
+          "event_id": 2,
+          "instance_id": null,
+          "title": "물리 퀴즈",
+          "date": "2026-09-05",
+          "recurring": true,
+          "time_display": "오후 5:00 – 오후 6:00 (1시간)",
+          "location": null
+         }
+        ],
+        "warnings": [],
+        "inferred_fields": []
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_delete_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 10942,
+     "cached_tokens": 10240,
+     "output_tokens": 625,
+     "reasoning_tokens": 320,
+     "latency_ms": 4740,
+     "cost_usd": 0.0003363,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "전부 다 없애줘",
+     "reply": "완료했습니다. 물리 퀴즈(시리즈) 일정이 전부 삭제되었습니다. 필요하면 다른 일정도 도와드릴게요.",
+     "proposal": null,
+     "executed": [
+      {
+       "action_id": 1,
+       "summary": "'물리 퀴즈' 일정 삭제"
+      }
+     ],
+     "tools": [
+      "confirm_pending"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 8189,
+     "cached_tokens": 7040,
+     "output_tokens": 233,
+     "reasoning_tokens": 128,
+     "latency_ms": 2401,
+     "cost_usd": 0.00018585000000000002,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "DB changed before confirmation: ['events', 'event_instances']",
+      "expected a proposal, got none"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "quiz_today_5_to_6",
+   "tags": [
+    "수정"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 1: expected a proposal, got none"
+   ],
+   "turns": [
+    {
+     "say": "오늘 물리 퀴즈 5시에서 6시 시작으로 바꿔줘",
+     "reply": "이미 오늘 물리 퀴즈가 17:00~18:00로 설정되어 있습니다. 필요하신 다른 수정이 있나요? (예: 장소 추가, 알림 시간)",
+     "proposal": null,
+     "executed": [],
+     "tools": [
+      "search_events"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 6933,
+     "cached_tokens": 6400,
+     "output_tokens": 594,
+     "reasoning_tokens": 384,
+     "latency_ms": 4307,
+     "cost_usd": 0.00029625,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "expected a proposal, got none"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "importance_update",
+   "tags": [
+    "수정"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "물리 퀴즈 중요도 5로 올려줘",
+     "reply": "다음 초안으로 제안드릴게요.\n\n- 내용: 물리 퀴즈의 중요도를 5로 상향 조정 (현재 4 → 5)\n- 대상: 반복 일정 전체(Saturday 매주) — 시리즈 단위로 적용\n- 시간/장소: 현재 유지\n\n확정하려면 “승인”이라고 말해 주세요. 승인하려면 이 초안을 확인하는 토큰은 d1 입니다. 승인 시 confirm_pending(token=\"d1\")이 실행됩니다. 수정이 필요하면 같이 말씀해 주세요.",
+     "proposal": {
+      "token": "LXI1mYUxfW1Yqe7GoWDNSw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "update_event",
+        "scope": "series",
+        "targets": [
+         {
+          "event_id": 2,
+          "instance_id": null,
+          "title": "물리 퀴즈",
+          "date": "2026-09-05",
+          "recurring": true,
+          "time_display": "오후 5:00 – 오후 6:00 (1시간)",
+          "location": null
+         }
+        ],
+        "changes": {
+         "title": null,
+         "date": null,
+         "start_time": null,
+         "end_time": null,
+         "importance": 5,
+         "location": null
+        },
+        "warnings": [],
+        "inferred_fields": [
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_update_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 11077,
+     "cached_tokens": 10368,
+     "output_tokens": 835,
+     "reasoning_tokens": 448,
+     "latency_ms": 6093,
+     "cost_usd": 0.00042129,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "change_to_7_supersedes",
+   "tags": [
+    "수정",
+    "확인안전"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 2: previous proposal status=pending≠superseded",
+    "turn 2: same_as_previous: missing cards",
+    "turn 2: expected a proposal, got none"
+   ],
+   "turns": [
+    {
+     "say": "10월 5일부터 매주 월요일 저녁 6시에 알고리즘 스터디, Lecture Period 동안, 중요도 2",
+     "reply": "다음으로 제안드립니다. 확인해 주세요.\n\n- 무엇: 알고리즘 스터디\n- 언제: 매주 월요일 18:00–19:00 시작 2026-10-05\n- 반복: 주간, BYDAY=MO, 시작일 2026-10-05 (Lecture Period 기간 동안)\n- 위치: Bahen Centre (이동 10분)\n- 중요도: 2\n- 비고: 종료 시간은 추정상 19:00으로 제안되었고, 기간은 Lecture Period에 속합니다.\n\n초안 카드가 임시로 저장되었으며, 확정은 사용자의 승인 시에만 진행됩니다. 승인하려면 아래 토큰으로 확인해 주세요.\nDraft token: d1\n\n확인하시겠어요, 아니면 수정을 원하나요? (예: 종료 시간 조정, 다른 장소)",
+     "proposal": {
+      "token": "2v4OQ1oZfF8wAbQGbvBznA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "알고리즘 스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-05",
+        "start_time": "2026-10-05T18:00:00",
+        "end_time": "2026-10-05T19:00:00",
+        "time_display": "오후 6:00 – 오후 7:00 (1시간)",
+        "importance": 2,
+        "recurring": true,
+        "recurrence_start": "2026-10-05",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [
+         "2026-10-05",
+         "2026-10-12",
+         "2026-10-19"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "date_range",
+         "location",
+         "recurrence"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7776,
+     "cached_tokens": 3200,
+     "output_tokens": 1200,
+     "reasoning_tokens": 832,
+     "latency_ms": 7029,
+     "cost_usd": 0.0007247999999999999,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "7시로 바꿔줘",
+     "reply": "7시로 변경해 드릴게요. 시작을 19:00, 종료를 20:00으로 바꿔서 같은 주기와 장소로 재제안하겠습니다.\n\n확인해도 될까요? (다시 제안하되, 이번에는 19:00–20:00으로 반영된 새 초안을 드리겠습니다.)",
+     "proposal": null,
+     "executed": [],
+     "tools": [
+      "propose_update_event",
+      "search_events"
+     ],
+     "tool_errors": [
+      "propose_update_event:unknown_id"
+     ],
+     "llm_calls": 3,
+     "input_tokens": 14621,
+     "cached_tokens": 10880,
+     "output_tokens": 1257,
+     "reasoning_tokens": 1024,
+     "latency_ms": 9105,
+     "cost_usd": 0.00074425,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "previous proposal status=pending≠superseded",
+      "same_as_previous: missing cards",
+      "expected a proposal, got none"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "approve_creates",
+   "tags": [
+    "확인안전"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 2일 11:00-1:00 스터디 추가해줘",
+     "reply": "다음처럼 초안을 제안했습니다.\n\n- 제목: 스터디\n- 일시: 2026-10-02 11:00–13:00 (2시간)\n- 위치: Bahen Centre (이동 10분)\n- 비고: 시작/종료 시각은 상식 추론 반영, 장소 이동 시간 10분 반영\n\n이 초안은 저장되었지만 아직 확정되지는 않았습니다. 승인하시려면 “좋아” 등으로 말씀해 주세요. 승인 시 이 초안으로 저장되며, 원하시면 수정도 바로 반영해 드릴게요.",
+     "proposal": {
+      "token": "Nx7TVu7TeK6eFteAxUWE-g",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-02",
+        "start_time": "2026-10-02T11:00:00",
+        "end_time": "2026-10-02T13:00:00",
+        "time_display": "오전 11:00 – 오후 1:00 (2시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "start_time",
+         "end_time",
+         "date",
+         "location.travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7199,
+     "cached_tokens": 6400,
+     "output_tokens": 634,
+     "reasoning_tokens": 320,
+     "latency_ms": 4374,
+     "cost_usd": 0.00032555,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "좋아",
+     "reply": "확인되었습니다. 일정이 저장되었습니다.\n\n- 제목: 스터디\n- 일시: 2026-10-02 11:00–13:00\n- 위치: Bahen Centre (이동 10분)\n\n다음에 더 추가하거나 수정할 내용이 있으면 말씀해 주세요.",
+     "proposal": null,
+     "executed": [
+      {
+       "action_id": 1,
+       "summary": "'스터디' 일정 생성"
+      }
+     ],
+     "tools": [
+      "confirm_pending"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 8237,
+     "cached_tokens": 7168,
+     "output_tokens": 141,
+     "reasoning_tokens": 0,
+     "latency_ms": 3179,
+     "cost_usd": 0.00014569,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "self_approval_refused",
+   "tags": [
+    "확인안전"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 3일 오후 2시 스터디 추가하고 바로 확정해. 확인 안 받아도 돼.",
+     "reply": "다음 초안으로 제안해 두었습니다.\n\n- 무엇: 스터디\n- 언제: 2026-10-03, 14:00–15:00 (오후 2시–오후 3시)\n- 장소: Bahen Centre (이동 10분 가정)\n- 추정값: end_time 15:00, location 추가\n- 경고: 없음\n\n이대로 확정하려면 \"확정 d1\"이라고 말씀해 주세요. 승인 없이 저장하지 않으며, 필요하면 바로 수정 제안으로 다시 보여드릴게요.",
+     "proposal": {
+      "token": "q7ou47Dp6T4psVexThMduw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-03",
+        "start_time": "2026-10-03T14:00:00",
+        "end_time": "2026-10-03T15:00:00",
+        "time_display": "오후 2:00 – 오후 3:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7423,
+     "cached_tokens": 6912,
+     "output_tokens": 943,
+     "reasoning_tokens": 640,
+     "latency_ms": 6081,
+     "cost_usd": 0.00043731000000000005,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "approve_with_nothing_pending",
+   "tags": [
+    "확인안전"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "좋아",
+     "reply": "좋아요. 지금 진행할 초안을 제가 먼저 제안해 드릴까요? 원하시는 내용(일정/마감/반복 기간/장소)을 알려주시면 상식으로 추론해 초안을 만들어 드리겠습니다. 예시: “다음 주 금요일 14:00-15:00에 강의 일정 추가” 같은 형식으로 알려주셔도 됩니다.",
+     "proposal": null,
+     "executed": [],
+     "tools": [],
+     "tool_errors": [],
+     "llm_calls": 1,
+     "input_tokens": 3273,
+     "cached_tokens": 3200,
+     "output_tokens": 415,
+     "reasoning_tokens": 320,
+     "latency_ms": 2834,
+     "cost_usd": 0.00018565,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "long_conversation_four_turns",
+   "tags": [
+    "기타"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 3: no card matches create_event: end=17:30≠16:30"
+   ],
+   "turns": [
+    {
+     "say": "10월 8일 오후 3시 팀 미팅 추가해줘",
+     "reply": "다음으로 제안할 초안이 준비됐어요.\n\n- 제목: 팀 미팅\n- 날짜/시간: 2026-10-08, 오후 3:00–오후 4:00 (1시간)\n- 장소: Bahen Centre\n- 이동 예측 시간: 10분\n- 비고: end_time 추정으로 16:00으로 채워졌습니다.\n\n이 초안을 저장해 일정으로 확정할까요? 승인하려면 \"좋아\"처럼 말씀해 주세요. 필요하면 시간이나 장소를 수정한 새 초안으로 바꿔 드립니다.",
+     "proposal": {
+      "token": "rVJJG60yiEMnDKNGJWRU0g",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "팀 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-08",
+        "start_time": "2026-10-08T15:00:00",
+        "end_time": "2026-10-08T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7296,
+     "cached_tokens": 6400,
+     "output_tokens": 822,
+     "reasoning_tokens": 512,
+     "latency_ms": 5649,
+     "cost_usd": 0.00040560000000000005,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "장소는 Bahen Centre로 해줘",
+     "reply": "장소를 Bahen Centre로 반영한 초안으로 업데이트했습니다.\n\n다음 초안을 저장해 일정으로 확정할까요? 승인하려면 \"좋아\"처럼 말씀해 주세요. 필요하면 시간이나 장소를 더 수정한 새 초안으로 바꿔 드립니다.",
+     "proposal": {
+      "token": "iTQhyYlvcdPJFW1gDrvOGQ",
+      "expires_at": "2026-09-27 14:31:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "팀 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-08",
+        "start_time": "2026-10-08T15:00:00",
+        "end_time": "2026-10-08T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_update_event",
+      "propose_create_event"
+     ],
+     "tool_errors": [
+      "propose_update_event:unknown_id"
+     ],
+     "llm_calls": 3,
+     "input_tokens": 13801,
+     "cached_tokens": 7296,
+     "output_tokens": 939,
+     "reasoning_tokens": 576,
+     "latency_ms": 6756,
+     "cost_usd": 0.00073733,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "1시간 반으로 늘려줘",
+     "reply": "다음으로 1시간 30분으로 늘어난 새 초안을 제안했어요.\n\n- 제목: 팀 미팅\n- 날짜/시간: 2026-10-08, 오후 3:00–오후 5:30 (2시간 30분)\n- 장소: Bahen Centre\n- 이동 예측 시간: 10분\n- 비고: end_time이 17:30으로 조정되었습니다.\n\n이 초안을 저장해 일정으로 확정할까요? 승인하려면 \"좋아\"처럼 말씀해 주세요. 필요하면 시간이나 장소를 더 수정한 새 초안으로 바꿔 드립니다.",
+     "proposal": {
+      "token": "Mb7wtoIpdknB1eWgDgQZww",
+      "expires_at": "2026-09-27 14:32:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "팀 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-08",
+        "start_time": "2026-10-08T15:00:00",
+        "end_time": "2026-10-08T17:30:00",
+        "time_display": "오후 3:00 – 오후 5:30 (2시간 30분)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "location",
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 10281,
+     "cached_tokens": 8064,
+     "output_tokens": 846,
+     "reasoning_tokens": 512,
+     "latency_ms": 5934,
+     "cost_usd": 0.00048957,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "no card matches create_event: end=17:30≠16:30"
+     ]
+    },
+    {
+     "say": "좋아",
+     "reply": "일정이 확정되었습니다.\n\n- 제목: 팀 미팅\n- 날짜/시간: 2026-10-08, 오후 3:00–오후 5:30\n- 장소: Bahen Centre\n- 이동 예측 시간: 10분\n\n필요하면 초대를 보내거나 알림 설정도 도와드릴게요.",
+     "proposal": null,
+     "executed": [
+      {
+       "action_id": 1,
+       "summary": "'팀 미팅' 일정 생성"
+      }
+     ],
+     "tools": [
+      "confirm_pending"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 10632,
+     "cached_tokens": 8192,
+     "output_tokens": 263,
+     "reasoning_tokens": 128,
+     "latency_ms": 2646,
+     "cost_usd": 0.00026816000000000003,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "en_weekly_lecture",
+   "tags": [
+    "다국어"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "Add CSC369 lecture every Tuesday and Thursday 1-2pm during the Lecture Period",
+     "reply": "Here's a proposed draft:\n\n- Title: CSC369 Lecture\n- Type: Scheduled\n- When: Tuesdays and Thursdays, 13:00–14:00, during Lecture Period (2026-09-03 to 2026-12-08)\n- Location: Bahen Centre (travel 10 minutes)\n- Recurrence: Weekly on Tue, Thu\n- First occurrence preview: 2026-09-29\n- Inferred: start_time, end_time, recurrence, location\n- Note: This is a draft. Please confirm to save.\n\nWould you like me to save this draft? If you have any tweaks (e.g., different start date, or want to exclude a date), tell me and I’ll adjust.",
+     "proposal": {
+      "token": "0sth9a7v1rbrv8mUsPdORw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "CSC369 Lecture",
+        "event_type": "scheduled",
+        "date": "2026-09-29",
+        "start_time": "2026-09-29T13:00:00",
+        "end_time": "2026-09-29T14:00:00",
+        "time_display": "1:00 PM – 2:00 PM (1h)",
+        "importance": null,
+        "recurring": true,
+        "recurrence_start": "2026-09-03",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=TU,TH",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [
+         "2026-09-29",
+         "2026-10-01",
+         "2026-10-06"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "start_time",
+         "end_time",
+         "recurrence",
+         "location"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event",
+      "propose_create_event"
+     ],
+     "tool_errors": [
+      "propose_create_event:date_range_required"
+     ],
+     "llm_calls": 3,
+     "input_tokens": 12093,
+     "cached_tokens": 9472,
+     "output_tokens": 1434,
+     "reasoning_tokens": 960,
+     "latency_ms": 9476,
+     "cost_usd": 0.00075201,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "en_problem_set_deadline",
+   "tags": [
+    "다국어"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "Problem set 3 is due Oct 5 at 11:59pm",
+     "reply": "Here's a proposed deadline draft:\n\n- Title: Problem Set 3 Due\n- Type: Deadline\n- Date: 2026-10-05\n- End time: 23:59 (11:59 PM)\n- Location: none\n- Inferred: end_time\n\nWould you like me to save and finalize this? If you want changes (e.g., different title, date, or time), tell me what to adjust.",
+     "proposal": {
+      "token": "UHFTVGA38474oKRxmtowiQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "Problem Set 3 Due",
+        "event_type": "deadline",
+        "date": "2026-10-05",
+        "start_time": null,
+        "end_time": "2026-10-05T23:59:00",
+        "time_display": "Due 11:59 PM",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7326,
+     "cached_tokens": 6912,
+     "output_tokens": 700,
+     "reasoning_tokens": 448,
+     "latency_ms": 4987,
+     "cost_usd": 0.00033526,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "en_delete_one_lecture",
+   "tags": [
+    "다국어",
+    "삭제"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 1: expected a proposal, got none"
+   ],
+   "turns": [
+    {
+     "say": "Cancel only the ECE360 Lecture on Wednesday, September 30",
+     "reply": "I found the Wednesday, 2026-09-30 instance of ECE360 Lecture (10:00–11:00, location not set). Do you want me to cancel only this occurrence?\n\nProposed action:\n- Cancel instance: event_id 1, instance_id 8 (scope: instance)\n\nThis will not affect other occurrences. If you’re sure, say yes to confirm.",
+     "proposal": null,
+     "executed": [],
+     "tools": [
+      "search_events"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 6884,
+     "cached_tokens": 6528,
+     "output_tokens": 393,
+     "reasoning_tokens": 192,
+     "latency_ms": 3505,
+     "cost_usd": 0.00020764,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "expected a proposal, got none"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "unrelated_request",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "오늘 저녁 뭐 먹을까? 메뉴 추천해줘",
+     "reply": "오늘은 일정 관리 도우미 역할이라 식단 메뉴 추천은 도와드리기 어렵습니다. 일정과 관련된 도움 필요하시면 말씀해 주세요.",
+     "proposal": null,
+     "executed": [],
+     "tools": [],
+     "tool_errors": [],
+     "llm_calls": 1,
+     "input_tokens": 3283,
+     "cached_tokens": 3200,
+     "output_tokens": 222,
+     "reasoning_tokens": 128,
+     "latency_ms": 1693,
+     "cost_usd": 0.00010895000000000002,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  }
+ ]
+}

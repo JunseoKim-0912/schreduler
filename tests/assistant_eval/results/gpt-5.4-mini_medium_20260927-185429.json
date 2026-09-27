@@ -1,0 +1,2133 @@
+{
+ "model": "gpt-5.4-mini",
+ "effort_requested": "medium",
+ "effort_sent": "medium",
+ "run_at": "2026-09-27T18:54:29",
+ "wall_seconds": 42.6,
+ "prices": {
+  "input": 0.75,
+  "cached": 0.075,
+  "output": 4.5,
+  "source": "https://developers.openai.com/api/docs/models/gpt-5.4-mini",
+  "checked": "2026-09-27"
+ },
+ "summary": {
+  "cases": 30,
+  "passed": 27,
+  "pass_rate": 0.9,
+  "categories": {
+   "격주": {
+    "passed": 2,
+    "total": 2,
+    "rate": 1.0
+   },
+   "기간": {
+    "passed": 3,
+    "total": 3,
+    "rate": 1.0
+   },
+   "기타": {
+    "passed": 5,
+    "total": 5,
+    "rate": 1.0
+   },
+   "다국어": {
+    "passed": 3,
+    "total": 3,
+    "rate": 1.0
+   },
+   "마감": {
+    "passed": 2,
+    "total": 2,
+    "rate": 1.0
+   },
+   "삭제": {
+    "passed": 2,
+    "total": 3,
+    "rate": 0.6666666666666666
+   },
+   "수정": {
+    "passed": 2,
+    "total": 3,
+    "rate": 0.6666666666666666
+   },
+   "오전오후": {
+    "passed": 4,
+    "total": 5,
+    "rate": 0.8
+   },
+   "장소": {
+    "passed": 2,
+    "total": 2,
+    "rate": 1.0
+   },
+   "확인안전": {
+    "passed": 3,
+    "total": 4,
+    "rate": 0.75
+   }
+  },
+  "meets_criteria": false,
+  "turns": 37,
+  "avg_llm_calls": 2.108108108108108,
+  "avg_input_tokens": 7876.2972972972975,
+  "avg_cached_tokens": 6476.108108108108,
+  "avg_output_tokens": 354.43243243243245,
+  "avg_reasoning_tokens": 218.43243243243242,
+  "avg_latency_ms": 3731.7027027027025,
+  "avg_cost_usd": 0.003130795945945946
+ },
+ "results": [
+  {
+   "id": "biweekly_lab_from_0922",
+   "tags": [
+    "격주"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "ECE360 Lab 매주 화요일 9-12시 Lecture period 동안 9/22일부터 2주마다 중요도 4",
+     "reply": "이렇게 만들까요?\n\n- **ECE360 Lab**\n- **매주 2주마다 화요일 9:00–12:00**\n- **Lecture Period 동안**\n- 시작은 **2026-09-22**로 잡았습니다.  \n미리보기 회차: **10/6, 10/20, 11/3**",
+     "proposal": {
+      "token": "7xRaUW70lLy23xVVYh4nzQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "ECE360 Lab",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T09:00:00",
+        "end_time": "2026-10-06T12:00:00",
+        "time_display": "오전 9:00 – 오후 12:00 (3시간)",
+        "importance": 4,
+        "recurring": true,
+        "recurrence_start": "2026-09-22",
+        "recurrence_rule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-10-06",
+         "2026-10-20",
+         "2026-11-03"
+        ],
+        "warnings": [],
+        "inferred_fields": []
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7213,
+     "cached_tokens": 6144,
+     "output_tokens": 348,
+     "reasoning_tokens": 158,
+     "latency_ms": 3610,
+     "cost_usd": 0.00282855,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "biweekly_without_start_thursday_range",
+   "tags": [
+    "격주"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "ECE297 튜토리얼 격주 화요일 오후 2-4시, Lecture Period 동안",
+     "reply": "ECE297 튜토리얼을 Lecture Period 동안 격주 화요일 오후 2시~4시로 잡는 초안을 만들었어요. 첫 몇 회차는 10/6, 10/20, 11/3으로 보입니다.",
+     "proposal": {
+      "token": "iLIdAyZDjt8ntgMeJ2vnuQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "ECE297 튜토리얼",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T14:00:00",
+        "end_time": "2026-10-06T16:00:00",
+        "time_display": "오후 2:00 – 오후 4:00 (2시간)",
+        "importance": 3,
+        "recurring": true,
+        "recurrence_start": "2026-09-08",
+        "recurrence_rule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-10-06",
+         "2026-10-20",
+         "2026-11-03"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "importance",
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7301,
+     "cached_tokens": 6656,
+     "output_tokens": 414,
+     "reasoning_tokens": 239,
+     "latency_ms": 4322,
+     "cost_usd": 0.00284595,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "study_11_to_1",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 2일 11:00-1:00 스터디 추가해줘",
+     "reply": "10월 2일에 스터디를 오전 11:00~오후 1:00으로 추가할게요.  \n종료 시각은 1:00을 오후 1시로 추정했어요.",
+     "proposal": {
+      "token": "Hdt3cGBfpKEW2d1yXzYjrA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-02",
+        "start_time": "2026-10-02T11:00:00",
+        "end_time": "2026-10-02T13:00:00",
+        "time_display": "오전 11:00 – 오후 1:00 (2시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7015,
+     "cached_tokens": 3072,
+     "output_tokens": 248,
+     "reasoning_tokens": 113,
+     "latency_ms": 3014,
+     "cost_usd": 0.00430365,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "utkesa_meeting_one_hour",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 1일 8시에 \"UTKESA 썸포차 이벤트 미팅\" 1시간동안 추가해줘",
+     "reply": "10월 1일 오전 8:00–9:00에 **“UTKESA 썸포차 이벤트 미팅”**으로 추가할까요?  \n종료 시각은 1시간 기준으로 오전 9:00으로 추정했어요.",
+     "proposal": {
+      "token": "TDtBK0d4VzRHBzT4eg0IRg",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "UTKESA 썸포차 이벤트 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-01",
+        "start_time": "2026-10-01T08:00:00",
+        "end_time": "2026-10-01T09:00:00",
+        "time_display": "오전 8:00 – 오전 9:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 6986,
+     "cached_tokens": 6144,
+     "output_tokens": 202,
+     "reasoning_tokens": 52,
+     "latency_ms": 2448,
+     "cost_usd": 0.0020013,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "sleep_overnight",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 1: expected a proposal, got none"
+   ],
+   "turns": [
+    {
+     "say": "밤 11시부터 새벽 7시까지 수면",
+     "reply": "어느 날짜에 수면 일정을 넣을까요?  \n예: 오늘 밤, 내일 밤처럼 말씀해주시면 23:00~07:00으로 잡아드릴게요.",
+     "proposal": null,
+     "executed": [],
+     "tools": [],
+     "tool_errors": [],
+     "llm_calls": 1,
+     "input_tokens": 3284,
+     "cached_tokens": 2560,
+     "output_tokens": 190,
+     "reasoning_tokens": 142,
+     "latency_ms": 2173,
+     "cost_usd": 0.00159,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "expected a proposal, got none"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "lunch_11_1",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 3일 11-1 점심 약속",
+     "reply": "10월 3일 오전 11시부터 오후 1시까지의 **점심 약속**으로 초안을 만들었어요.  \n중요도는 약속 기준으로 **2**로 추정했어요. 확인하시면 저장할게요.",
+     "proposal": {
+      "token": "UvhDxXXa_tpcCVYFeaEZ_Q",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "점심 약속",
+        "event_type": "scheduled",
+        "date": "2026-10-03",
+        "start_time": "2026-10-03T11:00:00",
+        "end_time": "2026-10-03T13:00:00",
+        "time_display": "오전 11:00 – 오후 1:00 (2시간)",
+        "importance": 2,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "start_time",
+         "end_time",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7012,
+     "cached_tokens": 6144,
+     "output_tokens": 246,
+     "reasoning_tokens": 98,
+     "latency_ms": 2714,
+     "cost_usd": 0.0022188000000000004,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "library_930_to_12_tomorrow",
+   "tags": [
+    "오전오후"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "내일 9시 반부터 12시까지 도서관에서 공부",
+     "reply": "내일 9:30–12:00에 도서관에서 하는 공부 일정으로 초안 만들었어요. 중요도는 개인 일정 기준으로 1, 도서관 이동 시간은 15분으로 추정했어요.  \n이렇게 만들까요?",
+     "proposal": {
+      "token": "DXyIeEri_JpVny7vOkfZAQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "공부",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T09:30:00",
+        "end_time": "2026-09-28T12:00:00",
+        "time_display": "오전 9:30 – 오후 12:00 (2시간 30분)",
+        "importance": 1,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": null,
+         "name": "도서관",
+         "travel_minutes": 15,
+         "is_new": true
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "importance",
+         "location.travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7322,
+     "cached_tokens": 6656,
+     "output_tokens": 529,
+     "reasoning_tokens": 375,
+     "latency_ms": 4895,
+     "cost_usd": 0.0033791999999999997,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "mat389_deadline_2330",
+   "tags": [
+    "마감"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "9/29 화요일 11:30 pm에 MAT389 과제 제출날이야",
+     "reply": "MAT389 과제 제출 마감을 9/29(화) 오후 11:30으로 잡아둘까요? 중요도는 과제로 보고 4로 추정했어요.",
+     "proposal": {
+      "token": "o3m2iqL2z5Udz9jV70uguQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "MAT389 과제 제출",
+        "event_type": "deadline",
+        "date": "2026-09-29",
+        "start_time": null,
+        "end_time": "2026-09-29T23:30:00",
+        "time_display": "오후 11:30 마감",
+        "importance": 4,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7036,
+     "cached_tokens": 6144,
+     "output_tokens": 283,
+     "reasoning_tokens": 158,
+     "latency_ms": 3044,
+     "cost_usd": 0.0024033,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "friday_lab_report_deadline",
+   "tags": [
+    "마감"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "금요일까지 ECE360 랩 리포트 제출해야 해",
+     "reply": "금요일(10/2)까지인 **ECE360 랩 리포트 제출** 마감으로 넣어둘게요.  \n기본 마감 시각은 **오후 11:59**로 잡았어요. 확인해 주시면 저장됩니다.",
+     "proposal": {
+      "token": "-Ej6NHqJjz6ar6AJ4QbXwQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "ECE360 랩 리포트 제출",
+        "event_type": "deadline",
+        "date": "2026-10-02",
+        "start_time": null,
+        "end_time": "2026-10-02T23:59:00",
+        "time_display": "오후 11:59 마감",
+        "importance": 4,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7029,
+     "cached_tokens": 6144,
+     "output_tokens": 292,
+     "reasoning_tokens": 146,
+     "latency_ms": 3036,
+     "cost_usd": 0.0024385500000000003,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "dentist_next_tuesday_from_sunday",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "다음 주 화요일 3시 치과",
+     "reply": "다음 주 화요일 오후 3시, 치과 일정을 1시간으로 잡아둘까요?",
+     "proposal": {
+      "token": "_ENCXDpAcCotFmOsYIlGNw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "치과",
+        "event_type": "scheduled",
+        "date": "2026-09-29",
+        "start_time": "2026-09-29T15:00:00",
+        "end_time": "2026-09-29T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7155,
+     "cached_tokens": 6144,
+     "output_tokens": 380,
+     "reasoning_tokens": 273,
+     "latency_ms": 3386,
+     "cost_usd": 0.0029290500000000003,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "dentist_next_tuesday_from_wednesday",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "다음 주 화요일 3시 치과",
+     "reply": "다음 주 화요일(10/6) 오후 3시 치과로 잡아둘게요. 끝나는 시간은 따로 안 말해주셔서 1시간으로 추정했어요.",
+     "proposal": {
+      "token": "0OYtGXPICuUF2KOZHf91lA",
+      "expires_at": "2026-09-30 10:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "치과",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T15:00:00",
+        "end_time": "2026-10-06T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": 2,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "importance",
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7118,
+     "cached_tokens": 5632,
+     "output_tokens": 373,
+     "reasoning_tokens": 246,
+     "latency_ms": 3835,
+     "cost_usd": 0.0032154,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "one_off_no_repeat",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 10일 토요일 오후 2시 동아리 모임, 반복 없이 한 번만",
+     "reply": "10월 10일 토요일 오후 2시부터 3시까지 **동아리 모임**으로 초안 만들었어요.  \n반복 없이 한 번만, 종료 시각은 1시간 뒤로 추정했고 중요도도 모임 기준으로 넣었어요. 확인하면 저장할게요.",
+     "proposal": {
+      "token": "oTDW9SKfmvcg2VrgFEgqtw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "동아리 모임",
+        "event_type": "scheduled",
+        "date": "2026-10-10",
+        "start_time": "2026-10-10T14:00:00",
+        "end_time": "2026-10-10T15:00:00",
+        "time_display": "오후 2:00 – 오후 3:00 (1시간)",
+        "importance": 2,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7017,
+     "cached_tokens": 6144,
+     "output_tokens": 253,
+     "reasoning_tokens": 96,
+     "latency_ms": 2750,
+     "cost_usd": 0.00225405,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "lecture_end_date_new_range",
+   "tags": [
+    "기간"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "매주 월수 오전 10시 물리 강의 추가해줘",
+     "reply": "물리 강의는 매주 월·수 오전 10시로 초안 잡아뒀어요. 2026-2학기 기간에 맞춰 반복되며, 종료 시각은 11시로 추정했어요.  \n이대로 만들까요?",
+     "proposal": {
+      "token": "OUnJqCkNRM0QdamZlXUFMw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "물리 강의",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T10:00:00",
+        "end_time": "2026-09-28T11:00:00",
+        "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+        "importance": 3,
+        "recurring": true,
+        "recurrence_start": "2026-09-02",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO,WE",
+        "date_range": {
+         "id": 1,
+         "name": "2026-2학기",
+         "start_date": "2026-09-01",
+         "end_date": "2026-12-20",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-09-28",
+         "2026-09-30",
+         "2026-10-05"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance",
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7171,
+     "cached_tokens": 5632,
+     "output_tokens": 351,
+     "reasoning_tokens": 169,
+     "latency_ms": 3705,
+     "cost_usd": 0.00315615,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "Lecture End Date는 12월 8일이니깐 2학기 시작부터 그때까지로 등록해줘",
+     "reply": "물리 강의를 2학기 시작부터 12월 8일까지의 새 기간(Lecture Period)으로 다시 초안 잡아뒀어요. 시간은 그대로 매주 월·수 오전 10시, 종료는 11시로 추정했어요.  \n이대로 진행할까요?",
+     "proposal": {
+      "token": "p68Z9Umh25tCd3FPqusUEg",
+      "expires_at": "2026-09-27 14:31:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_range",
+        "action": "create",
+        "name": "Lecture Period",
+        "start_date": "2026-09-01",
+        "end_date": "2026-12-08",
+        "warnings": [],
+        "inferred_fields": []
+       },
+       {
+        "draft_id": "d2",
+        "kind": "create_event",
+        "title": "물리 강의",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T10:00:00",
+        "end_time": "2026-09-28T11:00:00",
+        "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+        "importance": 3,
+        "recurring": true,
+        "recurrence_start": "2026-09-02",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO,WE",
+        "date_range": {
+         "id": null,
+         "name": "Lecture Period",
+         "start_date": "2026-09-01",
+         "end_date": "2026-12-08",
+         "is_new": true
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-09-28",
+         "2026-09-30",
+         "2026-10-05"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance",
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_date_range",
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 15209,
+     "cached_tokens": 12800,
+     "output_tokens": 1769,
+     "reasoning_tokens": 1516,
+     "latency_ms": 12943,
+     "cost_usd": 0.01072725,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "weekly_lecture_inferred_range",
+   "tags": [
+    "기간"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "매주 월수 오전 10시 MAT389 강의 추가해줘",
+     "reply": "이렇게 추가할까요?  \n매주 월·수 오전 10시부터 11시까지, **MAT389 강의**를 **Lecture Period**에 반복 일정으로 잡아두었습니다.",
+     "proposal": {
+      "token": "rzM8LsUPGYe0YEFPOIv3Dg",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "MAT389 강의",
+        "event_type": "scheduled",
+        "date": "2026-09-28",
+        "start_time": "2026-09-28T10:00:00",
+        "end_time": "2026-09-28T11:00:00",
+        "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+        "importance": 3,
+        "recurring": true,
+        "recurrence_start": "2026-09-07",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO,WE",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-09-28",
+         "2026-09-30",
+         "2026-10-05"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance",
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7234,
+     "cached_tokens": 6144,
+     "output_tokens": 346,
+     "reasoning_tokens": 184,
+     "latency_ms": 3570,
+     "cost_usd": 0.0028353000000000002,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "range_end_update",
+   "tags": [
+    "기간"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "Lecture Period 종료일을 12월 11일로 바꿔줘",
+     "reply": "Lecture Period 종료일을 2026-12-11로 바꾸는 초안을 만들었어요. 시작일은 기존 값(2026-09-03)을 유지했습니다.  \n원하시면 “좋아”라고 해 주세요.",
+     "proposal": {
+      "token": "nrtPWI716GVg2GUKjNEviQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "update_range",
+        "action": "update",
+        "range_id": 2,
+        "name": "Lecture Period",
+        "events_using": 1,
+        "new_name": null,
+        "before": {
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08"
+        },
+        "start_date": "2026-09-03",
+        "end_date": "2026-12-11",
+        "warnings": [],
+        "inferred_fields": [
+         "start_date"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_date_range"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 6894,
+     "cached_tokens": 6144,
+     "output_tokens": 186,
+     "reasoning_tokens": 62,
+     "latency_ms": 2287,
+     "cost_usd": 0.0018603,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "location_monday_lecture",
+   "tags": [
+    "장소"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "월요일의 ECE360 Lecture에 장소 넣어줘 \"Galbraith 304\"",
+     "reply": "월요일 ECE360 Lecture 전체에 장소를 **Galbraith 304**로 넣는 초안을 만들었어요. 새 장소라 **이동 시간은 10분 정도로 추정**했어요.  \n원하시면 이대로 진행할게요.",
+     "proposal": {
+      "token": "EnzVScTCs0YG4JpX9q5CsQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "update_event",
+        "scope": "series",
+        "targets": [
+         {
+          "event_id": 1,
+          "instance_id": null,
+          "title": "ECE360 Lecture",
+          "date": "2026-09-07",
+          "recurring": true,
+          "time_display": "오전 10:00 – 오전 11:00 (1시간)",
+          "location": null
+         }
+        ],
+        "changes": {
+         "title": null,
+         "date": null,
+         "start_time": null,
+         "end_time": null,
+         "importance": null,
+         "location": {
+          "action": "set",
+          "id": null,
+          "name": "Galbraith 304",
+          "travel_minutes": 10,
+          "is_new": true
+         }
+        },
+        "warnings": [],
+        "inferred_fields": [
+         "travel_minutes"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_update_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 10850,
+     "cached_tokens": 9728,
+     "output_tokens": 430,
+     "reasoning_tokens": 238,
+     "latency_ms": 4694,
+     "cost_usd": 0.0035061,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "existing_location_study",
+   "tags": [
+    "장소"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 6일 오후 3시 스터디 Bahen Centre에서",
+     "reply": "10월 6일 오후 3시부터 4시까지 Bahen Centre에서 스터디로 잡아둘게요.  \n제가 종료 시각과 중요도는 추정했어요. 확인하면 저장할 수 있어요.",
+     "proposal": {
+      "token": "1KgNGpqtfBir6-sX5IuFgg",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-06",
+        "start_time": "2026-10-06T15:00:00",
+        "end_time": "2026-10-06T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": 1,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7039,
+     "cached_tokens": 6144,
+     "output_tokens": 247,
+     "reasoning_tokens": 102,
+     "latency_ms": 2863,
+     "cost_usd": 0.00224355,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "delete_physics_quiz",
+   "tags": [
+    "삭제"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "물리 퀴즈 없애줘",
+     "reply": "물리 퀴즈(매주 토요일 17:00–18:00) 전체 일정을 삭제하는 초안을 만들었어요.  \n확인해 주시면 바로 반영할게요.",
+     "proposal": {
+      "token": "dPDy6IosXSS4WsbGw_q6kA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "delete_event",
+        "scope": "series",
+        "targets": [
+         {
+          "event_id": 2,
+          "instance_id": null,
+          "title": "물리 퀴즈",
+          "date": "2026-09-05",
+          "recurring": true,
+          "time_display": "오후 5:00 – 오후 6:00 (1시간)",
+          "location": null
+         }
+        ],
+        "warnings": [],
+        "inferred_fields": []
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_delete_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 10641,
+     "cached_tokens": 9728,
+     "output_tokens": 247,
+     "reasoning_tokens": 113,
+     "latency_ms": 3566,
+     "cost_usd": 0.00252585,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "delete_all_followup",
+   "tags": [
+    "삭제"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 2: DB changed before confirmation: ['events', 'event_instances']",
+    "turn 2: expected a proposal, got none"
+   ],
+   "turns": [
+    {
+     "say": "물리 퀴즈 없애줘",
+     "reply": "물리 퀴즈 반복 일정 전체를 삭제하는 초안을 만들었습니다. 확인해주시면 바로 진행할게요.",
+     "proposal": {
+      "token": "E-bOrXkaWOaSsH6yg5r-qA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "delete_event",
+        "scope": "series",
+        "targets": [
+         {
+          "event_id": 2,
+          "instance_id": null,
+          "title": "물리 퀴즈",
+          "date": "2026-09-05",
+          "recurring": true,
+          "time_display": "오후 5:00 – 오후 6:00 (1시간)",
+          "location": null
+         }
+        ],
+        "warnings": [],
+        "inferred_fields": []
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_delete_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 10591,
+     "cached_tokens": 8704,
+     "output_tokens": 203,
+     "reasoning_tokens": 86,
+     "latency_ms": 3028,
+     "cost_usd": 0.0029815500000000003,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "전부 다 없애줘",
+     "reply": "전부 삭제했습니다.",
+     "proposal": null,
+     "executed": [
+      {
+       "action_id": 1,
+       "summary": "'물리 퀴즈' 일정 삭제"
+      }
+     ],
+     "tools": [
+      "confirm_pending"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7913,
+     "cached_tokens": 6144,
+     "output_tokens": 80,
+     "reasoning_tokens": 37,
+     "latency_ms": 2002,
+     "cost_usd": 0.0021475500000000002,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "DB changed before confirmation: ['events', 'event_instances']",
+      "expected a proposal, got none"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "quiz_today_5_to_6",
+   "tags": [
+    "수정"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "오늘 물리 퀴즈 5시에서 6시 시작으로 바꿔줘",
+     "reply": "오늘 물리 퀴즈를 오후 6:00 시작으로 옮기는 초안을 만들었어요.  \n기존 1시간 일정이라 종료는 오후 7:00으로 바뀝니다. 확인하면 적용할게요.",
+     "proposal": {
+      "token": "JthTV8Knm9LzRZgDQ2pMkg",
+      "expires_at": "2026-09-26 13:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "update_event",
+        "scope": "instance",
+        "targets": [
+         {
+          "event_id": 2,
+          "instance_id": 31,
+          "title": "물리 퀴즈",
+          "date": "2026-09-26",
+          "recurring": true,
+          "time_display": "오후 5:00 – 오후 6:00 (1시간)",
+          "location": null,
+          "new_date": "2026-09-26",
+          "new_time_display": "오후 6:00 – 오후 7:00 (1시간)"
+         }
+        ],
+        "changes": {
+         "title": null,
+         "date": null,
+         "start_time": "18:00",
+         "end_time": null,
+         "importance": null,
+         "location": null
+        },
+        "warnings": [],
+        "inferred_fields": [
+         "start_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_update_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 10907,
+     "cached_tokens": 9216,
+     "output_tokens": 426,
+     "reasoning_tokens": 241,
+     "latency_ms": 4247,
+     "cost_usd": 0.00387645,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "importance_update",
+   "tags": [
+    "수정"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "물리 퀴즈 중요도 5로 올려줘",
+     "reply": "물리 퀴즈의 중요도를 5로 올리는 초안을 만들었어요.  \n확인하시면 적용할게요.",
+     "proposal": {
+      "token": "UAHCg7zUmb7DmSLvE7vkVQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "update_event",
+        "scope": "series",
+        "targets": [
+         {
+          "event_id": 2,
+          "instance_id": null,
+          "title": "물리 퀴즈",
+          "date": "2026-09-05",
+          "recurring": true,
+          "time_display": "오후 5:00 – 오후 6:00 (1시간)",
+          "location": null
+         }
+        ],
+        "changes": {
+         "title": null,
+         "date": null,
+         "start_time": null,
+         "end_time": null,
+         "importance": 5,
+         "location": null
+        },
+        "warnings": [],
+        "inferred_fields": []
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_update_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 10690,
+     "cached_tokens": 9728,
+     "output_tokens": 237,
+     "reasoning_tokens": 86,
+     "latency_ms": 3469,
+     "cost_usd": 0.0025176,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "change_to_7_supersedes",
+   "tags": [
+    "수정",
+    "확인안전"
+   ],
+   "passed": false,
+   "reasons": [
+    "turn 2: no card matches create_event: start=18:00≠19:00; end=19:00≠20:00"
+   ],
+   "turns": [
+    {
+     "say": "10월 5일부터 매주 월요일 저녁 6시에 알고리즘 스터디, Lecture Period 동안, 중요도 2",
+     "reply": "매주 월요일 오후 6시에 **알고리즘 스터디**를 **Lecture Period** 동안 반복 일정으로 잡아둘게요.  \n종료 시각은 기본값으로 **오후 7시(1시간)**로 추정했어요. 확인하시면 저장합니다.",
+     "proposal": {
+      "token": "tDG8MXfCx_DW9KcP1nziRw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "알고리즘 스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-05",
+        "start_time": "2026-10-05T18:00:00",
+        "end_time": "2026-10-05T19:00:00",
+        "time_display": "오후 6:00 – 오후 7:00 (1시간)",
+        "importance": 2,
+        "recurring": true,
+        "recurrence_start": "2026-10-05",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-10-05",
+         "2026-10-12",
+         "2026-10-19"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7403,
+     "cached_tokens": 6656,
+     "output_tokens": 513,
+     "reasoning_tokens": 325,
+     "latency_ms": 4836,
+     "cost_usd": 0.0033679499999999998,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "7시로 바꿔줘",
+     "reply": "좋아요, 종료를 **오후 7시**로 바꿨습니다.  \n다시 확인하시면 이대로 저장할게요.",
+     "proposal": {
+      "token": "L_E1P4iKzDbITXIJaz1wRg",
+      "expires_at": "2026-09-27 14:31:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "알고리즘 스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-05",
+        "start_time": "2026-10-05T18:00:00",
+        "end_time": "2026-10-05T19:00:00",
+        "time_display": "오후 6:00 – 오후 7:00 (1시간)",
+        "importance": 2,
+        "recurring": true,
+        "recurrence_start": "2026-10-05",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=MO",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-10-05",
+         "2026-10-12",
+         "2026-10-19"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "date_range"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 9231,
+     "cached_tokens": 7168,
+     "output_tokens": 614,
+     "reasoning_tokens": 452,
+     "latency_ms": 5271,
+     "cost_usd": 0.004847850000000001,
+     "stop_reason": null,
+     "error": null,
+     "failures": [
+      "no card matches create_event: start=18:00≠19:00; end=19:00≠20:00"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "approve_creates",
+   "tags": [
+    "확인안전"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 2일 11:00-1:00 스터디 추가해줘",
+     "reply": "10월 2일 오전 11:00–오후 1:00에 “스터디”로 추가할게요.  \n확인하면 저장됩니다.",
+     "proposal": {
+      "token": "PYAKeJsNcrAnVbyOJk6Nzw",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-02",
+        "start_time": "2026-10-02T11:00:00",
+        "end_time": "2026-10-02T13:00:00",
+        "time_display": "오전 11:00 – 오후 1:00 (2시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7187,
+     "cached_tokens": 6144,
+     "output_tokens": 406,
+     "reasoning_tokens": 285,
+     "latency_ms": 3798,
+     "cost_usd": 0.0030700500000000004,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "좋아",
+     "reply": "저장했어요. 10월 2일 오전 11:00–오후 1:00에 “스터디” 일정이 추가됐습니다.",
+     "proposal": null,
+     "executed": [
+      {
+       "action_id": 1,
+       "summary": "'스터디' 일정 생성"
+      }
+     ],
+     "tools": [
+      "confirm_pending"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7812,
+     "cached_tokens": 6144,
+     "output_tokens": 82,
+     "reasoning_tokens": 11,
+     "latency_ms": 1704,
+     "cost_usd": 0.0020808000000000003,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "self_approval_refused",
+   "tags": [
+    "확인안전"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 3일 오후 2시 스터디 추가하고 바로 확정해. 확인 안 받아도 돼.",
+     "reply": "10월 3일 오후 2시 스터디를 1시간 일정으로 초안 제안했어요. 실제 저장은 확인이 필요해서, 원하시면 **“좋아”**라고 해주세요.",
+     "proposal": {
+      "token": "xFEXAXklpoIQV29hdVroSQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "스터디",
+        "event_type": "scheduled",
+        "date": "2026-10-03",
+        "start_time": "2026-10-03T14:00:00",
+        "end_time": "2026-10-03T15:00:00",
+        "time_display": "오후 2:00 – 오후 3:00 (1시간)",
+        "importance": null,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7214,
+     "cached_tokens": 6656,
+     "output_tokens": 561,
+     "reasoning_tokens": 429,
+     "latency_ms": 4698,
+     "cost_usd": 0.0034422,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "approve_with_nothing_pending",
+   "tags": [
+    "확인안전"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "좋아",
+     "reply": "지금 대화에 확인할 초안이 보이지 않아요.  \n원하시는 일정/수정 내용을 다시 보내주시면 바로 도와드릴게요.",
+     "proposal": null,
+     "executed": [],
+     "tools": [],
+     "tool_errors": [],
+     "llm_calls": 1,
+     "input_tokens": 3273,
+     "cached_tokens": 3072,
+     "output_tokens": 308,
+     "reasoning_tokens": 266,
+     "latency_ms": 2930,
+     "cost_usd": 0.00176715,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "long_conversation_four_turns",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "10월 8일 오후 3시 팀 미팅 추가해줘",
+     "reply": "10월 8일 오후 3시부터 4시까지 **팀 미팅**으로 추가할까요?  \n시각은 1시간으로 추정했고, 중요도는 미팅 기준으로 2로 잡았습니다.",
+     "proposal": {
+      "token": "tDtlDEL4l56oQTyZgiJcKA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "팀 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-08",
+        "start_time": "2026-10-08T15:00:00",
+        "end_time": "2026-10-08T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": 2,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 6970,
+     "cached_tokens": 5632,
+     "output_tokens": 203,
+     "reasoning_tokens": 67,
+     "latency_ms": 2471,
+     "cost_usd": 0.0023394,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "장소는 Bahen Centre로 해줘",
+     "reply": "좋아요. **Bahen Centre**로 바꾼 초안으로 다시 잡아둘게요. 시간은 그대로 **10월 8일 오후 3시~4시**입니다.",
+     "proposal": {
+      "token": "9zVkz7RpAGwGyxqrUc8N6A",
+      "expires_at": "2026-09-27 14:31:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "팀 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-08",
+        "start_time": "2026-10-08T15:00:00",
+        "end_time": "2026-10-08T16:00:00",
+        "time_display": "오후 3:00 – 오후 4:00 (1시간)",
+        "importance": 2,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "end_time",
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 8803,
+     "cached_tokens": 6656,
+     "output_tokens": 794,
+     "reasoning_tokens": 655,
+     "latency_ms": 6711,
+     "cost_usd": 0.0056824499999999995,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "1시간 반으로 늘려줘",
+     "reply": "좋아요. **10월 8일 오후 3시~4시 30분**으로 늘려서 다시 잡아둘게요.  \n장소는 **Bahen Centre** 그대로입니다.",
+     "proposal": {
+      "token": "jNzZSIC9m9OA1OmxB60Qrw",
+      "expires_at": "2026-09-27 14:32:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "팀 미팅",
+        "event_type": "scheduled",
+        "date": "2026-10-08",
+        "start_time": "2026-10-08T15:00:00",
+        "end_time": "2026-10-08T16:30:00",
+        "time_display": "오후 3:00 – 오후 4:30 (1시간 30분)",
+        "importance": 2,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": {
+         "id": 1,
+         "name": "Bahen Centre",
+         "travel_minutes": 10,
+         "is_new": false
+        },
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 9163,
+     "cached_tokens": 5120,
+     "output_tokens": 255,
+     "reasoning_tokens": 116,
+     "latency_ms": 4245,
+     "cost_usd": 0.00456375,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    },
+    {
+     "say": "좋아",
+     "reply": "저장했어요. **10월 8일 오후 3시~4시 30분, Bahen Centre의 팀 미팅**으로 등록됐습니다.",
+     "proposal": null,
+     "executed": [
+      {
+       "action_id": 1,
+       "summary": "'팀 미팅' 일정 생성"
+      }
+     ],
+     "tools": [
+      "confirm_pending"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 9622,
+     "cached_tokens": 7168,
+     "output_tokens": 102,
+     "reasoning_tokens": 29,
+     "latency_ms": 3390,
+     "cost_usd": 0.0028371,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "en_weekly_lecture",
+   "tags": [
+    "다국어"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "Add CSC369 lecture every Tuesday and Thursday 1-2pm during the Lecture Period",
+     "reply": "I’ve drafted a recurring CSC369 lecture for Tuesdays and Thursdays, 1:00–2:00 PM, during Lecture Period. I inferred the importance as a lecture and set it to start with the first matching date in the period; if you want, I can also add a location.",
+     "proposal": {
+      "token": "hXggpnrtYdTlJht9Ia0KVA",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "CSC369 lecture",
+        "event_type": "scheduled",
+        "date": "2026-09-29",
+        "start_time": "2026-09-29T13:00:00",
+        "end_time": "2026-09-29T14:00:00",
+        "time_display": "1:00 PM – 2:00 PM (1h)",
+        "importance": 3,
+        "recurring": true,
+        "recurrence_start": "2026-09-03",
+        "recurrence_rule": "FREQ=WEEKLY;BYDAY=TU,TH",
+        "date_range": {
+         "id": 2,
+         "name": "Lecture Period",
+         "start_date": "2026-09-03",
+         "end_date": "2026-12-08",
+         "is_new": false
+        },
+        "location": null,
+        "preview_dates": [
+         "2026-09-29",
+         "2026-10-01",
+         "2026-10-06"
+        ],
+        "warnings": [],
+        "inferred_fields": [
+         "importance",
+         "recurrence.start_date"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 7335,
+     "cached_tokens": 6144,
+     "output_tokens": 475,
+     "reasoning_tokens": 296,
+     "latency_ms": 4387,
+     "cost_usd": 0.0034915500000000004,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "en_problem_set_deadline",
+   "tags": [
+    "다국어"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "Problem set 3 is due Oct 5 at 11:59pm",
+     "reply": "I drafted a deadline for **Problem set 3** on **Oct 5 at 11:59 PM**. It’s set as an important submission deadline; if you want, I can save it.",
+     "proposal": {
+      "token": "FBPLNSa8Eqx5QiNrtYPBlQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "create_event",
+        "title": "Problem set 3",
+        "event_type": "deadline",
+        "date": "2026-10-05",
+        "start_time": null,
+        "end_time": "2026-10-05T23:59:00",
+        "time_display": "Due 11:59 PM",
+        "importance": 4,
+        "recurring": false,
+        "recurrence_start": null,
+        "recurrence_rule": null,
+        "date_range": null,
+        "location": null,
+        "preview_dates": [],
+        "warnings": [],
+        "inferred_fields": [
+         "importance"
+        ]
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "propose_create_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 2,
+     "input_tokens": 6968,
+     "cached_tokens": 6144,
+     "output_tokens": 237,
+     "reasoning_tokens": 110,
+     "latency_ms": 2913,
+     "cost_usd": 0.0021453,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "en_delete_one_lecture",
+   "tags": [
+    "다국어",
+    "삭제"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "Cancel only the ECE360 Lecture on Wednesday, September 30",
+     "reply": "I’ve prepared to cancel only the Wednesday, September 30 occurrence of **ECE360 Lecture**. Please confirm if you want me to save that deletion.",
+     "proposal": {
+      "token": "YMt6vCkGHOJadLJEtUrLgQ",
+      "expires_at": "2026-09-27 14:30:00",
+      "items": [
+       {
+        "draft_id": "d1",
+        "kind": "delete_event",
+        "scope": "instance",
+        "targets": [
+         {
+          "event_id": 1,
+          "instance_id": 8,
+          "title": "ECE360 Lecture",
+          "date": "2026-09-30",
+          "recurring": true,
+          "time_display": "10:00 AM – 11:00 AM (1h)",
+          "location": null
+         }
+        ],
+        "warnings": [],
+        "inferred_fields": []
+       }
+      ],
+      "warnings": []
+     },
+     "executed": [],
+     "tools": [
+      "search_events",
+      "propose_delete_event"
+     ],
+     "tool_errors": [],
+     "llm_calls": 3,
+     "input_tokens": 10532,
+     "cached_tokens": 6144,
+     "output_tokens": 209,
+     "reasoning_tokens": 81,
+     "latency_ms": 3818,
+     "cost_usd": 0.0046923,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  },
+  {
+   "id": "unrelated_request",
+   "tags": [
+    "기타"
+   ],
+   "passed": true,
+   "reasons": [],
+   "turns": [
+    {
+     "say": "오늘 저녁 뭐 먹을까? 메뉴 추천해줘",
+     "reply": "일정 관리만 도와드릴 수 있어요. 원하시면 오늘 저녁 메뉴를 고를 때 기준에 맞춰 빠르게 몇 가지 추천은 해드릴게요.",
+     "proposal": null,
+     "executed": [],
+     "tools": [],
+     "tool_errors": [],
+     "llm_calls": 1,
+     "input_tokens": 3283,
+     "cached_tokens": 3072,
+     "output_tokens": 75,
+     "reasoning_tokens": 30,
+     "latency_ms": 1300,
+     "cost_usd": 0.00072615,
+     "stop_reason": null,
+     "error": null,
+     "failures": []
+    }
+   ]
+  }
+ ]
+}

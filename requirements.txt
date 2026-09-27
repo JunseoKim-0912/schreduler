@@ -13,3 +13,4 @@ pytest-cov
 httpx
 freezegun
 tzdata
+pyyaml
