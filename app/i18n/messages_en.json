@@ -79,5 +79,14 @@
   "command.not_found_suggest": "I couldn't find '{title}'. Did you mean one of these? {candidates}",
   "draft.ask_end_time": "What time does it end?",
   "draft.ask_deadline": "When is it due?",
-  "persona.fallback_default": "I'm not sure what you mean. Would you tell me about your day?"
+  "persona.fallback_default": "I'm not sure what you mean. Would you tell me about your day?",
+  "time.clock_am": "{hour}:{minute} AM",
+  "time.clock_pm": "{hour}:{minute} PM",
+  "time.range": "{start} – {end} ({duration})",
+  "time.range_next_day": "{start} – {end} (next day) ({duration})",
+  "time.range_days_later": "{start} – {end} ({days} days later) ({duration})",
+  "time.deadline": "Due {time}",
+  "time.hours": "{hours}h",
+  "time.minutes": "{minutes}m",
+  "time.hours_minutes": "{hours}h {minutes}m"
 }

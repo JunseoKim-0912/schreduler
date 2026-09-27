@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import time
 from datetime import date
 from datetime import date as dt_date
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 import httpx
 from pydantic import BaseModel, Field
@@ -496,7 +497,7 @@ def fill_draft_edit_for_user(
         raise LLMResponseParsingError(f"LLM 초안 수정 응답이 예상한 형식이 아닙니다: {raw_content!r}") from exc
 
 
-def _prompt_cache_key(task: PromptTask, cacheable_prefix: str) -> str:
+def _prompt_cache_key(task: PromptTask | ResponsesTask, cacheable_prefix: str) -> str:
     digest = hashlib.sha256(cacheable_prefix.encode("utf-8")).hexdigest()[:16]
     return f"{task}:{digest}"
 
@@ -950,3 +951,252 @@ def get_event_titles(db: Session, user_id: int) -> list[str]:
         select(Event.title).where(Event.user_id == user_id, Event.parent_event_id.is_(None)).distinct()
     ).scalars()
     return sorted(titles)
+
+
+# --- Responses API (일정 어시스턴트) -------------------------------------------------
+# gpt-5.6-luna는 Chat Completions에서 도구와 추론을 함께 쓸 수 없어서 어시스턴트는 /v1/responses를 쓴다.
+# 대화 상태는 우리 DB가 갖고(previous_response_id 미사용) store=false로 호출하므로, 도구 결과를 넣어 이어서
+# 부를 때 직전 응답의 output(암호화된 reasoning 포함)을 입력에 그대로 다시 넣어야 추론이 이어진다.
+
+RESPONSES_URL = "https://api.openai.com/v1/responses"
+RESPONSES_TIMEOUT_SECONDS = 20.0
+
+ResponsesTask = Literal["assistant", "assistant_probe"]
+ResponsesInputItem = dict[str, Any]
+
+
+class FunctionTool(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    strict: bool = True
+
+    def to_api(self) -> dict[str, Any]:
+        return {"type": "function", **self.model_dump()}
+
+
+class ToolCall(BaseModel):
+    call_id: str
+    name: str
+    arguments: str  # 모델이 준 JSON 문자열 그대로
+
+    def parsed_arguments(self) -> dict[str, Any]:
+        try:
+            value = json.loads(self.arguments)
+        except json.JSONDecodeError as exc:
+            raise LLMResponseParsingError(f"도구 {self.name} 인자가 JSON이 아닙니다: {self.arguments!r}") from exc
+        if not isinstance(value, dict):
+            raise LLMResponseParsingError(f"도구 {self.name} 인자가 객체가 아닙니다: {self.arguments!r}")
+        return value
+
+
+class ResponsesUsage(BaseModel):
+    input_tokens: int = 0
+    cached_tokens: int = 0
+    output_tokens: int = 0
+    reasoning_tokens: int = 0
+
+
+class ResponsesResult(BaseModel):
+    response_id: str
+    status: str
+    text: str
+    tool_calls: list[ToolCall]
+    # 다음 호출 입력에 다시 넣을 원본 output 항목들 (reasoning, function_call, message)
+    output_items: list[ResponsesInputItem]
+    usage: ResponsesUsage | None
+    latency_ms: int
+    model: str
+    reasoning_effort: str | None
+
+
+class ResponsesCaller(Protocol):
+    """ResponsesClient와 테스트용 가짜 클라이언트가 함께 따르는 인터페이스."""
+
+    def create(
+        self,
+        *,
+        task: ResponsesTask,
+        instruction_blocks: list[str],
+        tools: list[FunctionTool],
+        input_items: list[ResponsesInputItem],
+    ) -> ResponsesResult: ...
+
+
+def user_message(text: str) -> ResponsesInputItem:
+    return {"role": "user", "content": text}
+
+
+def with_tool_outputs(
+    input_items: list[ResponsesInputItem], result: ResponsesResult, outputs: dict[str, object]
+) -> list[ResponsesInputItem]:
+    """도구 결과를 넣어 이어서 부를 입력: 지금까지의 입력 + 직전 응답의 output 전체 + call_id별 도구 결과."""
+    missing = [call.call_id for call in result.tool_calls if call.call_id not in outputs]
+    if missing:
+        raise ValueError(f"결과가 없는 도구 호출이 있습니다: {missing}")
+    results: list[ResponsesInputItem] = []
+    for call in result.tool_calls:
+        value = outputs[call.call_id]
+        output = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+        results.append({"type": "function_call_output", "call_id": call.call_id, "output": output})
+    return [*input_items, *result.output_items, *results]
+
+
+def build_responses_payload(
+    task: ResponsesTask,
+    instruction_blocks: list[str],
+    tools: list[FunctionTool],
+    input_items: list[ResponsesInputItem],
+    *,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+) -> dict[str, object]:
+    """고정 지시(instructions)와 도구 정의가 프롬프트 앞(캐시 프리픽스)에 오고, 매번 바뀌는 문맥·대화는
+    input에만 둔다. temperature는 넣지 않는다 (추론 모델이 거부한다)."""
+    instructions = "\n\n".join(instruction_blocks)
+    tool_defs = [tool.to_api() for tool in tools]
+    cacheable_prefix = instructions + json.dumps(tool_defs, ensure_ascii=False, sort_keys=True)
+    return {
+        "model": model or settings.assistant_model,
+        "instructions": instructions,
+        "tools": tool_defs,
+        "input": input_items,
+        "reasoning": {"effort": reasoning_effort or settings.assistant_reasoning_effort},
+        "store": False,
+        "include": ["reasoning.encrypted_content"],
+        "prompt_cache_key": _prompt_cache_key(task, cacheable_prefix),
+    }
+
+
+def _parse_responses_usage(body: dict[str, Any]) -> ResponsesUsage | None:
+    usage = body.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return ResponsesUsage(
+        input_tokens=usage.get("input_tokens", 0),
+        cached_tokens=(usage.get("input_tokens_details") or {}).get("cached_tokens", 0),
+        output_tokens=usage.get("output_tokens", 0),
+        reasoning_tokens=(usage.get("output_tokens_details") or {}).get("reasoning_tokens", 0),
+    )
+
+
+def _parse_responses_body(body: dict[str, Any], latency_ms: int) -> ResponsesResult:
+    output = body.get("output")
+    if not isinstance(output, list):
+        raise LLMResponseParsingError(f"Responses API 응답에 output 배열이 없습니다: {body!r}")
+    texts: list[str] = []
+    tool_calls: list[ToolCall] = []
+    try:
+        for item in output:
+            if item["type"] == "function_call":
+                tool_calls.append(ToolCall(call_id=item["call_id"], name=item["name"], arguments=item.get("arguments", "")))
+            elif item["type"] == "message":
+                texts.extend(part["text"] for part in item.get("content", []) if part.get("type") == "output_text")
+    except (KeyError, TypeError) as exc:
+        raise LLMResponseParsingError(f"Responses API output 항목 형식이 예상과 다릅니다: {output!r}") from exc
+    return ResponsesResult(
+        response_id=body.get("id", ""),
+        status=body.get("status", ""),
+        text="".join(texts),
+        tool_calls=tool_calls,
+        output_items=output,
+        usage=_parse_responses_usage(body),
+        latency_ms=latency_ms,
+        model=body.get("model", ""),
+        reasoning_effort=(body.get("reasoning") or {}).get("effort"),
+    )
+
+
+def _log_responses_usage(payload: dict[str, object], result: ResponsesResult) -> None:
+    usage = result.usage
+    cache_key = payload.get("prompt_cache_key", "-")
+    if usage is None:
+        logger.info("[LLM usage] api=responses cache_key=%s latency_ms=%d usage 정보 없음", cache_key, result.latency_ms)
+        return
+    hit_ratio = usage.cached_tokens / usage.input_tokens if usage.input_tokens else 0.0
+    logger.info(
+        "[LLM usage] api=responses model=%s effort=%s cache_key=%s input=%d cached=%d (%.0f%%) output=%d "
+        "reasoning=%d latency_ms=%d tool_calls=%d status=%s",
+        result.model or payload.get("model"),
+        result.reasoning_effort,
+        cache_key,
+        usage.input_tokens,
+        usage.cached_tokens,
+        hit_ratio * 100,
+        usage.output_tokens,
+        usage.reasoning_tokens,
+        result.latency_ms,
+        len(result.tool_calls),
+        result.status,
+    )
+
+
+def post_responses(
+    payload: dict[str, object],
+    http_client: httpx.Client | None = None,
+    *,
+    timeout: float = RESPONSES_TIMEOUT_SECONDS,
+) -> ResponsesResult:
+    """/v1/responses 한 번 호출. 도구 호출·텍스트·토큰 사용량·지연 시간을 돌려주고 사용량을 로그로 남긴다."""
+    if not settings.llm_api_key:
+        raise LLMConfigError("LLM_API_KEY가 설정되지 않았습니다 (.env 확인)")
+
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    owns_client = http_client is None
+    client = http_client or httpx.Client()
+    started = time.perf_counter()
+    try:
+        response = client.post(RESPONSES_URL, json=payload, headers=headers, timeout=timeout)
+    except httpx.TimeoutException as exc:
+        raise LLMRequestError(f"LLM API 호출이 {timeout:g}초 안에 끝나지 않았습니다: {exc}") from exc
+    except httpx.HTTPError as exc:
+        raise LLMRequestError(f"LLM API 호출에 실패했습니다: {exc}") from exc
+    finally:
+        if owns_client:
+            client.close()
+    latency_ms = round((time.perf_counter() - started) * 1000)
+
+    if response.status_code >= 400:
+        raise LLMRequestError(f"LLM API가 오류를 반환했습니다 ({response.status_code}): {response.text}")
+    try:
+        body = response.json()
+    except json.JSONDecodeError as exc:
+        raise LLMResponseParsingError(f"LLM 응답이 JSON이 아닙니다: {response.text!r}") from exc
+    if not isinstance(body, dict):
+        raise LLMResponseParsingError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}")
+
+    result = _parse_responses_body(body, latency_ms)
+    _log_responses_usage(payload, result)
+    if result.status != "completed":
+        logger.warning("[LLM] Responses 응답이 완료되지 않았습니다: status=%s details=%s", result.status, body.get("incomplete_details"))
+    return result
+
+
+class ResponsesClient:
+    """실제 /v1/responses 클라이언트. model·reasoning_effort를 생략하면 ASSISTANT_* 설정을 쓴다."""
+
+    def __init__(
+        self,
+        http_client: httpx.Client | None = None,
+        *,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+        timeout: float = RESPONSES_TIMEOUT_SECONDS,
+    ) -> None:
+        self.http_client = http_client
+        self.model = model
+        self.reasoning_effort = reasoning_effort
+        self.timeout = timeout
+
+    def create(
+        self,
+        *,
+        task: ResponsesTask,
+        instruction_blocks: list[str],
+        tools: list[FunctionTool],
+        input_items: list[ResponsesInputItem],
+    ) -> ResponsesResult:
+        payload = build_responses_payload(
+            task, instruction_blocks, tools, input_items, model=self.model, reasoning_effort=self.reasoning_effort
+        )
+        return post_responses(payload, self.http_client, timeout=self.timeout)

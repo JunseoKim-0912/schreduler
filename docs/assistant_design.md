@@ -1,0 +1,110 @@
+# 일정 어시스턴트(에이전트) 설계 — v4 전환안
+
+- 작성: 2026-09-27
+- 배경: 자연어 일정 입력을 "슬롯필링 + 손으로 짠 규칙"(event_parse_service, 1093줄)에서 "LLM이 도구를 써서 초안을 제안하는 에이전트"로 바꾼다. 최근 버그(2주마다 무시, 장소 수정 불가, 마감일 422, 대화 상태 누수, 오전 11시~새벽 1시)는 모두 슬롯과 규칙을 하나씩 덧붙이는 구조에서 나왔다.
+- 원칙 한 줄: **LLM은 추론하고 제안한다. 백엔드는 검증하고 저장한다. 사용자는 확인한다.**
+
+---
+
+## 1. 동작 방식 (사용자 입장)
+
+1. 사용자가 자유롭게 말한다. 예: "ECE360 Lab 격주 화요일 9-12시 9/22부터 Lecture period 동안"
+2. 어시스턴트는 되묻기보다 **상식적으로 추론해서 초안을 만든다.** 빠진 값(중요도, 종료 시각, 반복 기간 등)은 합리적인 기본값으로 채우고, 추론한 항목에는 "추정" 표시를 붙인다.
+3. 확인 카드로 "이렇게 만들까요?"를 보여준다. 반복이면 처음 3회차 날짜도 보여준다. 이상한 값(자정을 넘는 일정, 12시간 초과, 과거 날짜 등)은 경고로 표시한다.
+4. 마음에 안 들면 자연어로 고친다("7시로", "매주로", "장소는 Bahen"). 어시스턴트가 초안을 다시 만든다.
+5. [만들기] 버튼이나 "좋아" 같은 말로 확정하면 그때 DB에 저장된다. 모든 실행은 되돌리기 기록을 남긴다.
+6. **되묻는 경우는 추론이 불가능할 때만.** 예: 무엇을 할지 전혀 알 수 없음, 삭제 대상 후보가 여러 개인데 고를 근거가 없음.
+
+## 2. API 선택
+
+- **Responses API(`/v1/responses`) + 추론(reasoning) 켜기.** gpt-5.6-luna는 Chat Completions에서 도구와 추론을 같이 쓸 수 없다. 날짜·격주·오전/오후처럼 추론이 가장 필요한 곳이 바로 이 기능이므로 추론을 끄지 않는다.
+- `reasoning.effort`는 환경변수(`ASSISTANT_REASONING_EFFORT`, 기본 `low`)로 둔다. 평가 세트(§8)로 none/low/medium을 비교해 최종값을 정한다.
+- **모델도 따로 설정한다:** `ASSISTANT_MODEL`(기본값은 `LLM_MODEL`과 같게). 페르소나·체크인은 계속 `LLM_MODEL`을 쓴다. 더 저렴한 모델(예: `gpt-5-nano` 계열)로 내릴지는 평가 세트로 결정한다 — 후보 모델 × effort 조합을 돌려서 **통과율 기준(예: 90% 이상, 격주·오전/오후·마감 케이스는 전부 통과)을 넘는 것 중 가장 싼 조합**을 고른다.
+- 기존 Chat Completions 경로(페르소나 대화, 미준수 피드백, 체크인)는 **그대로 둔다.** 새 Responses 클라이언트는 옆에 추가한다.
+- 대화 상태는 OpenAI 쪽 `previous_response_id`에 맡기지 않고 **우리 DB에 저장**한다 (모델·공급자 교체 가능성, 테스트 용이성).
+
+## 3. 도구 (LLM에게 주는 것)
+
+도구는 **읽기 또는 제안만** 한다. DB에 쓰는 도구는 없다. 단, `confirm_pending`만 예외이며 §5의 조건을 통과해야 실행된다.
+
+| 도구 | 역할 | 비고 |
+|---|---|---|
+| `search_events(query?, date_from?, date_to?, weekday?)` | 제목(느슨한 매칭)·날짜·요일로 이벤트/회차 검색 | 반환 ID만 이후 도구에 쓸 수 있음. 기존 match_events/resolve/list_instances_in_range 재사용 |
+| `propose_create_event(...)` | 일반/마감(Task) 이벤트 초안 | event_type, title, 날짜·시각, importance, recurrence{freq, interval, by_day, start_date}, date_range(기존 이름 또는 new{name,start,end}), location(기존 이름 또는 new{name, travel_minutes}), inferred_fields[] |
+| `propose_update_event(target_ids, scope, changes)` | 수정 초안 | scope = instance / series. changes에 시각·제목·중요도·장소·마감·반복 포함 |
+| `propose_delete_event(target_ids, scope)` | 삭제 초안 | |
+| `propose_date_range(action, ...)` | 반복 기간 생성·수정·삭제 초안 | 사용 중인 기간 삭제는 경고 |
+| `confirm_pending(token)` | 사용자가 채팅으로 승인했을 때 대기 중인 초안 실행 | §5 조건 |
+
+- 한 턴에 여러 초안을 묶어 제안할 수 있다 (예: 새 기간 + 그 기간을 쓰는 이벤트).
+- 제안 도구는 백엔드 검증(§4)을 거친 **정규화된 초안 + 경고/에러**를 돌려준다. 에러면 LLM이 고쳐서 다시 부른다.
+- 루프 제한: 한 턴에 LLM 호출 최대 6회, 총 20초. 넘으면 지금까지의 초안을 보여주거나 짧게 되묻는다.
+
+## 4. 백엔드 검증 (안전망)
+
+event_parse_service에 엉켜 있는 규칙을 **순수 함수 모듈**(예: `app/services/draft_rules.py`)로 떼어 낸다. 도구와 기존 코드가 같은 함수를 쓴다 (규칙이 두 벌이 되지 않게).
+
+- 에러 (초안 거절): 종료 ≤ 시작, deadline인데 start_time 있음, RRULE 조립 불가, 존재하지 않는 ID.
+- 경고 (카드에 표시, 사용자 확인 필요): 자정을 넘음, 12시간 초과, 과거 날짜, 반복 시작일이 요일과 불일치, 사용 중인 기간 삭제, 여러 개를 한꺼번에 삭제/수정.
+- 정규화: 연도 없는 날짜, RRULE 조립(INTERVAL 포함), dtstart = 첫 회차, 미리보기 3회차, 시간 표시("오전 11:00 – 오후 1:00 (2시간)", "(다음 날)").
+
+## 5. 확인과 실행
+
+- 제안 결과는 `PendingProposal`(DB)에 토큰과 함께 저장, 30분 뒤 만료. 같은 세션의 새 제안이 이전 제안을 대체한다.
+- 실행 경로 두 가지:
+  1. 버튼: 기존 `POST /events/commands/confirm` 흐름 재사용 (또는 `/assistant/confirm`).
+  2. 채팅 승인("좋아", "만들어줘"): LLM이 `confirm_pending`을 부른다. 백엔드는 **그 제안이 이전 턴에 이미 사용자에게 보여진 것**인지 확인한다. 같은 턴에 만든 제안을 스스로 승인하는 건 거절한다.
+- 실행은 기록이 남는 서비스 함수(create_event_from_nl, execute, date_range_command_service 등)만 쓴다. 기록 없는 함수(create_event, delete_event 등)는 도구에서 호출하지 않는다.
+
+## 6. 프롬프트 구성 (캐싱 고려)
+
+순서 (앞쪽일수록 덜 바뀜):
+1. 역할·행동 원칙·기본값 규칙 (고정)
+2. 도구 정의 (고정)
+3. 반복 기간 목록, 장소 목록 (가끔 바뀜)
+4. 현재 시각 블록: 오늘 날짜 + **요일** + 현재 시각 + 시간대(America/Toronto)
+5. 최근 대화(요약 포함), 대기 중인 초안
+6. 사용자 발화
+
+이벤트 제목 목록은 프롬프트에 넣지 않고 `search_events`로 찾는다 (일정이 바뀔 때마다 캐시가 깨지는 문제 해결).
+
+**상식 기본값 (추론 가이드, 확인 카드에 "추정" 표시):**
+- 종료 시각 없음 → 1시간 (마감은 제외).
+- 오전/오후 없음 → 상식으로 판단. "11-1"은 오전 11시~오후 1시. 밤을 넘기려면 "밤", "새벽" 같은 근거가 있어야 한다.
+- 마감 시각 없음 → 23:59.
+- 중요도 없음 → 제목으로 추정 (시험 5, 퀴즈·과제 4, 강의·랩 3, 약속 2, 개인 1, 수면 없음).
+- 반복 기간 없음 → 이름이 관련된 기간을 추정 (예: 강의·랩 → "Lecture Period"). 맞는 게 없으면 가장 최근 학기 기간.
+- "과제 제출", "~까지", "마감" → deadline.
+
+## 7. 저장소 (새 테이블)
+
+- `AssistantSession`: id, user_id, created_at, updated_at
+- `AssistantMessage`: id, session_id, role(user/assistant/tool), content(JSON: 텍스트, 도구 호출, 도구 결과), created_at
+- `PendingProposal`: id, session_id, token, proposals(JSON), shown_at, expires_at, status(pending/confirmed/cancelled/expired/superseded)
+- `AssistantTurnLog`: id, session_id, llm_calls, input_tokens, cached_tokens, output_tokens, reasoning_tokens, latency_ms, reasoning_effort, created_at (비용·지연 추적)
+
+## 8. 평가 세트
+
+- `tests/assistant_eval/cases.yaml`: 실제 문장 25~30개와 기대하는 초안 속성 (예: `rrule contains INTERVAL=2`, `start 11:00`, `end 13:00`, `event_type deadline`).
+- 첫 케이스들은 실제로 실패했던 문장들: 격주 ECE360 Lab, "11:00-1:00", "9/29 11:30 pm MAT389 과제 제출날이야", "월요일의 ECE360 Lecture에 장소 넣어줘 Galbraith 304", "Lecture End Date는 12월 8일이니깐 2학기 시작부터 그때까지", "10월 1일 8시 UTKESA 미팅 1시간", "반복 없이 한번만", "전부 없애줘" 등.
+- `python -m app.scripts.eval_assistant --effort low`: 실제 모델로 돌려 통과율, 평균 LLM 호출 수, 토큰, 지연을 표로 출력. pytest에는 넣지 않는다 (실제 API 비용).
+- 단위 테스트는 "도구 호출 순서를 미리 적어 둔 가짜 LLM"으로 시나리오를 검증한다.
+
+## 9. 전환 단계
+
+| 단계 | 내용 | 기존 기능 |
+|---|---|---|
+| A | Responses API 클라이언트 + 사용량 로깅 + 가짜 LLM 도구, 검증 규칙을 draft_rules.py로 분리 | 그대로 동작 (규칙만 공용 함수로 이동) |
+| B | 에이전트 코어: 도구, 루프, DB 세션/제안, `POST /assistant/chat`, 확인 흐름, 시나리오 테스트 | 그대로 |
+| C | 평가 세트 + eval 스크립트, 모델 × reasoning effort 비교 후 기본값 확정 | 그대로 |
+| D | 프론트엔드: 이벤트 탭에 "새 어시스턴트" 전환 스위치, 추정 배지·경고·미리보기 카드 | 스위치로 옛 방식 선택 가능 |
+| E | 며칠 실사용 후 옛 `/events/parse`·slot fill 코드와 관련 테스트 제거, 기획보고서 FR-2 v4 반영 | 제거 |
+
+각 단계는 Claude Code 새 세션(`/clear`)에서 이 문서를 먼저 읽고 시작한다.
+
+## 10. 열린 질문
+
+1. 어시스턴트 모델과 reasoning effort 최종 조합 (C단계 평가 후). 싼 모델 후보가 Responses API에서 도구 + 추론을 지원하는지도 확인 필요.
+2. 되돌리기를 채팅("방금 거 취소해줘")으로도 할지. 지금은 버튼만.
+3. 사용자별 시간대 필드(User.timezone). 지금은 서버 설정 하나(America/Toronto).
+4. 장기 기억: 페르소나 대화(FR-9)의 장기 문맥 기억에는 MemMachine 도입을 검토한다 (어시스턴트 전환 이후 별도 단계). 어시스턴트의 세션·초안·확인 토큰처럼 정확해야 하는 상태는 계속 SQLite 테이블(§7)에 둔다.

@@ -79,5 +79,14 @@
   "command.not_found_suggest": "'{title}'에 해당하는 일정을 찾지 못했어요. 혹시 이 중에 있나요? {candidates}",
   "draft.ask_end_time": "몇 시에 끝나나요?",
   "draft.ask_deadline": "마감 시각이 언제인가요?",
-  "persona.fallback_default": "무슨 말인지 잘 모르겠어요. 오늘 하루 얘기를 들려줄래요?"
+  "persona.fallback_default": "무슨 말인지 잘 모르겠어요. 오늘 하루 얘기를 들려줄래요?",
+  "time.clock_am": "오전 {hour}:{minute}",
+  "time.clock_pm": "오후 {hour}:{minute}",
+  "time.range": "{start} – {end} ({duration})",
+  "time.range_next_day": "{start} – {end} (다음 날) ({duration})",
+  "time.range_days_later": "{start} – {end} ({days}일 뒤) ({duration})",
+  "time.deadline": "{time} 마감",
+  "time.hours": "{hours}시간",
+  "time.minutes": "{minutes}분",
+  "time.hours_minutes": "{hours}시간 {minutes}분"
 }

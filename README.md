@@ -80,7 +80,10 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build  
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./schreduler.db` | SQLAlchemy DB URL. PostgreSQL은 `postgresql+psycopg://user:pw@host:5432/db` |
 | `LLM_API_KEY` | (없음) | LLM API 키. 없으면 LLM 엔드포인트가 500을 돌려준다 |
-| `LLM_MODEL` | `gpt-5.6-luna` | 사용할 모델 |
+| `LLM_MODEL` | `gpt-5.6-luna` | 페르소나 대화·체크인·미준수 피드백·기존 자연어 일정 추가에 쓰는 모델 |
+| `ASSISTANT_MODEL` | (`LLM_MODEL` 값) | 일정 어시스턴트(Responses API)에 쓸 모델 |
+| `ASSISTANT_REASONING_EFFORT` | `low` | 일정 어시스턴트의 `reasoning.effort` |
+| `APP_TIMEZONE` | `America/Toronto` | 날짜·시각 해석 기준 시간대 (IANA 이름) |
 | `FIREBASE_CREDENTIALS_PATH` | (없음) | FCM 서비스 계정 JSON 경로. 없으면 푸시는 로그만 남기고 건너뛴다 |
 | `TELEGRAM_BOT_TOKEN` | (없음) | 에스컬레이션용 텔레그램 봇 토큰. 없으면 로그만 남긴다 |
 | `LOG_LEVEL` | `INFO` | 앱 로그 레벨 |

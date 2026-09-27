@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 
 import httpx
 from sqlalchemy.orm import Session
@@ -23,6 +23,7 @@ from app.schemas.event_parse import (
     NewLocationDraft,
 )
 from app.services import date_range_command_service as ranges
+from app.services import draft_rules as rules
 from app.services.llm_client import (
     ClarifyingQuestion,
     DraftEditResult,
@@ -33,7 +34,6 @@ from app.services.llm_client import (
     fill_event_slots_for_user,
 )
 from app.services.common import require
-from app.services.recurrence import build_recurrence_rule, occurrences
 from app.services.event_command_service import (
     CommandDescription,
     Target,
@@ -61,8 +61,8 @@ logger = logging.getLogger(__name__)
 
 def _parse_hhmm(value: str) -> time:
     try:
-        return datetime.strptime(value, "%H:%M").time()
-    except ValueError as exc:
+        return rules.parse_hhmm(value)
+    except rules.DraftRuleError as exc:
         raise LLMResponseParsingError(
             f"LLM이 채운 시각 슬롯이 HH:MM 형식이 아닙니다: {value!r}"
         ) from exc
@@ -80,7 +80,6 @@ _CLOCK_HOUR = re.compile(r"(?<![\d:])(\d{1,2})\s*(?:시(?!간)|:[0-5]\d)")
 _MERIDIEM_WORD = re.compile(r"오전|오후|아침|점심|저녁|밤|새벽|낮|정오|자정|(?<![a-z])[ap]\.?m(?![a-z])", re.IGNORECASE)
 _PM_ANSWER = re.compile(r"오후|저녁|밤|낮|(?<![a-z])p\.?m(?![a-z])", re.IGNORECASE)
 _AM_ANSWER = re.compile(r"오전|아침|새벽|(?<![a-z])a\.?m(?![a-z])", re.IGNORECASE)
-_DATE_SLOT = re.compile(r"(?:(\d{4})-)?(\d{1,2})-(\d{1,2})")
 
 
 def ambiguous_hours(utterance: str) -> set[int]:
@@ -115,23 +114,10 @@ def meridiem_answer(utterance: str) -> bool | None:
 
 def resolve_event_date(value: str, today: date) -> date:
     """date 슬롯 값을 날짜로. 연도 없는 MM-DD는 오늘 이후(오늘 포함) 가장 가까운 그 날짜로 정한다."""
-    match = _DATE_SLOT.fullmatch(value.strip())
-    if match is None:
-        raise LLMResponseParsingError(f"LLM이 채운 날짜 슬롯이 YYYY-MM-DD/MM-DD 형식이 아닙니다: {value!r}")
-    year, month, day = match.groups()
     try:
-        if year:
-            return date(int(year), int(month), int(day))
-        for candidate_year in range(today.year, today.year + 5):  # 2월 29일은 다음 윤년까지 찾는다
-            try:
-                candidate = date(candidate_year, int(month), int(day))
-            except ValueError:
-                continue
-            if candidate >= today:
-                return candidate
-    except ValueError:
-        pass
-    raise LLMResponseParsingError(f"LLM이 채운 날짜 슬롯이 올바른 날짜가 아닙니다: {value!r}")
+        return rules.resolve_event_date(value, today)
+    except rules.DraftRuleError as exc:
+        raise LLMResponseParsingError(f"LLM이 채운 날짜 슬롯을 날짜로 해석할 수 없습니다: {value!r}") from exc
 
 
 def _is_recurring(session: SlotFillSession) -> bool:
@@ -229,7 +215,7 @@ def _enforce_date_range_rules(db: Session, session: SlotFillSession, user: User)
             session.clarifying_questions.append(_repeat_until_question(db, user))
 
 
-_WEEKDAY_CODES = ("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+_WEEKDAY_CODES = rules.WEEKDAY_CODES
 
 
 def _first_matching_day(value: str, by_day: list[str] | None, frequency: str | None) -> str:
@@ -237,10 +223,7 @@ def _first_matching_day(value: str, by_day: list[str] | None, frequency: str | N
         day = resolve_event_date(value, date.today())
     except LLMResponseParsingError:
         return value
-    if frequency == "WEEKLY" and by_day:
-        while _WEEKDAY_CODES[day.weekday()] not in by_day:
-            day += timedelta(days=1)
-    return day.isoformat()
+    return rules.first_matching_day(day, by_day, frequency).isoformat()
 
 
 def _range_bounds(db: Session, session: SlotFillSession, user: User) -> tuple[str | None, date | None, date | None]:
@@ -271,7 +254,7 @@ def _check_start_weekday(db: Session, session: SlotFillSession, user: User) -> N
     if session.start_weekday_asked or session.frequency != "WEEKLY" or not session.by_day:
         return
     start = _recurrence_start_date(db, session, user)
-    if start is None or _WEEKDAY_CODES[start.weekday()] in session.by_day:
+    if start is None or not rules.start_weekday_mismatch(start, session.frequency, session.by_day):
         return
     lang = user.preferred_language
     session.start_weekday_asked = True
@@ -315,9 +298,7 @@ def _enforce_create_rules(session: SlotFillSession, utterance: str, known_before
         _make_one_off(session)
         session.new_date_range = None
     if session.event_type == "deadline":
-        if not session.end_time and session.start_time:
-            session.end_time = session.start_time
-        session.start_time = None
+        session.start_time, session.end_time = rules.normalize_deadline_times(session.start_time, session.end_time)
         _drop_slots(session, ("start_time",))
     if _is_recurring(session):
         # 반복 일정의 첫 날짜는 선택이다(말하지 않으면 반복 기간 시작 뒤 첫 해당 요일). LLM이 물으려 해도 묻지 않는다.
@@ -369,7 +350,7 @@ def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> Eve
         )
 
     new_range = _resolve_new_range(db, session, user) if recurring and session.new_date_range else None
-    rule = build_recurrence_rule(session.frequency, session.by_day, session.interval) if recurring else None
+    rule = rules.build_rrule(session.frequency, session.by_day, session.interval) if recurring else None
     range_name, range_start, range_end = _range_bounds(db, session, user) if recurring else (None, None, None)
     preview: list[date] = []
     if recurring:
@@ -377,17 +358,15 @@ def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> Eve
         day = _recurrence_start_date(db, session, user)
         clock = _parse_hhmm(session.end_time if deadline else session.start_time)
         if day is None and range_start is not None:
-            candidates = occurrences(rule, datetime.combine(range_start, clock), range_start, range_end)
-            day = candidates[0] if candidates else range_start
+            day = rules.first_occurrence(rule, clock, range_start, range_end)
         day = day or _resolve_anchor_date(db, session.date_range_id)
         if range_start is not None:
-            preview = occurrences(rule, datetime.combine(day, clock), range_start, range_end)[:3]
+            preview = rules.preview_dates(rule, datetime.combine(day, clock), range_start, range_end)
     else:
         day = resolve_event_date(session.date, date.today())
-    start_time = None if deadline else datetime.combine(day, _parse_hhmm(session.start_time))
-    end_time = datetime.combine(day, _parse_hhmm(session.end_time))
-    if start_time is not None and end_time <= start_time:  # 23:00–00:30처럼 자정을 넘기면 다음 날 끝난다
-        end_time += timedelta(days=1)
+    start_time, end_time = rules.combine_times(
+        day, None if deadline else _parse_hhmm(session.start_time), _parse_hhmm(session.end_time)
+    )
     new_location = session.new_location
     return EventDraft(
         user_id=session.user_id,
@@ -750,12 +729,11 @@ def is_cancel_reply(utterance: str) -> bool:
 
 
 def _add_minutes(hhmm: str, minutes: int) -> str:
-    return (datetime.combine(date.today(), _parse_hhmm(hhmm)) + timedelta(minutes=minutes)).strftime("%H:%M")
+    return rules.add_minutes(_parse_hhmm(hhmm).strftime("%H:%M"), minutes)
 
 
 def _minutes_between(start: str, end: str) -> int:
-    delta = datetime.combine(date.today(), _parse_hhmm(end)) - datetime.combine(date.today(), _parse_hhmm(start))
-    return int(delta.total_seconds() // 60) % (24 * 60)
+    return rules.minutes_between(_parse_hhmm(start).strftime("%H:%M"), _parse_hhmm(end).strftime("%H:%M"))
 
 
 _EDITABLE = ("title", "date", "start_time", "end_time", "importance", "frequency", "by_day", "interval",
@@ -796,8 +774,9 @@ def _apply_draft_edit(db: Session, user: User, session: SlotFillSession, edit: D
 
     # 시간: 시작만 바꾸면 길이를 유지한다. 길이를 말하면 끝을 다시 계산한다.
     if session.event_type == "deadline":
-        if edit.end_time or edit.start_time:
-            session.end_time = edit.end_time or edit.start_time
+        _, due = rules.normalize_deadline_times(edit.start_time, edit.end_time)
+        if due:
+            session.end_time = due
     elif session.start_time or edit.start_time:
         old_start, old_end = session.start_time, session.end_time
         start = edit.start_time or old_start
@@ -810,7 +789,7 @@ def _apply_draft_edit(db: Session, user: User, session: SlotFillSession, edit: D
         else:
             end = old_end
         session.start_time = start
-        if edit.end_time and not edit.duration_minutes and _parse_hhmm(edit.end_time) <= _parse_hhmm(start):
+        if edit.end_time and not edit.duration_minutes and rules.end_not_after_start(_parse_hhmm(start), _parse_hhmm(edit.end_time)):
             session.end_time = None
             _ask(session, "end_time", render_message("draft.end_before_start", lang, start=start))
         else:

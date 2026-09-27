@@ -146,6 +146,15 @@ MessageKey = Literal[
     "weekday.FR",
     "weekday.SA",
     "weekday.SU",
+    "time.clock_am",
+    "time.clock_pm",
+    "time.range",
+    "time.range_next_day",
+    "time.range_days_later",
+    "time.deadline",
+    "time.hours",
+    "time.minutes",
+    "time.hours_minutes",
 ]
 
 
