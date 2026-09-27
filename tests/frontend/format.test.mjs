@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  assistantConfirmLabel,
   candidateReply,
   describeAction,
+  describeAssistantItem,
   describeCandidate,
   describeCommandTarget,
   describeEventTime,
@@ -162,5 +164,78 @@ describe("확인 카드 반복 설명", () => {
 
   test("단발 일정", () => {
     assert.equal(describeDraftRepeat({ is_recurring: false }), "반복 안 함 (한 번만)");
+  });
+});
+
+describe("새 어시스턴트 확인 카드", () => {
+  const biweekly = {
+    draft_id: "d1", kind: "create_event", title: "ECE360 Lab", event_type: "scheduled",
+    date: "2026-10-06", start_time: "2026-10-06T09:00:00", end_time: "2026-10-06T12:00:00",
+    time_display: "오전 9:00 – 오후 12:00 (3시간)", importance: 3, recurring: true,
+    recurrence_start: "2026-09-22", recurrence_rule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
+    date_range: { id: 1, name: "Lecture Period", start_date: "2026-09-03", end_date: "2026-12-08", is_new: false },
+    location: null, preview_dates: ["2026-10-06", "2026-10-20", "2026-11-03"],
+    warnings: [], inferred_fields: ["importance", "date_range"],
+  };
+  const value = (view, key) => view.rows.find((row) => row.key === key);
+
+  test("반복 일정: 시간 문자열 그대로, 미리보기 3회차, 기준일 보조 문구, 추정 배지", () => {
+    const view = describeAssistantItem(biweekly);
+    assert.equal(value(view, "time").value, "오전 9:00 – 오후 12:00 (3시간)");
+    assert.equal(value(view, "recurrence").value, "격주 화요일");
+    assert.equal(value(view, "preview").value, "10/6, 10/20, 11/3");
+    assert.equal(value(view, "date_range").value, "Lecture Period (9/3~12/8)");
+    assert.deepEqual(view.notes, ["9/22 기준 격주"]);
+    assert.equal(value(view, "importance").inferred, true);
+    assert.equal(value(view, "date_range").inferred, true);
+    assert.equal(value(view, "time").inferred, false);
+  });
+
+  test("기준일이 첫 회차와 같거나 매주 반복이면 보조 문구가 없다", () => {
+    assert.deepEqual(describeAssistantItem({ ...biweekly, recurrence_start: "2026-10-06" }).notes, []);
+    assert.deepEqual(describeAssistantItem({ ...biweekly, recurrence_rule: "FREQ=WEEKLY;BYDAY=TU" }).notes, []);
+  });
+
+  test("마감 일정과 경고, 하위 항목 추정(location.travel_minutes)", () => {
+    const view = describeAssistantItem({
+      kind: "create_event", title: "MAT389 과제", event_type: "deadline", date: "2026-09-29",
+      start_time: null, end_time: "2026-09-29T23:30:00", time_display: "오후 11:30 마감", importance: 4,
+      recurring: false, location: { id: null, name: "Bahen", travel_minutes: 15, is_new: true },
+      warnings: [{ code: "past_date", message: "이미 지난 날짜예요" }],
+      inferred_fields: ["location.travel_minutes"],
+    });
+    assert.equal(value(view, "event_type").value, "마감");
+    assert.equal(value(view, "time").label, "마감 시각");
+    assert.equal(value(view, "recurrence").value, "반복 안 함");
+    assert.equal(value(view, "location").value, "Bahen (이동 15분, 새로 등록)");
+    assert.equal(value(view, "location").inferred, true);
+    assert.deepEqual(view.warnings, ["⚠ 이미 지난 날짜예요"]);
+  });
+
+  test("삭제 초안은 대상 목록과 개수", () => {
+    const view = describeAssistantItem({
+      kind: "delete_event", scope: "series", warnings: [], inferred_fields: [],
+      targets: [
+        { title: "물리 퀴즈", date: "2026-09-29", recurring: false, time_display: "오후 6:00 – 오후 7:00 (1시간)" },
+        { title: "물리 강의", date: "2026-09-28", recurring: true, time_display: "오전 9:00 – 오전 10:00 (1시간)" },
+      ],
+    });
+    assert.equal(view.heading, "삭제할 일정 2개");
+    assert.deepEqual(view.targets, ["물리 퀴즈 · 2026-09-29 (화) · 오후 6:00 – 오후 7:00 (1시간)", "물리 강의 · 반복 전체"]);
+  });
+
+  test("수정 초안은 바뀐 시간을 화살표로", () => {
+    const view = describeAssistantItem({
+      kind: "update_event", scope: "instance", warnings: [], inferred_fields: [],
+      targets: [{ title: "물리 퀴즈", date: "2026-09-29", recurring: true, time_display: "오후 6:00 – 오후 7:00 (1시간)", new_time_display: "오후 7:00 – 오후 8:00 (1시간)" }],
+      changes: { start_time: "19:00", end_time: null, title: null, date: null, importance: null, location: null },
+    });
+    assert.equal(view.targets[0], "물리 퀴즈 · 2026-09-29 (화) · 오후 6:00 – 오후 7:00 (1시간) → 오후 7:00 – 오후 8:00 (1시간)");
+    assert.equal(value(view, "time").value, "19:00 – 그대로");
+  });
+
+  test("실행 버튼 이름", () => {
+    assert.equal(assistantConfirmLabel([{ kind: "create_range" }, { kind: "create_event" }]), "만들기");
+    assert.equal(assistantConfirmLabel([{ kind: "delete_event" }]), "실행");
   });
 });

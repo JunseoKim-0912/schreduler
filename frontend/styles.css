@@ -1115,3 +1115,147 @@ select:focus-visible {
 #locations-status[data-state="error"] {
   color: var(--error-text);
 }
+
+/* --- 이벤트 탭: 새 어시스턴트 / 기존 방식 스위치 --- */
+
+.events-main > .section-header-first {
+  flex-wrap: wrap;
+}
+
+.mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  padding: 2px;
+}
+
+.mode-switch button {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mode-switch button[aria-checked="true"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+
+.mode-switch button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* --- 새 어시스턴트 대화와 확인 카드 --- */
+
+.assistant-log {
+  max-height: min(560px, 70vh);
+}
+
+.bubble-thinking {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.assistant-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.assistant-item + .assistant-item {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.assistant-item-heading {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.assistant-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.assistant-fields dt {
+  color: var(--muted);
+}
+
+.assistant-fields dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.badge-inferred {
+  background: #f1f3f5;
+  color: #8a929a;
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.assistant-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.assistant-warning {
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #fff8c5;
+  color: #6a5000;
+  font-size: 13px;
+}
+
+.assistant-card > .actions {
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.assistant-card.is-superseded {
+  opacity: 0.5;
+  border-color: var(--border);
+  background: var(--background);
+}
+
+@media (max-width: 480px) {
+  .assistant-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .assistant-fields dd {
+    margin-bottom: 6px;
+  }
+
+  .assistant-card {
+    padding: 10px;
+  }
+
+  #assistant-form {
+    flex-wrap: wrap;
+  }
+
+  #assistant-form input {
+    flex-basis: 100%;
+  }
+}

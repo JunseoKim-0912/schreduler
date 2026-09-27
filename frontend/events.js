@@ -1,4 +1,5 @@
 import { apiFetch, getUserId } from "./api.js";
+import { initAssistantChat } from "./assistant.js";
 import { badge, el, setStatus } from "./dom.js";
 import {
   candidateReply,
@@ -16,8 +17,29 @@ import {
 } from "./format.js";
 
 const NO_ACTIONS = "아직 변경 기록이 없어요.";
+const MODE_KEY = "schreduler.eventsMode";
+const MODES = ["assistant", "legacy"];
 
-// 이벤트 탭: 자연어 일정 관리(POST /events/parse — 추가·삭제·수정), 확인이 필요한 요청 실행(POST /events/commands/confirm),
+function loadMode() {
+  try {
+    const saved = globalThis.localStorage?.getItem(MODE_KEY);
+    return MODES.includes(saved) ? saved : "assistant";
+  } catch {
+    return "assistant";
+  }
+}
+
+function saveMode(mode) {
+  try {
+    globalThis.localStorage?.setItem(MODE_KEY, mode);
+  } catch {
+    // 저장소를 못 쓰면 이번 화면에서만 기억한다.
+  }
+}
+
+// 이벤트 탭: 자연어 일정 관리. [새 어시스턴트](assistant.js, POST /assistant/chat)와 [기존 방식](POST /events/parse
+// 슬롯필링)을 스위치로 고른다. 아래는 기존 방식과 탭 공통 목록이다.
+// 기존 방식: 자연어 일정 관리(POST /events/parse — 추가·삭제·수정), 확인이 필요한 요청 실행(POST /events/commands/confirm),
 // 되돌리기(GET /actions, POST /actions/{id}/undo), 이벤트 목록(GET /events).
 // 대화 상태는 서버가 session_id로 보관하므로, 클라이언트는 session_id와 새 발화만 보낸다.
 // onDataChanged: 실행·되돌리기로 데이터가 바뀌었을 때 다른 탭(할 일, 포인트)을 다시 불러오게 app.js가 넘겨준다.
@@ -50,6 +72,12 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   const actionsStatus = document.getElementById("actions-status");
   const actionsRefreshButton = document.getElementById("actions-refresh");
 
+  const panel = document.getElementById("panel-events");
+  const modeButtons = [...document.querySelectorAll(".mode-switch [data-mode]")];
+  const assistantBox = document.getElementById("assistant-chat");
+  const legacyBox = document.getElementById("legacy-chat");
+
+  let mode = loadMode();
   let sessionId = null;
   let draft = null;
   let draftToken = null;
@@ -383,7 +411,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   // 409(더 최근 변경이 있음, 이미 되돌림)는 호출한 쪽이 서버 문구를 그대로 보여준다.
   async function undo(actionId) {
     const action = await apiFetch(`/actions/${actionId}/undo`, { method: "POST", showError: bannerUnless(409) });
-    for (const button of chatLog.querySelectorAll(`button[data-action-id="${actionId}"]`)) {
+    for (const button of panel.querySelectorAll(`button[data-action-id="${actionId}"]`)) {
       button.disabled = true;
       button.textContent = "되돌림";
     }
@@ -720,13 +748,45 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   }
 
   async function refresh() {
-    await Promise.all([refreshEvents(), refreshActions(), refreshRanges(), refreshLocations()]);
+    const loads = [refreshEvents(), refreshActions(), refreshRanges(), refreshLocations()];
+    if (mode === "assistant") loads.push(assistant.sync());
+    await Promise.all(loads);
   }
 
   // 실행·되돌리기 뒤: 이 탭의 목록과 최근 변경, 그리고 할 일·포인트 탭까지 다시 불러온다.
   async function dataChanged() {
     await Promise.all([refresh(), onDataChanged()]);
   }
+
+  const assistant = initAssistantChat({ undo, dataChanged });
+
+  function setMode(next, { focus = false } = {}) {
+    mode = next;
+    saveMode(next);
+    for (const button of modeButtons) {
+      const selected = button.dataset.mode === next;
+      button.setAttribute("aria-checked", String(selected));
+      button.tabIndex = selected ? 0 : -1;
+      if (selected && focus) button.focus();
+    }
+    assistantBox.hidden = next !== "assistant";
+    legacyBox.hidden = next !== "legacy";
+  }
+
+  for (const button of modeButtons) {
+    button.addEventListener("click", () => {
+      if (button.dataset.mode === mode) return;
+      setMode(button.dataset.mode);
+      if (mode === "assistant") assistant.sync();
+    });
+    button.addEventListener("keydown", (event) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      event.preventDefault();
+      setMode(mode === "assistant" ? "legacy" : "assistant", { focus: true });
+      if (mode === "assistant") assistant.sync();
+    });
+  }
+  setMode(mode);
 
   form.addEventListener("submit", submit);
   resetButton.addEventListener("click", () => {
@@ -749,6 +809,10 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     refresh,
     // 캘린더의 빈 칸을 누르면 "9월 24일 14시에 " 같은 문구를 채워 두고 바로 이어서 입력하게 한다.
     prefill(text) {
+      if (mode === "assistant") {
+        assistant.prefill(text);
+        return;
+      }
       if (draft) endConversation();
       input.value = text;
       input.focus();
@@ -757,6 +821,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     },
     // 사용자가 바뀌면 이전 사용자의 대화 세션과 목록을 지운다.
     reset() {
+      assistant.reset();
       resetConversation();
       list.replaceChildren();
       setStatus(listStatus, "");

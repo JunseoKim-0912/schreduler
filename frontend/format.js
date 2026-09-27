@@ -164,3 +164,142 @@ export function describeDraftRepeat(draft) {
   const until = draft.date_range_name ? `${draft.date_range_name} 종료(${formatShortDate(draft.date_range_end)})까지` : "";
   return `${rule} ${time}, ${start}부터${until ? ` ${until}` : ""}`;
 }
+
+// --- 새 어시스턴트 확인 카드 (POST /assistant/chat의 proposal.items) ---
+
+// 카드 행 → 그 행에 "추정" 배지를 붙게 하는 inferred_fields 이름. "location.travel_minutes"처럼 하위 항목도 부모 행에 붙인다.
+const INFERRED_ROWS = {
+  title: ["title"],
+  event_type: ["event_type"],
+  date: ["date"],
+  time: ["start_time", "end_time"],
+  importance: ["importance"],
+  recurrence: ["recurrence", "by_day", "interval", "frequency"],
+  date_range: ["date_range"],
+  location: ["location", "changes.location"],
+  mode: ["mode"],
+};
+
+function isInferred(inferred, key) {
+  const names = INFERRED_ROWS[key] ?? [key];
+  return inferred.some((field) => names.some((name) => field === name || field.startsWith(`${name}.`)));
+}
+
+// "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU" → "격주" (요일 없이 반복 간격만)
+function recurrenceEvery(rule) {
+  return describeRecurrence(rule).replace(/ [월화수목금토일](?:·[월화수목금토일])*$/, "");
+}
+
+function describeLocation(location) {
+  if (!location) return "없음";
+  const minutes = location.travel_minutes ?? location.default_travel_minutes;
+  const details = [minutes !== undefined && minutes !== null ? `이동 ${minutes}분` : "", location.is_new ? "새로 등록" : ""];
+  const extra = details.filter(Boolean).join(", ");
+  return extra ? `${location.name} (${extra})` : location.name;
+}
+
+// 수정·삭제 대상 한 줄: "물리 퀴즈 · 2026-09-29 (화) · 오후 6:00 – 오후 7:00 (1시간) → 오후 7:00 – …"
+export function describeAssistantTarget(target, scope) {
+  const when = scope === "series" && target.recurring ? "반복 전체" : [formatDate(target.date), target.time_display].filter(Boolean).join(" · ");
+  const text = [target.title, when].filter(Boolean).join(" · ");
+  if (!target.new_time_display) return text;
+  const after = [target.new_date && target.new_date !== target.date ? formatDate(target.new_date) : "", target.new_time_display];
+  return `${text} → ${after.filter(Boolean).join(" ")}`;
+}
+
+const RANGE_MODES = { range_only: "기간만 삭제 (일정은 마지막 회차까지 유지)", with_events: "일정도 함께 삭제" };
+const SCOPES = { instance: "이 회차만", series: "반복 전체" };
+
+/**
+ * 확인 카드 초안 하나를 화면용으로 풀어 쓴다.
+ * 돌려주는 값: { heading, rows: [{key, label, value, inferred}], notes, targets, warnings }
+ * 시간은 백엔드가 준 time_display를 그대로 쓴다 (오전/오후·다음 날 표기를 한 곳에서만 만든다).
+ */
+export function describeAssistantItem(item) {
+  const inferred = (item.inferred_fields ?? []).map(String);
+  const rows = [];
+  const notes = [];
+  let targets = [];
+  let heading = "";
+  const row = (key, label, value) => rows.push({ key, label, value, inferred: isInferred(inferred, key) });
+
+  switch (item.kind) {
+    case "create_event": {
+      heading = "새 일정";
+      row("title", "제목", item.title);
+      row("event_type", "종류", item.event_type === "deadline" ? "마감" : "일반");
+      row("date", item.recurring ? "첫 회차" : "날짜", formatDate(item.date));
+      row("time", item.event_type === "deadline" ? "마감 시각" : "시간", item.time_display);
+      row("importance", "중요도", importanceLabel(item.importance));
+      if (item.recurring) {
+        row("recurrence", "반복", describeRecurrence(item.recurrence_rule).replace(/ ([월화수목금토일](?:·[월화수목금토일])*)$/, " $1요일"));
+        if (item.preview_dates?.length) row("preview", "다음 회차", item.preview_dates.map(formatShortDate).join(", "));
+        // 기준일은 격주 이상에서만 리듬을 정한다 (매주면 어느 주에서 세든 같다).
+        const interval = Number(/INTERVAL=(\d+)/.exec(item.recurrence_rule ?? "")?.[1] ?? 1);
+        if (interval > 1 && item.recurrence_start && item.recurrence_start !== item.date) {
+          notes.push(`${formatShortDate(item.recurrence_start)} 기준 ${recurrenceEvery(item.recurrence_rule)}`);
+        }
+        const range = item.date_range;
+        if (range) {
+          const span = `${formatShortDate(range.start_date)}~${formatShortDate(range.end_date)}`;
+          row("date_range", "기간", `${range.name} (${span}${range.is_new ? ", 새로 만듦" : ""})`);
+        }
+      } else {
+        row("recurrence", "반복", "반복 안 함");
+      }
+      row("location", "장소", describeLocation(item.location));
+      break;
+    }
+    case "update_event":
+    case "delete_event": {
+      const verb = item.kind === "delete_event" ? "삭제" : "수정";
+      const count = item.targets?.length ?? 0;
+      heading = `${verb}할 일정 ${count}개${item.scope === "instance" ? " (이 회차만)" : ""}`;
+      targets = (item.targets ?? []).map((target) => describeAssistantTarget(target, item.scope));
+      const changes = item.changes ?? {};
+      if (changes.title) row("title", "새 제목", changes.title);
+      if (changes.date) row("date", "새 날짜", formatDate(changes.date));
+      if (changes.start_time || changes.end_time) {
+        row("time", "새 시간", [changes.start_time, changes.end_time].map((t) => t ?? "그대로").join(" – "));
+      }
+      if (changes.importance !== null && changes.importance !== undefined) row("importance", "새 중요도", importanceLabel(changes.importance));
+      if (changes.location) {
+        row("location", "장소", changes.location.action === "remove" ? "빼기" : describeLocation(changes.location));
+      }
+      if (item.kind === "update_event" && item.scope) row("scope", "범위", SCOPES[item.scope] ?? item.scope);
+      break;
+    }
+    case "create_range":
+      heading = "새 반복 기간";
+      row("title", "이름", item.name);
+      row("date_range", "기간", `${formatShortDate(item.start_date)}~${formatShortDate(item.end_date)}`);
+      break;
+    case "update_range":
+      heading = "반복 기간 수정";
+      row("title", "이름", item.new_name ? `${item.name} → ${item.new_name}` : item.name);
+      row(
+        "date_range",
+        "기간",
+        `${formatShortDate(item.before?.start_date)}~${formatShortDate(item.before?.end_date)} → ${formatShortDate(item.start_date)}~${formatShortDate(item.end_date)}`,
+      );
+      if (item.events_using) row("events_using", "쓰는 일정", `${item.events_using}개 (회차를 다시 맞춰요)`);
+      break;
+    case "delete_range":
+      heading = "반복 기간 삭제";
+      row("title", "이름", item.name);
+      if (item.events_using) {
+        row("events_using", "쓰는 일정", `${item.events_using}개`);
+        row("mode", "처리", RANGE_MODES[item.mode] ?? item.mode);
+      }
+      break;
+    default:
+      heading = item.kind ?? "제안";
+  }
+  const warnings = (item.warnings ?? []).map((warning) => `⚠ ${warning.message}`);
+  return { heading, rows, notes, targets, warnings };
+}
+
+// 카드의 실행 버튼 이름: 전부 새로 만드는 제안이면 "만들기", 수정·삭제가 섞이면 "실행".
+export function assistantConfirmLabel(items) {
+  return items.every((item) => item.kind?.startsWith("create_")) ? "만들기" : "실행";
+}

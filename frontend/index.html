@@ -67,28 +67,53 @@
       <section id="panel-events" class="panel" role="tabpanel" aria-labelledby="tab-events" hidden>
         <div class="events-layout">
           <div class="events-main">
-            <h2>자연어로 일정 관리</h2>
-            <p class="hint">
-              일정을 추가·삭제·수정하는 말을 적으면 AI가 처리하고, 부족한 정보는 되물어요.<br />
-              예: “매주 월요일 9시 물리 강의 추가해줘” / “물리 퀴즈 없애줘” / “오늘 물리 퀴즈 6시로 옮겨줘”
-            </p>
-            <ol id="chat-log" class="chat-log" aria-live="polite" hidden></ol>
-
-            <div id="draft-confirm" class="draft" hidden>
-              <dl id="draft-fields" class="draft-fields"></dl>
-              <div class="actions">
-                <button id="draft-create" type="button" class="button">이 내용으로 만들기</button>
-                <button id="draft-cancel" type="button" class="button button-secondary">취소</button>
+            <div class="section-header section-header-first">
+              <h2>자연어로 일정 관리</h2>
+              <div class="mode-switch" role="radiogroup" aria-label="자연어 처리 방식">
+                <button type="button" role="radio" id="mode-assistant" data-mode="assistant" aria-checked="true">새 어시스턴트</button>
+                <button type="button" role="radio" id="mode-legacy" data-mode="legacy" aria-checked="false">기존 방식</button>
               </div>
             </div>
 
-            <form id="parse-form" class="inline-form">
-              <label for="parse-input" class="visually-hidden">일정 요청</label>
-              <input id="parse-input" type="text" autocomplete="off" maxlength="300" />
-              <button id="parse-send" type="submit" class="button">전송</button>
-              <button id="parse-reset" type="button" class="button button-secondary">새 대화</button>
-            </form>
-            <p id="chat-status" class="hint" role="status" hidden></p>
+            <div id="assistant-chat">
+              <p class="hint">
+                하고 싶은 일을 편하게 말하면 어시스턴트가 초안을 만들어요. 확인 카드를 보고 [만들기]를 누르거나 “좋아”라고 하면
+                저장되고, 채팅으로 고칠 수도 있어요.<br />
+                예: “ECE360 Lab 격주 화요일 9-12시” / “10월 2일 11:00-1:00 스터디” / “물리 퀴즈 없애줘”
+              </p>
+              <ol id="assistant-log" class="chat-log assistant-log" aria-live="polite" hidden></ol>
+              <form id="assistant-form" class="inline-form">
+                <label for="assistant-input" class="visually-hidden">어시스턴트에게 할 말</label>
+                <input id="assistant-input" type="text" autocomplete="off" maxlength="500" placeholder="예: 10월 2일 11:00-1:00 스터디" />
+                <button id="assistant-send" type="submit" class="button">전송</button>
+                <button id="assistant-reset" type="button" class="button button-secondary">새 대화</button>
+              </form>
+              <p id="assistant-status" class="hint" role="status" hidden></p>
+            </div>
+
+            <div id="legacy-chat" hidden>
+              <p class="hint">
+                일정을 추가·삭제·수정하는 말을 적으면 AI가 처리하고, 부족한 정보는 되물어요.<br />
+                예: “매주 월요일 9시 물리 강의 추가해줘” / “물리 퀴즈 없애줘” / “오늘 물리 퀴즈 6시로 옮겨줘”
+              </p>
+              <ol id="chat-log" class="chat-log" aria-live="polite" hidden></ol>
+
+              <div id="draft-confirm" class="draft" hidden>
+                <dl id="draft-fields" class="draft-fields"></dl>
+                <div class="actions">
+                  <button id="draft-create" type="button" class="button">이 내용으로 만들기</button>
+                  <button id="draft-cancel" type="button" class="button button-secondary">취소</button>
+                </div>
+              </div>
+
+              <form id="parse-form" class="inline-form">
+                <label for="parse-input" class="visually-hidden">일정 요청</label>
+                <input id="parse-input" type="text" autocomplete="off" maxlength="300" />
+                <button id="parse-send" type="submit" class="button">전송</button>
+                <button id="parse-reset" type="button" class="button button-secondary">새 대화</button>
+              </form>
+              <p id="chat-status" class="hint" role="status" hidden></p>
+            </div>
 
             <div class="section-header">
               <h2>이벤트 목록</h2>

@@ -9,6 +9,7 @@ const USER_ID_KEY = "schreduler.userId";
 // LLM을 호출해 422(응답 형식 오류) / 500(키 미설정) / 502(호출 실패)가 올 수 있는 엔드포인트
 export const LLM_ENDPOINTS = [
   { method: "POST", path: "/events/parse" },
+  { method: "POST", path: "/assistant/chat" },
   { method: "POST", path: "/daily-actual-logs/checkin" },
   { method: "POST", path: "/compliance-reports" },
 ];

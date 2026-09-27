@@ -280,14 +280,14 @@ def test_incomplete_response_is_logged(caplog: pytest.LogCaptureFixture) -> None
 @pytest.mark.parametrize(
     ("env", "expected"),
     [
-        ({"LLM_MODEL": "main-model"}, ("main-model", "main-model", "low")),
+        ({"LLM_MODEL": "main-model"}, ("main-model", "gpt-5.6-luna", "medium")),
         (
             {"LLM_MODEL": "main-model", "ASSISTANT_MODEL": "cheap-model", "ASSISTANT_REASONING_EFFORT": "medium"},
             ("main-model", "cheap-model", "medium"),
         ),
     ],
 )
-def test_assistant_model_defaults_to_llm_model(env: dict[str, str], expected: tuple[str, str, str]) -> None:
+def test_assistant_model_defaults_are_independent_of_llm_model(env: dict[str, str], expected: tuple[str, str, str]) -> None:
     clean = {k: v for k, v in os.environ.items() if k not in ("LLM_MODEL", "ASSISTANT_MODEL", "ASSISTANT_REASONING_EFFORT")}
     code = (
         "import dotenv; dotenv.load_dotenv = lambda *a, **k: None\n"

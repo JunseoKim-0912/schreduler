@@ -18,8 +18,8 @@
 ## 2. API 선택
 
 - **Responses API(`/v1/responses`) + 추론(reasoning) 켜기.** gpt-5.6-luna는 Chat Completions에서 도구와 추론을 같이 쓸 수 없다. 날짜·격주·오전/오후처럼 추론이 가장 필요한 곳이 바로 이 기능이므로 추론을 끄지 않는다.
-- `reasoning.effort`는 환경변수(`ASSISTANT_REASONING_EFFORT`, 기본 `low`)로 둔다. 평가 세트(§8)로 none/low/medium을 비교해 최종값을 정한다.
-- **모델도 따로 설정한다:** `ASSISTANT_MODEL`(기본값은 `LLM_MODEL`과 같게). 페르소나·체크인은 계속 `LLM_MODEL`을 쓴다. 더 저렴한 모델(예: `gpt-5-nano` 계열)로 내릴지는 평가 세트로 결정한다 — 후보 모델 × effort 조합을 돌려서 **통과율 기준(예: 90% 이상, 격주·오전/오후·마감 케이스는 전부 통과)을 넘는 것 중 가장 싼 조합**을 고른다.
+- `reasoning.effort`는 환경변수(`ASSISTANT_REASONING_EFFORT`, 기본 `medium` — C단계 결과로 확정)로 둔다. 평가 세트(§8)로 none/low/medium을 비교해 최종값을 정한다.
+- **모델도 따로 설정한다:** `ASSISTANT_MODEL`(기본 `gpt-5.6-luna`, `LLM_MODEL`과 따로). 페르소나·체크인은 계속 `LLM_MODEL`을 쓴다. 더 저렴한 모델(예: `gpt-5-nano` 계열)로 내릴지는 평가 세트로 결정한다 — 후보 모델 × effort 조합을 돌려서 **통과율 기준(예: 90% 이상, 격주·오전/오후·마감 케이스는 전부 통과)을 넘는 것 중 가장 싼 조합**을 고른다.
 - 기존 Chat Completions 경로(페르소나 대화, 미준수 피드백, 체크인)는 **그대로 둔다.** 새 Responses 클라이언트는 옆에 추가한다.
 - 대화 상태는 OpenAI 쪽 `previous_response_id`에 맡기지 않고 **우리 DB에 저장**한다 (모델·공급자 교체 가능성, 테스트 용이성).
 
@@ -174,3 +174,14 @@ event_parse_service에 엉켜 있는 규칙을 **순수 함수 모듈**(예: `ap
   조합 중 **턴당 예상 비용이 가장 낮은 것**. 비용이 비슷하면 턴 지연이 짧은 쪽.
 - 1차는 후보 모델 × effort(low, medium) 조합당 1회, 2차는 기준을 통과한 상위 2개를 2회 더 돌려 결과가 흔들리지 않는지 본다.
 - 결정(기본값 변경)은 사람이 한다. 스크립트는 표와 추천만 낸다.
+
+### 11.8 D단계 프론트엔드
+
+- 기본값: `ASSISTANT_MODEL=gpt-5.6-luna`, `ASSISTANT_REASONING_EFFORT=medium` (LLM_MODEL과 따로 간다).
+- 이벤트 탭 위 [새 어시스턴트 | 기존 방식] 스위치, 기본은 새 어시스턴트. 선택은 localStorage(`schreduler.eventsMode`).
+- `frontend/assistant.js`가 대화·카드를, `format.describeAssistantItem`이 카드 한 장의 행·추정 배지·경고를 만든다.
+  시간은 백엔드 `time_display`를 그대로 쓴다. 반복 기준일 문구("9/22 기준 격주")는 INTERVAL이 2 이상이고
+  `recurrence_start`가 첫 회차와 다를 때만 보인다 (매주 반복에서는 의미가 없다).
+- 실행 버튼 이름은 전부 생성이면 [만들기], 수정·삭제가 섞이면 [실행].
+- 탭을 옮겼다 돌아오면 같은 세션이면 화면을 다시 그리지 않는다 (결과 말풍선의 되돌리기 버튼 유지). 새로고침 뒤에는
+  서버 기록(사용자 말·어시스턴트 답)으로 다시 그리므로 지난 결과의 되돌리기는 "최근 변경"에서 한다.

@@ -189,6 +189,8 @@ describe("describeError 문구", () => {
 
   test("LLM 엔드포인트는 메서드와 쿼리를 구분해서 판별한다", () => {
     assert.equal(isLlmEndpoint("post", "/events/parse"), true);
+    assert.equal(isLlmEndpoint("POST", "/assistant/chat"), true);
+    assert.equal(isLlmEndpoint("GET", "/assistant/sessions/current"), false);
     assert.equal(isLlmEndpoint("GET", "/compliance-reports/stats?days=30"), false);
     assert.equal(isLlmEndpoint("GET", "/compliance-reports"), false);
   });
