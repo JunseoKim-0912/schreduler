@@ -18,6 +18,7 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today
 from app.core.exceptions import ConflictError, InvalidInputError
 from app.i18n import render_message
 from app.models.action_history import ActionHistory
@@ -541,7 +542,7 @@ def create_event_from_nl(
             created_location = location
         data = data.model_copy(update={"location_id": location.id})
 
-    event = build_event(db, data)
+    event = build_event(db, data, instances_from=local_today())
     if created_range is not None:
         summary = render_message("summary.create_with_range", lang, title=event.title, name=created_range.name)
     else:

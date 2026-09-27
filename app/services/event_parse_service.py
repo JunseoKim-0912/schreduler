@@ -7,6 +7,7 @@ from datetime import date, datetime, time
 import httpx
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today
 from app.core.exceptions import InvalidInputError, NotFoundError
 from app.i18n import render_message
 from app.models.enums import ActionSource, EventType
@@ -361,7 +362,7 @@ def _build_event_draft(db: Session, session: SlotFillSession, user: User) -> Eve
             day = rules.first_occurrence(rule, clock, range_start, range_end)
         day = day or _resolve_anchor_date(db, session.date_range_id)
         if range_start is not None:
-            preview = rules.preview_dates(rule, datetime.combine(day, clock), range_start, range_end)
+            preview = rules.preview_dates(rule, datetime.combine(day, clock), range_start, range_end, local_today())
     else:
         day = resolve_event_date(session.date, date.today())
     start_time, end_time = rules.combine_times(

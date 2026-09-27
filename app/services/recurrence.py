@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,13 +20,16 @@ __all__ = [
 ]
 
 
-def generate_event_instances(session: Session, event: Event) -> list[EventInstance]:
+def generate_event_instances(session: Session, event: Event, not_before: date | None = None) -> list[EventInstance]:
     """반복 이벤트의 EventInstance를 미리 생성한다.
 
     event.recurrence_rule은 RFC 5545 RRULE 문자열이다 (예: "FREQ=WEEKLY;BYDAY=MO"는
     "매주 월요일"). event.date_range_id가 가리키는 ImportantDateRange의
     start_date~end_date 구간에서 규칙에 맞는 날짜마다 EventInstance를 만든다.
     이미 그 날짜의 EventInstance가 있으면 건너뛴다 (여러 번 호출해도 안전).
+
+    not_before가 있으면 그 날짜 이후 회차만 만든다 (자연어로 만든 일정·기간 연장은 오늘부터). 하위 일정(이동시간)은
+    not_before가 없으면 부모의 가장 이른 회차부터 만들어 부모와 같은 날짜들을 따라간다.
     """
     if not event.is_recurring:
         raise ValueError("event.is_recurring이 False인 이벤트는 인스턴스를 생성할 수 없습니다")
@@ -35,8 +40,11 @@ def generate_event_instances(session: Session, event: Event) -> list[EventInstan
     if date_range is None:
         raise ValueError("event.date_range_id가 가리키는 ImportantDateRange가 없습니다")
 
+    if not_before is None and event.parent_event is not None and event.parent_event.instances:
+        not_before = min(instance.date for instance in event.parent_event.instances)
+    window_start = max(date_range.start_date, not_before) if not_before else date_range.start_date
     # DEADLINE 이벤트는 start_time이 없으므로 마감 시각(end_time)이 기준이다(anchor_time).
-    occurrence_dates = set(occurrences(event.recurrence_rule, event.anchor_time, date_range.start_date, date_range.end_date))
+    occurrence_dates = set(occurrences(event.recurrence_rule, event.anchor_time, window_start, date_range.end_date))
     if not occurrence_dates:
         return []
 

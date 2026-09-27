@@ -154,7 +154,7 @@ def test_conversation_creates_named_range_and_event_without_asking_again(client,
         event = session.get(Event, event_id)
         assert event.date_range.name == "Lecture End Date"
     dates = [day for day, _ in _instances(engine, event_id)]
-    assert dates[0] == date(2026, 9, 2) and dates[-1] == date(2026, 12, 7)
+    assert dates[0] == date(2026, 9, 28) and dates[-1] == date(2026, 12, 7), "회차는 오늘 이후 첫 월요일부터"
     assert response.json()["message"] == "✔ '물리 강의' 일정 생성 (반복 기간 'Lecture End Date' 새로 만듦)"
 
 

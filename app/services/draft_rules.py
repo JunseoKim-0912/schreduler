@@ -139,8 +139,17 @@ def first_occurrence(rule: str, clock: time, range_start: date, range_end: date)
     return candidates[0] if candidates else range_start
 
 
-def preview_dates(rule: str, dtstart: datetime, range_start: date, range_end: date) -> list[date]:
-    return occurrences(rule, dtstart, range_start, range_end)[:PREVIEW_COUNT]
+def upcoming_occurrences(rule: str, dtstart: datetime, range_start: date, range_end: date, today: date) -> list[date]:
+    """Occurrences that become EventInstances: inside the range and on or after today.
+
+    dtstart only anchors the rhythm (the date the user said, or the first matching day after the range start);
+    dates before today are never materialized, so '9/22부터 격주 화요일' said on 9/27 yields 10/6, 10/20, ...
+    """
+    return occurrences(rule, dtstart, max(range_start, today), range_end)
+
+
+def preview_dates(rule: str, dtstart: datetime, range_start: date, range_end: date, today: date) -> list[date]:
+    return upcoming_occurrences(rule, dtstart, range_start, range_end, today)[:PREVIEW_COUNT]
 
 
 def first_matching_day(day: date, by_day: list[str] | None, frequency: str | None) -> date:
@@ -245,7 +254,8 @@ def validate_draft(spec: DraftSpec, now: datetime) -> DraftCheck:
 
     anchor = spec.start if spec.start is not None and not deadline else spec.end
     first_day = spec.recurrence_start or anchor.date()
-    if datetime.combine(first_day, anchor.time()) < now:
+    # A repeating event only gets occurrences from today on (upcoming_occurrences), so a past rhythm start is fine.
+    if spec.frequency is None and datetime.combine(first_day, anchor.time()) < now:
         check.warnings.append("past_date")
     if spec.frequency is not None and start_weekday_mismatch(first_day, spec.frequency, spec.by_day):
         check.warnings.append("start_weekday_mismatch")

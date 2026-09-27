@@ -248,9 +248,9 @@ def propose_create_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
         if rule and date_range and anchor_clock is not None:
             if day is None:
                 day = rules.first_occurrence(rule, anchor_clock, date_range.start, date_range.end)
-            preview = rules.preview_dates(rule, datetime.combine(day, anchor_clock), date_range.start, date_range.end)
+            preview = rules.preview_dates(rule, datetime.combine(day, anchor_clock), date_range.start, date_range.end, ctx.today)
             if not preview:
-                problems.error("no_occurrences", f"no {rule} dates between {day} and the range end {date_range.end}")
+                problems.error("no_occurrences", f"no {rule} dates from today ({ctx.today}) to the range end {date_range.end}")
     else:
         if not args.get("date"):
             problems.error("missing_date", "a one-off event needs date (YYYY-MM-DD); for a repeating event pass recurrence")
@@ -266,6 +266,9 @@ def propose_create_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
         return _failed(problems, inferred)
 
     start_at, end_at = rules.combine_times(day, None if deadline else start_clock, end_clock)
+    # 카드에는 실제 첫 회차(오늘 이후)를 보여준다. payload의 시작은 격주 리듬의 기준(dtstart) 그대로다.
+    shown_day = preview[0] if preview else day
+    shown_start, shown_end = rules.combine_times(shown_day, None if deadline else start_clock, end_clock)
     spec = rules.DraftSpec(
         event_type="deadline" if deadline else "scheduled",
         start=start_at,
@@ -311,12 +314,13 @@ def propose_create_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     card = {
         "title": title,
         "event_type": "deadline" if deadline else "scheduled",
-        "date": day.isoformat(),
-        "start_time": start_at.isoformat() if start_at else None,
-        "end_time": end_at.isoformat(),
-        "time_display": rules.format_time_range(start_at, end_at, ctx.language),
+        "date": shown_day.isoformat(),
+        "start_time": shown_start.isoformat() if shown_start else None,
+        "end_time": shown_end.isoformat(),
+        "time_display": rules.format_time_range(shown_start, shown_end, ctx.language),
         "importance": importance,
         "recurring": bool(recurrence),
+        "recurrence_start": day.isoformat() if recurrence else None,
         "recurrence_rule": rule if recurrence else None,
         "date_range": date_range.card() if date_range else None,
         "location": location,

@@ -96,17 +96,40 @@ def test_first_occurrence_and_preview_keep_biweekly_rhythm_from_dtstart() -> Non
     # no start date given: the first Tuesday after the range start (Thu 9/3) is the first occurrence
     first = rules.first_occurrence(rule, time(9), range_start, range_end)
     assert first == date(2026, 9, 8)
-    assert rules.preview_dates(rule, datetime.combine(first, time(9)), range_start, range_end) == [
+    assert rules.preview_dates(rule, datetime.combine(first, time(9)), range_start, range_end, range_start) == [
         date(2026, 9, 8),
         date(2026, 9, 22),
         date(2026, 10, 6),
     ]
     dtstart = datetime(2026, 9, 22, 9)  # "9/22부터 격주"
-    assert rules.preview_dates(rule, dtstart, range_start, range_end) == [
+    assert rules.preview_dates(rule, dtstart, range_start, range_end, range_start) == [
         date(2026, 9, 22),
         date(2026, 10, 6),
         date(2026, 10, 20),
     ]
+
+
+def test_only_occurrences_from_today_are_materialized_but_the_rhythm_stays() -> None:
+    rule = rules.build_rrule("WEEKLY", ["TU"], 2)
+    dtstart = datetime(2026, 9, 22, 9)  # "9/22부터 격주", said on Sun 9/27
+    today = date(2026, 9, 27)
+
+    upcoming = rules.upcoming_occurrences(rule, dtstart, date(2026, 9, 3), date(2026, 12, 8), today)
+    assert upcoming[:3] == [date(2026, 10, 6), date(2026, 10, 20), date(2026, 11, 3)]
+    assert rules.preview_dates(rule, dtstart, date(2026, 9, 3), date(2026, 12, 8), today) == upcoming[:3]
+    assert rules.preview_dates(rule, dtstart, date(2026, 9, 3), date(2026, 12, 8), date(2026, 10, 6))[0] == date(2026, 10, 6)
+
+
+def test_past_rhythm_start_is_not_a_past_date_but_a_past_one_off_is() -> None:
+    now = datetime(2026, 9, 27, 14)
+    recurring = rules.DraftSpec(
+        start=datetime(2026, 9, 22, 9), end=datetime(2026, 9, 22, 12), frequency="WEEKLY", by_day=["TU"], interval=2,
+        recurrence_start=date(2026, 9, 22),
+    )
+    one_off = rules.DraftSpec(start=datetime(2026, 9, 22, 9), end=datetime(2026, 9, 22, 12))
+
+    assert "past_date" not in rules.validate_draft(recurring, now).warnings
+    assert "past_date" in rules.validate_draft(one_off, now).warnings
 
 
 def test_first_occurrence_falls_back_to_range_start_when_no_date_matches() -> None:

@@ -120,13 +120,13 @@ def test_biweekly_lab_from_922_is_created_without_asking(client, engine, ids, ll
     draft = body["draft"]
     assert draft["recurrence_rule"] == "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"
     assert (draft["start_time"], draft["end_time"]) == ("2026-09-22T09:00:00", "2026-09-22T12:00:00")
-    assert draft["preview_dates"] == ["2026-09-22", "2026-10-06", "2026-10-20"]
+    assert draft["preview_dates"] == ["2026-10-06", "2026-10-20", "2026-11-03"], "미리보기는 오늘(9/26) 이후 회차"
     assert (draft["date_range_name"], draft["date_range_end"]) == ("Lecture period", "2026-12-08")
 
     confirmed = client.post("/events/commands/confirm", json={"user_id": ids["user"], "token": body["command"]["confirmation_token"]}).json()
 
     [event_id] = [t["event_id"] for t in confirmed["command"]["affected"]]
-    assert _dates(engine, event_id) == BIWEEKLY_FROM_922, "기간 시작(9/8)이 아니라 9/22 기준 격주, 9/22 이전 회차 없음"
+    assert _dates(engine, event_id) == BIWEEKLY_FROM_922[1:], "9/22 기준 격주 리듬, 회차는 오늘(9/26) 이후만"
 
 
 def test_prompt_explains_intervals_and_not_asking():
@@ -137,9 +137,9 @@ def test_prompt_explains_intervals_and_not_asking():
 @pytest.mark.parametrize(
     ("interval", "rule", "expected"),
     [
-        (2, "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", BIWEEKLY_FROM_922[:3]),
-        (3, "FREQ=WEEKLY;INTERVAL=3;BYDAY=TU", [date(2026, 9, 22), date(2026, 10, 13), date(2026, 11, 3)]),
-        (1, "FREQ=WEEKLY;BYDAY=TU", [date(2026, 9, 22), date(2026, 9, 29), date(2026, 10, 6)]),
+        (2, "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", BIWEEKLY_FROM_922[1:4]),
+        (3, "FREQ=WEEKLY;INTERVAL=3;BYDAY=TU", [date(2026, 10, 13), date(2026, 11, 3), date(2026, 11, 24)]),
+        (1, "FREQ=WEEKLY;BYDAY=TU", [date(2026, 9, 29), date(2026, 10, 6), date(2026, 10, 13)]),
     ],
 )
 def test_interval_goes_into_rrule_and_preview(client, engine, ids, llm, interval, rule, expected):
@@ -157,7 +157,7 @@ def test_without_start_date_first_matching_weekday_after_period_start(client, en
     draft = _parse(client, ids["user"], "격주 화요일 오전 9-12시 ECE360 Lab")["draft"]
 
     assert draft["start_time"] == "2026-09-08T09:00:00", "기간 시작일(9/8)이 화요일이라 그날부터"
-    assert draft["preview_dates"] == ["2026-09-08", "2026-09-22", "2026-10-06"]
+    assert draft["preview_dates"] == ["2026-10-06", "2026-10-20", "2026-11-03"], "리듬은 9/8 기준(9/22·10/6…), 미리보기는 오늘(9/26) 이후"
 
 
 def test_start_date_on_the_wrong_weekday_is_asked_once(client, engine, ids, llm):
@@ -207,6 +207,16 @@ def test_extending_the_period_keeps_the_biweekly_rhythm(client, engine, ids):
     client.put(f"/date-ranges/{short}", json={"start_date": "2026-09-01", "end_date": "2026-12-08"})
 
     assert _dates(engine, event_id) == BIWEEKLY_FROM_922, "늘린 뒤에도 10/27·11/10이 아니라 11/3·11/17 리듬, 9/22 이전 회차 없음"
+
+
+def test_extending_the_period_backwards_does_not_create_past_instances(client, engine, ids):
+    event_id = _post_event(client, ids["user"], ids["period"], start_time="2026-09-01T09:00:00", end_time="2026-09-01T12:00:00")
+    before = _dates(engine, event_id)
+    assert before[0] == date(2026, 9, 15), "POST /events는 기존대로 기간 안의 회차를 모두 만든다"
+
+    client.put(f"/date-ranges/{ids['period']}", json={"start_date": "2026-09-01"})
+
+    assert _dates(engine, event_id) == before, "기간을 늘려도 오늘(9/26) 이전 회차(9/1)는 새로 만들지 않는다"
 
 
 def test_travel_child_is_biweekly_too(client, engine, ids):
@@ -259,7 +269,7 @@ def test_change_to_weekly_in_the_confirmation_card(client, engine, ids, llm):
     body = _parse(client, ids["user"], "매주로 바꿔줘", first["session_id"])
 
     assert body["draft"]["recurrence_rule"] == "FREQ=WEEKLY;BYDAY=TU"
-    assert body["draft"]["preview_dates"] == ["2026-09-22", "2026-09-29", "2026-10-06"]
+    assert body["draft"]["preview_dates"] == ["2026-09-29", "2026-10-06", "2026-10-13"]
     assert "recurrence" in body["draft_changes"]
 
 

@@ -151,8 +151,10 @@ def test_biweekly_lab_with_start_date(db: Session, user: User, lecture_period: I
 
     item = result.proposal["items"][0]
     assert "INTERVAL=2" in item["recurrence_rule"]
-    assert item["date"] == "2026-09-22"
-    assert item["preview_dates"] == ["2026-09-22", "2026-10-06", "2026-10-20"]
+    assert item["recurrence_start"] == "2026-09-22", "격주 리듬의 기준은 말한 시작일"
+    assert item["date"] == "2026-10-06", "회차는 오늘(9/27) 이후만"
+    assert item["preview_dates"] == ["2026-10-06", "2026-10-20", "2026-11-03"]
+    assert item["warnings"] == [], "반복 일정은 리듬 시작일이 지나도 past_date 경고가 없다"
     assert item["date_range"]["id"] == lecture_period.id
     assert item["time_display"] == "오전 9:00 – 오후 12:00 (3시간)"
 
@@ -169,8 +171,8 @@ def test_biweekly_without_start_date_keeps_first_tuesday_of_a_thursday_period(db
     result, _ = _turn(db, user, [call("propose_create_event", **args), say("초안이에요.")], "ECE360 Lab 격주 화요일 9-12시")
 
     item = result.proposal["items"][0]
-    assert item["date"] == "2026-09-08"
-    assert item["preview_dates"] == ["2026-09-08", "2026-09-22", "2026-10-06"]
+    assert item["recurrence_start"] == "2026-09-08", "기간 시작(목 9/3) 이후 첫 화요일이 리듬 기준"
+    assert item["preview_dates"] == ["2026-10-06", "2026-10-20", "2026-11-03"]
 
 
 def test_eleven_to_one_is_a_two_hour_daytime_draft(db: Session, user: User) -> None:
@@ -570,3 +572,23 @@ def test_redrafting_with_draft_id_replaces_it_in_the_same_turn(db: Session, user
 
     assert len(result.proposal["items"]) == 1
     assert result.proposal["items"][0]["end_time"] == "2026-10-02T13:00:00"
+
+
+def test_confirmed_recurring_event_keeps_rhythm_but_creates_only_upcoming_instances(db: Session, user: User, lecture_period: ImportantDateRange) -> None:
+    args = _create(
+        title="ECE360 Lab", date=None, start_time="09:00", end_time="12:00",
+        recurrence={"frequency": "WEEKLY", "interval": 2, "by_day": ["TU"], "start_date": "2026-09-22"},
+        date_range={"name": "Lecture Period", "start_date": None, "end_date": None},
+    )
+    result, _ = _turn(db, user, [call("propose_create_event", **args), say("초안")], "9/22부터 격주 화요일 Lab")
+    agent.confirm(db, user, result.session_id, result.proposal["token"], now=NOW + timedelta(minutes=1))
+
+    event = db.execute(select(Event).where(Event.title == "ECE360 Lab")).scalar_one()
+    assert event.start_time == datetime(2026, 9, 22, 9)
+    dates = sorted(i.date for i in event.instances)
+    assert dates[:3] == [date(2026, 10, 6), date(2026, 10, 20), date(2026, 11, 3)] and dates[-1] == date(2026, 12, 1)
+
+
+def test_one_off_in_the_past_still_warns(db: Session, user: User) -> None:
+    result, _ = _turn(db, user, [call("propose_create_event", **_create(date="2026-09-25")), say("초안")], "9/25 스터디")
+    assert [w["code"] for w in result.proposal["items"][0]["warnings"]] == ["past_date"]

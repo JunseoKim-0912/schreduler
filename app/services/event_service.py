@@ -37,15 +37,16 @@ def _ensure_references_exist(db: Session, data: EventCreate | EventUpdate) -> No
         require(db, Location, data.location_id, "location_id")
 
 
-def build_event(db: Session, data: EventCreate) -> Event:
-    """이벤트와 반복 인스턴스, 이동시간 하위 일정을 만든다 (커밋하지 않음)."""
+def build_event(db: Session, data: EventCreate, instances_from: date | None = None) -> Event:
+    """이벤트와 반복 인스턴스, 이동시간 하위 일정을 만든다 (커밋하지 않음). instances_from이 있으면 반복 회차는
+    그 날짜부터 만든다 (자연어 경로: 오늘부터)."""
     _ensure_references_exist(db, data)
     event = Event(**data.model_dump())
     db.add(event)
     db.flush()
 
     if event.is_recurring and event.recurrence_rule and event.date_range_id is not None:
-        generate_event_instances(db, event)
+        generate_event_instances(db, event, not_before=instances_from)
     elif not event.is_recurring:
         create_single_instance(db, event)
 

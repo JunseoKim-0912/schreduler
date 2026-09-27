@@ -126,6 +126,7 @@ def test_parse_event_returns_next_question_when_slots_are_missing(
     assert "session_id" in body
 
 
+@freeze_time("2026-09-27 16:00:00")  # 미리보기는 오늘 이후 회차라 날짜를 고정한다
 def test_parse_event_multiturn_completes_with_draft(
     client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -212,7 +213,7 @@ def test_parse_event_multiturn_completes_with_draft(
         "new_date_range": None,
         "date_range_name": "2026 가을학기",
         "date_range_end": "2026-12-20",
-        "preview_dates": ["2026-09-07", "2026-09-14", "2026-09-21"],        "event_type": "scheduled",
+        "preview_dates": ["2026-09-28", "2026-10-05", "2026-10-12"],        "event_type": "scheduled",
         "location_id": None,
         "location_name": None,
         "new_location": None,

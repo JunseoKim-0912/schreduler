@@ -15,6 +15,7 @@ from typing import Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today
 from app.core.exceptions import ConflictError, InvalidInputError
 from app.i18n import render_message
 from app.models.action_history import ActionHistory
@@ -139,13 +140,13 @@ class RangeSync:
 
 
 def sync_range_instances(db: Session, date_range: ImportantDateRange, snapshot: Snapshot) -> RangeSync:
-    """기간 안의 날짜에 빠진 회차를 만들고, 범위 밖의 대기 회차는 취소한다 (커밋하지 않음).
+    """기간 안의 오늘 이후 날짜에 빠진 회차를 만들고, 범위 밖의 대기 회차는 취소한다 (커밋하지 않음).
     하위 일정(이동시간 등)도 부모와 같은 기간을 쓰므로 함께 맞춘다."""
     result = RangeSync()
     events = db.execute(select(Event).where(Event.date_range_id == date_range.id, Event.is_recurring.is_(True))).scalars().all()
     for event in events:
         result.event_ids.add(event.id)
-        result.added.extend(generate_event_instances(db, event))
+        result.added.extend(generate_event_instances(db, event, not_before=local_today()))
         for instance in event.instances:
             outside = instance.date < date_range.start_date or instance.date > date_range.end_date
             if outside and instance.status == EventInstanceStatus.PENDING:
