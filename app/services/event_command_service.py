@@ -9,6 +9,7 @@ set_instance_times)를 거치고, 변경 전 스냅샷과 ActionHistory를 같�
 
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, time
@@ -149,6 +150,16 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", "", text).casefold()
 
 
+def _loose(text: str) -> str:
+    """대소문자·공백·기호를 무시한 비교용 문자열."""
+    return re.sub(r"[\W_]+", "", text).casefold()
+
+
+def _codes(text: str) -> set[str]:
+    """과목 코드처럼 제목을 구분하는 단어('ECE360', '물리')."""
+    return {_loose(word) for word in re.split(r"[\s/·,()]+", text) if len(_loose(word)) >= 2}
+
+
 def _active_instances(event: Event) -> list[EventInstance]:
     return [i for i in event.instances if i.status != _CANCELLED]
 
@@ -163,9 +174,34 @@ def match_events(db: Session, user_id: int, title: str) -> list[Event]:
     events = db.execute(
         select(Event).where(Event.user_id == user_id, Event.parent_event_id.is_(None)).order_by(Event.id)
     ).scalars().all()
-    key = _norm(title)
-    exact = [e for e in events if _norm(e.title) == key]
-    return exact or [e for e in events if key in _norm(e.title)]
+    key = _loose(title)
+    exact = [e for e in events if _loose(e.title) == key]
+    if exact:
+        return exact
+    partial = [e for e in events if key and (key in _loose(e.title) or _loose(e.title) in key)]
+    if partial:
+        return partial
+    # 단어 일부만 맞아도 후보 ('ECE360'만 말해도 'ECE360 Lab'). 숫자가 든 과목 코드가 있으면 그것만 본다 — 'Lecture'처럼
+    # 흔한 단어가 모든 강의를 끌어오지 않게. 오타일 수 있으니 아주 비슷한 제목도 함께 후보로 낸다(여러 개면 고르게).
+    words = _codes(title)
+    codes = {word for word in words if any(ch.isdigit() for ch in word)} or words
+    by_word = [e for e in events if codes & _codes(e.title)]
+    if not by_word:
+        return []
+    similar = [e for e in similar_events(db, user_id, title, cutoff=0.88) if e not in by_word]
+    return by_word + similar
+
+
+def similar_events(db: Session, user_id: int, title: str, limit: int = 3, cutoff: float = 0.6) -> list[Event]:
+    """하나도 맞지 않을 때 보여줄 비슷한 제목 (오타: 'ECE360 Lecture' → 'ESC360 Lecture')."""
+    events = db.execute(
+        select(Event).where(Event.user_id == user_id, Event.parent_event_id.is_(None)).order_by(Event.id)
+    ).scalars().all()
+    by_key = {}
+    for event in events:
+        by_key.setdefault(_loose(event.title), event)
+    close = difflib.get_close_matches(_loose(title), list(by_key), n=limit, cutoff=cutoff)
+    return [by_key[key] for key in close]
 
 
 def _label(target: Target, index: int | None = None) -> str:
@@ -192,6 +228,11 @@ def resolve(db: Session, user: User, desc: CommandDescription) -> Resolution:
 
     events = match_events(db, user.id, desc.title)
     if not events:
+        similar = similar_events(db, user.id, desc.title)
+        if similar:
+            labels = ", ".join(e.title for e in similar)
+            message = render_message("command.not_found_suggest", lang, title=desc.title, candidates=labels)
+            return Resolution("not_found", message, candidates=[Target(e) for e in similar])
         return Resolution("not_found", render_message("command.not_found", lang, title=desc.title))
 
     if desc.date is not None:

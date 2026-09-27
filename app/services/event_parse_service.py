@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, time, timedelta
 
@@ -51,7 +52,11 @@ from app.services.slot_fill_session import (
     delete_session,
     discard_pending_action,
     get_session,
+    reset_session_state,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_hhmm(value: str) -> time:
@@ -310,6 +315,9 @@ def _enforce_create_rules(session: SlotFillSession, utterance: str, known_before
         _make_one_off(session)
         session.new_date_range = None
     if session.event_type == "deadline":
+        if not session.end_time and session.start_time:
+            session.end_time = session.start_time
+        session.start_time = None
         _drop_slots(session, ("start_time",))
     if _is_recurring(session):
         # 반복 일정의 첫 날짜는 선택이다(말하지 않으면 반복 기간 시작 뒤 첫 해당 요일). LLM이 물으려 해도 묻지 않는다.
@@ -443,8 +451,23 @@ def _draft_changes(before: dict[str, object] | None, draft: EventDraft) -> list[
     return changes
 
 
+def _ask_missing_required(session: SlotFillSession, language: str) -> None:
+    """LLM이 다 채웠다고 했는데 초안에 꼭 필요한 값이 비어 있으면(예: 마감 시각) 오류 대신 그 값을 묻는다."""
+    deadline = session.event_type == "deadline"
+    if not session.title:
+        _ask(session, "title", render_message("command.need_title", language))
+    if not session.end_time:
+        _ask(session, "end_time", render_message("draft.ask_deadline" if deadline else "draft.ask_end_time", language))
+    if not deadline and not session.start_time:
+        _ask(session, "start_time", render_message("draft.ask_start_time", language))
+    if session.frequency is None and not session.date:
+        _ask(session, "date", render_message("command.ask_event_date", language))
+
+
 def _to_response(db: Session, session: SlotFillSession, user: User, notice: str | None = None) -> EventParseResponse:
     lang = user.preferred_language
+    if session.is_complete:
+        _ask_missing_required(session, lang)
     if session.is_complete:
         _ask_end_if_same_as_start(session, lang)
     if session.is_complete:
@@ -527,13 +550,19 @@ def _handle_command(db: Session, user: User, session: SlotFillSession, desc: Com
     resolution = resolve(db, user, desc)
     base = {"session_id": session.session_id, "intent": desc.intent}
 
+    if resolution.status == "not_found" and not resolution.candidates:
+        session.command = None  # 끝난 명령(찾지 못함)의 상태는 남기지 않는다
+        session.command_candidates = []
+        return EventParseResponse(
+            **base, is_complete=False, message=resolution.message, command=command_result(desc.intent, "not_found")
+        )
     if resolution.status != "ready":
         # 되묻는 동안 요청을 세션에 남겨 두고, 다음 턴에 사용자의 답으로 보완한다.
         session.command = desc.to_dict()
         session.command_candidates = [
             f"{i}) {c.title} ({c.date})" for i, c in enumerate(map(to_command_target, resolution.candidates), start=1)
         ]
-        status = "not_found" if resolution.status == "not_found" else "needs_clarification"
+        status = "needs_clarification"  # 비슷한 제목을 제안한 경우도 고르는 답을 기다린다
         return EventParseResponse(
             **base,
             is_complete=False,
@@ -901,9 +930,13 @@ def _handle_draft_turn(
     if is_cancel_reply(utterance):
         return _cancel_draft(session, user)
 
-    edit = fill_draft_edit_for_user(
-        db, user.id, utterance, draft=session.last_draft or {}, history=session.history, http_client=http_client
-    )
+    try:
+        edit = fill_draft_edit_for_user(
+            db, user.id, utterance, draft=session.last_draft or {}, history=session.history, http_client=http_client
+        )
+    except LLMResponseParsingError as error:
+        logger.warning("[자연어 일정] 초안 수정 응답을 해석하지 못했습니다: %s", error)
+        return _current_draft_response(session, render_message("draft.unclear", lang))
     if edit.decision == "confirm":
         return _confirm_draft(db, user, session)
     if edit.decision == "cancel":
@@ -917,6 +950,38 @@ def _handle_draft_turn(
             return _current_draft_response(session, f"{notice} {render_message('draft.unchanged', lang)}")
         return _current_draft_response(session, render_message("draft.unclear", lang))
     return _to_response(db, session, user, notice=notice)
+
+
+def _fill_slots(
+    db: Session,
+    user: User,
+    session: SlotFillSession,
+    utterance: str,
+    known_slots: dict[str, object],
+    http_client: httpx.Client | None,
+) -> EventSlotFillResult | None:
+    """슬롯필링 LLM 호출. 다시 요청해도 형식이 맞지 않으면 None — 422로 끝내지 않고 대화로 다시 묻는다."""
+    try:
+        return fill_event_slots_for_user(
+            db,
+            user.id,
+            utterance,
+            known_slots=known_slots,
+            pending_command=_pending_command_prompt(session),
+            history=session.history,
+            http_client=http_client,
+        )
+    except LLMResponseParsingError as error:
+        logger.warning("[자연어 일정] LLM 응답을 해석하지 못해 다시 묻습니다: %s", error)
+        return None
+
+
+def _retry_reply(session: SlotFillSession, user: User) -> EventParseResponse:
+    return EventParseResponse(
+        session_id=session.session_id,
+        is_complete=False,
+        message=render_message("command.retry_ask", user.preferred_language),
+    )
 
 
 def _pending_command_prompt(session: SlotFillSession) -> str | None:
@@ -938,6 +1003,7 @@ def parse_event_utterance(
     user = require(db, User, data.user_id, "user_id")
     session = _get_or_create_session(data)
     response = _parse_turn(db, user, session, data.utterance, http_client)
+    session = get_session(session.session_id) or session  # 새 요청으로 상태를 초기화했으면 바뀐 세션에 기록
     session.remember("user", data.utterance)
     session.remember("assistant", response.next_question.question if response.next_question else response.message)
     return response
@@ -983,15 +1049,18 @@ def _parse_turn(
         return _to_response(db, session, user)
 
     known_before = session.known_slots()
-    result = fill_event_slots_for_user(
-        db,
-        user.id,
-        utterance,
-        known_slots=known_before,
-        pending_command=_pending_command_prompt(session),
-        history=session.history,
-        http_client=http_client,
-    )
+    result = _fill_slots(db, user, session, utterance, known_before, http_client)
+    if result is None:
+        return _retry_reply(session, user)
+    if not result.answers_previous_question and (session.command is not None or known_before):
+        # 새 요청이 분명하면 이전 상태(되묻던 명령, 모으던 슬롯)를 버리고 새로 시작한다. 모으던 슬롯이 있었으면 그
+        # 값이 섞였을 수 있으므로 빈 상태로 한 번 더 해석한다.
+        session = reset_session_state(session)
+        if known_before:
+            known_before = {}
+            result = _fill_slots(db, user, session, utterance, known_before, http_client)
+            if result is None:
+                return _retry_reply(session, user)
 
     if result.target_kind == "date_range" and result.intent in ("create", "update", "delete", "list"):
         session.command = None

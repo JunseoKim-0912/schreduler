@@ -74,5 +74,9 @@
   "command.ask_location_minutes": "{name}까지 이동 시간이 몇 분인가요?",
   "command.location_applies_to_series": "장소는 반복 일정 전체({days})에 적용돼요. 진행할까요?",
   "change.location": "장소 {before}→{after}",
-  "change.no_location": "없음"
+  "change.no_location": "없음",
+  "command.retry_ask": "날짜와 시간을 다시 말해줄래요?",
+  "command.not_found_suggest": "'{title}'에 해당하는 일정을 찾지 못했어요. 혹시 이 중에 있나요? {candidates}",
+  "draft.ask_end_time": "몇 시에 끝나나요?",
+  "draft.ask_deadline": "마감 시각이 언제인가요?"
 }

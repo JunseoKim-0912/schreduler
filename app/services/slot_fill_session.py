@@ -98,6 +98,8 @@ class SlotFillSession:
         for slot in SLOT_NAMES:
             if slot not in result.missing_slots:
                 setattr(self, slot, getattr(result, slot))
+        if result.event_type is not None:
+            self.event_type = result.event_type
         if result.new_date_range is not None:
             self.new_date_range = result.new_date_range.model_dump()
             self.date_range_id = None
@@ -105,6 +107,15 @@ class SlotFillSession:
             self.new_date_range = None
         self.missing_slots = list(result.missing_slots)
         self.clarifying_questions = list(result.clarifying_questions)
+
+
+def reset_session_state(session: SlotFillSession) -> SlotFillSession:
+    """새 요청이 분명할 때: 같은 session_id와 최근 대화는 두고 나머지 상태(모은 슬롯, 되묻는 중인 명령)를 비운다."""
+    fresh = SlotFillSession(session_id=session.session_id, user_id=session.user_id, history=list(session.history))
+    discard_pending_action(session.pending_token)
+    with _lock:
+        _sessions[session.session_id] = fresh
+    return fresh
 
 
 _sessions: dict[str, SlotFillSession] = {}

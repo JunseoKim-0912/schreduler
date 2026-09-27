@@ -74,5 +74,9 @@
   "command.ask_location_minutes": "How many minutes does it take to get to {name}?",
   "command.location_applies_to_series": "The place applies to the whole series ({days}). Go ahead?",
   "change.location": "place {before}→{after}",
-  "change.no_location": "none"
+  "change.no_location": "none",
+  "command.retry_ask": "Could you tell me the date and time again?",
+  "command.not_found_suggest": "I couldn't find '{title}'. Did you mean one of these? {candidates}",
+  "draft.ask_end_time": "What time does it end?",
+  "draft.ask_deadline": "When is it due?"
 }

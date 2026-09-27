@@ -377,23 +377,43 @@ def test_parse_event_session_state_is_persisted_between_requests(
     assert stored.user_id == user_id
 
 
-def test_parse_event_returns_422_when_llm_response_schema_is_invalid(
+def test_invalid_llm_output_is_retried_once_then_asked_in_conversation(
     client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={"choices": [{"message": {"content": "이건 JSON이 아님"}}]},
+    sent: list = []
+
+    def invalid(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "이건 JSON이 아님"}}]})
+
+    _mock_llm(monkeypatch, [invalid, invalid])
+
+    response = client.post("/events/parse", json={"user_id": user_id, "utterance": "아무 발화"})
+
+    assert response.status_code == 200, "422로 끝내지 않는다"
+    assert response.json()["message"] == "날짜와 시간을 다시 말해줄래요?"
+    assert len(sent) == 2
+    retry_messages = sent[1]["messages"]
+    assert retry_messages[-2] == {"role": "assistant", "content": "이건 JSON이 아님"}
+    assert "형식 검증에 실패했다" in retry_messages[-1]["content"], "검증 에러를 LLM에 알려 준다"
+
+
+def test_invalid_llm_output_then_valid_retry_continues_normally(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def invalid(request: httpx.Request) -> httpx.Response:
+        return _chat_response({"title": "스터디", "importance": "high"})
+
+    def valid(request: httpx.Request) -> httpx.Response:
+        return _chat_response(
+            {"title": "스터디", "missing_slots": ["start_time"], "clarifying_questions": [{"slot": "start_time", "question": "몇 시에 시작하나요?"}]}
         )
 
-    _mock_llm(monkeypatch, [handler])
+    _mock_llm(monkeypatch, [invalid, valid])
 
-    response = client.post(
-        "/events/parse", json={"user_id": user_id, "utterance": "아무 발화"}
-    )
+    body = client.post("/events/parse", json={"user_id": user_id, "utterance": "스터디 추가"}).json()
 
-    assert response.status_code == 422
-    assert "detail" in response.json()
+    assert body["next_question"] == {"slot": "start_time", "question": "몇 시에 시작하나요?"}
 
 
 def test_parse_event_returns_502_when_llm_http_call_fails(

@@ -65,6 +65,10 @@ Intent = Literal["create", "delete", "update", "list", "unknown"]
 TargetKind = Literal["event", "date_range"]
 _COMMAND_FIELDS: dict[str, dict[str, object]] = {
     "intent": {"type": "string", "enum": ["create", "delete", "update", "list", "unknown"]},
+    "answers_previous_question": {
+        "type": "boolean",
+        "description": "앱이 방금 되물은 질문에 대한 답이면 true, 새 요청이면 false",
+    },
     "target_kind": {"type": "string", "enum": ["event", "date_range"], "description": "일정이면 event, 반복 기간 자체면 date_range"},
     "range_name": {"type": ["string", "null"], "description": "만들 기간의 이름, 또는 바꾸거나 지울 기간의 이름"},
     "range_start": {"type": ["string", "null"], "description": "기간 시작일 YYYY-MM-DD(연도를 말하지 않았으면 MM-DD)"},
@@ -97,6 +101,11 @@ _EVENT_SLOT_JSON_SCHEMA = {
         "type": "object",
         "properties": {
             "title": {"type": ["string", "null"]},
+            "event_type": {
+                "type": ["string", "null"],
+                "enum": ["scheduled", "deadline", None],
+                "description": "마감(과제 제출 등)이면 deadline — start_time은 null, end_time이 마감 시각",
+            },
             "date": {
                 "type": ["string", "null"],
                 "description": "일정 날짜 YYYY-MM-DD. 사용자가 연도를 말하지 않았으면 MM-DD",
@@ -166,7 +175,9 @@ _EVENT_SLOT_JSON_SCHEMA = {
             },
             **_COMMAND_FIELDS,
         },
-        "required": list(SLOT_NAMES) + ["new_date_range", "missing_slots", "clarifying_questions"] + list(_COMMAND_FIELDS),
+        "required": list(SLOT_NAMES)
+        + ["event_type", "new_date_range", "missing_slots", "clarifying_questions"]
+        + list(_COMMAND_FIELDS),
         "additionalProperties": False,
     },
 }
@@ -207,6 +218,7 @@ class EventSlotFillResult(BaseModel):
     """
 
     title: str | None = None
+    event_type: Literal["scheduled", "deadline"] | None = None
     date: str | None = None  # YYYY-MM-DD, 연도를 말하지 않았으면 MM-DD (event_parse_service가 날짜로 정한다)
     frequency: Literal["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] | None = None
     by_day: list[Literal["MO", "TU", "WE", "TH", "FR", "SA", "SU"]] | None = None
@@ -221,6 +233,8 @@ class EventSlotFillResult(BaseModel):
     clarifying_questions: list[ClarifyingQuestion] = Field(default_factory=list)
     # v3.6: 새 필드가 없는 응답(기존 테스트의 가짜 응답 등)은 일정 추가(create)로 본다.
     intent: Intent = "create"
+    # 이 발화가 앱이 방금 되물은 질문에 대한 답인지. 아니면 백엔드가 이전 대화 상태를 버리고 새 요청으로 처리한다.
+    answers_previous_question: bool = True
     target_kind: TargetKind = "event"
     range_name: str | None = None
     range_start: str | None = None
@@ -294,6 +308,8 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "- by_day는 frequency가 WEEKLY일 때 반복 요일들을 MO/TU/WE/TH/FR/SA/SU "
     "코드의 배열로 담는다 (예: '매주 월요일'이면 [\"MO\"], '매주 화, 목'이면 "
     "[\"TU\", \"TH\"]). DAILY/MONTHLY/YEARLY면 보통 필요 없으니 빈 배열로 둔다.\n"
+    "- event_type: '과제 제출날이야', '~까지 내야 해', '마감', '제출'처럼 마감을 말하면 deadline이다. deadline이면 "
+    "start_time은 null이고 end_time에 마감 시각을 적는다('11:30 pm'은 23:30). 그 밖에는 scheduled.\n"
     "- start_time, end_time은 24시간제 HH:MM 형식이다. '1시간 동안'처럼 길이만 말하면 end_time은 "
     "start_time에 그 길이를 더한 시각이다. '8시'처럼 오전/오후가 분명하지 않으면 오전으로 적고 직접 묻지 "
     "않는다(필요하면 앱이 한 번 되묻는다). '오후 8시', '저녁 8시', '20시'처럼 분명하면 그대로 변환한다.\n"
@@ -317,6 +333,8 @@ _EVENT_SLOT_INSTRUCTIONS = (
     "알아낸 값이다. 최신 발화가 그 값을 바꾸라고 명시하지 않는 한 그대로 결과에 "
     "포함하고 missing_slots에 넣지 않는다. 최신 발화가 다른 값으로 정정하면 그 "
     "값으로 덮어쓴다.\n"
+    "[이어지는 답인지] answers_previous_question: '최근 대화'의 마지막 앱 말이 되묻는 질문이고 이 발화가 그 답이면 "
+    "true다. 새 날짜와 새 제목, '추가해줘', '~날이야'처럼 새 요청이 분명하면 false다. 앞선 요청이 없으면 false.\n"
     "[의도 분류] 먼저 intent를 정한다: 새 일정을 만들려는 발화는 create, 기존 일정을 없애려는 발화"
     "(삭제·취소·없애줘)는 delete, 기존 일정의 시간·제목·중요도를 바꾸려는 발화는 update, 목록을 보여 달라는 "
     "발화는 list, 일정 관리와 무관하면 unknown이다. 대상이 일정이면 target_kind=event, 반복 기간(학기, "
@@ -758,7 +776,23 @@ def fill_event_slots(
         history,
     )
     raw_content = _call_chat_completion(payload, http_client)
-    return _parse_response(raw_content)
+    try:
+        return _parse_response(raw_content)
+    except LLMResponseParsingError as error:
+        # 형식 검증에 실패하면 무엇이 틀렸는지 알려 주고 한 번만 다시 묻는다. 원본과 에러는 로그로 남긴다.
+        logger.warning("[LLM] 슬롯필링 응답 검증 실패, 한 번 다시 요청: error=%s raw=%s", error, raw_content)
+        retry = dict(payload)
+        retry["messages"] = [
+            *payload["messages"],  # type: ignore[misc]
+            {"role": "assistant", "content": raw_content},
+            {"role": "user", "content": f"방금 응답이 형식 검증에 실패했다: {error}. 같은 발화에 대해 스키마에 맞는 JSON으로 다시 답하라."},
+        ]
+        raw_retry = _call_chat_completion(retry, http_client)
+        try:
+            return _parse_response(raw_retry)
+        except LLMResponseParsingError as second:
+            logger.warning("[LLM] 다시 요청한 응답도 검증 실패: error=%s raw=%s", second, raw_retry)
+            raise
 
 
 def generate_compliance_feedback(
