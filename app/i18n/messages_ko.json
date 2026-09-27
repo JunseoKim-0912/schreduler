@@ -78,5 +78,6 @@
   "command.retry_ask": "날짜와 시간을 다시 말해줄래요?",
   "command.not_found_suggest": "'{title}'에 해당하는 일정을 찾지 못했어요. 혹시 이 중에 있나요? {candidates}",
   "draft.ask_end_time": "몇 시에 끝나나요?",
-  "draft.ask_deadline": "마감 시각이 언제인가요?"
+  "draft.ask_deadline": "마감 시각이 언제인가요?",
+  "persona.fallback_default": "무슨 말인지 잘 모르겠어요. 오늘 하루 얘기를 들려줄래요?"
 }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import random
 from datetime import date as dt_date
 
 import httpx
@@ -10,13 +11,14 @@ from sqlalchemy.orm import Session
 from app.core.db import SessionLocal
 from app.core.exceptions import NotFoundError
 from app.core.scheduler import scheduler
-from app.i18n import render_notification
+from app.i18n import render_message, render_notification, to_language
 from app.models.user import User
 from app.schemas.daily_checkin import DailyCheckinMessageResponse
 from app.schemas.persona import PersonaRead
 from app.services.context_builder import build_daily_checkin_summary
 from app.services.llm_client import generate_daily_checkin_reply
-from app.services.persona_conversation_service import record_turn, resolve_conversation
+from app.services import input_filter
+from app.services.persona_conversation_service import current_conversation, record_turn, resolve_conversation
 from app.services.notification import send_push_notification
 
 logger = logging.getLogger(__name__)
@@ -73,18 +75,41 @@ def handle_daily_checkin_message(
     if user is None:
         raise NotFoundError(f"user_id {user_id} does not exist")
 
+    day = target_date or dt_date.today()
     conversation = resolve_conversation(db, user, DAILY_CHECKIN_CONTEXT_TYPE, conversation_id)
-    summary = build_daily_checkin_summary(db, user_id, target_date or dt_date.today())
+    if conversation is None and user.selected_persona_id is not None:
+        # 탭을 옮겼다 오거나 새로고침해도 그 페르소나의 오늘 대화에 이어서 쓴다.
+        conversation = current_conversation(db, user.id, user.selected_persona_id, DAILY_CHECKIN_CONTEXT_TYPE, day)
+    summary = build_daily_checkin_summary(db, user_id, day)
     persona = PersonaRead.model_validate(user.selected_persona) if user.selected_persona else None
-    reply = generate_daily_checkin_reply(
-        summary, utterance, persona=persona, language=user.preferred_language, http_client=http_client
-    )
-    conversation = record_turn(db, user, DAILY_CHECKIN_CONTEXT_TYPE, utterance, reply, conversation)
+
+    reason = input_filter.check(utterance)
+    if reason is not None:
+        # 키보드 난타·인젝션 등 확실히 의미 없는 입력은 LLM을 부르지 않고 페르소나의 "못 알아들음" 대사로 답한다.
+        reply = _fallback_line(persona, user.preferred_language)
+        logger.info("[체크인] LLM 건너뜀 user_id=%s reason=%s", user.id, reason)
+        conversation = record_turn(
+            db, user, DAILY_CHECKIN_CONTEXT_TYPE, utterance, reply, conversation, day=day, llm_skipped=True, filter_reason=reason
+        )
+    else:
+        history = [(m["role"], m["content"]) for m in (conversation.messages if conversation else [])][-10:]
+        reply = generate_daily_checkin_reply(
+            summary, utterance, persona=persona, language=user.preferred_language, history=history, http_client=http_client
+        )
+        conversation = record_turn(db, user, DAILY_CHECKIN_CONTEXT_TYPE, utterance, reply, conversation, day=day)
     return DailyCheckinMessageResponse(
         reply=reply,
         summary=summary,
         conversation_id=conversation.id if conversation else None,
     )
+
+
+def _fallback_line(persona: PersonaRead | None, language: str) -> str:
+    lang = to_language(language)
+    lines = getattr(persona.fallback_lines, lang, None) if persona and persona.fallback_lines else None
+    if lines:
+        return random.choice(lines)
+    return render_message("persona.fallback_default", lang)
 
 
 def register_daily_checkin_job() -> None:

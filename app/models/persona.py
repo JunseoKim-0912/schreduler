@@ -23,6 +23,8 @@ class Persona(Base):
     description: Mapped[dict[str, Any]] = mapped_column(JSON)
     example_lines: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     backstory: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # 의미 없는 입력(키보드 난타 등)에 LLM 없이 답할 "못 알아들음" 대사 {"ko": [...], "en": [...]}
+    fallback_lines: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     users: Mapped[list["User"]] = relationship(back_populates="selected_persona")
     conversations: Mapped[list["PersonaConversation"]] = relationship(back_populates="persona")

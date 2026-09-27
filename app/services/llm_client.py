@@ -842,6 +842,7 @@ def generate_daily_checkin_reply(
     *,
     persona: PersonaRead | None = None,
     language: str = "ko",
+    history: list["ConversationTurn"] | None = None,
     http_client: httpx.Client | None = None,
 ) -> str:
     """FR-8 저녁 9시 체크인 대화 한 턴을 생성한다.
@@ -851,7 +852,7 @@ def generate_daily_checkin_reply(
     담겨 있다 - "컨텍스트 동적 로딩"). 요약은 매일 바뀌므로 캐시 프리픽스가 아닌
     user 메시지에 발화와 함께 넣는다.
     """
-    payload = build_daily_checkin_payload(summary, utterance, persona=persona, language=language)
+    payload = build_daily_checkin_payload(summary, utterance, persona=persona, language=language, history=history)
     content = _call_chat_completion(payload, http_client)
     return content.strip()
 
@@ -862,15 +863,24 @@ def build_daily_checkin_payload(
     *,
     persona: PersonaRead | None = None,
     language: str = "ko",
+    history: list["ConversationTurn"] | None = None,
 ) -> dict[str, object]:
     instructions = (
         "너는 일정 관리 앱의 페르소나다. 사용자와 저녁 체크인 대화를 나눈다. "
         "사용자 메시지에 오늘 하루 요약이 함께 온다 (완료한 일정은 개수만 적혀 있고, "
         "놓친 일정만 제목·시간·사유가 상세히 적혀 있다). 놓친 일정이 있다면 그것 "
         "위주로 묻고 격려하라. 놓친 일정이 없다면 짧게 칭찬하라. 아래 페르소나의 "
-        "성격과 말투로 1~3문장 답하라."
+        "성격과 말투로 1~3문장 답하라. "
+        "오늘 요약(계획 개수, 완료·놓친 일정)은 대화의 첫 답변에서만 짚는다. '이전 대화'가 있으면 이미 요약을 "
+        "말한 것이니 되풀이하지 말고 사용자가 방금 한 말에 반응하라. "
+        "사용자가 체크인과 무관한 작업(요리 레시피, 코드 작성, 번역, 숙제 풀이 등)을 부탁하면 캐릭터를 유지한 채 "
+        "그 작업은 하지 않고, 오늘 하루 이야기로 자연스럽게 돌아오라."
     )
-    user_message = f"오늘 요약:\n{summary}\n\n사용자 발화: {utterance}"
+    lines = [f"오늘 요약:\n{summary}"]
+    if history:
+        lines.append("이전 대화:\n" + "\n".join(f"{'사용자' if role == 'user' else '페르소나'}: {text}" for role, text in history))
+    lines.append(f"사용자 발화: {utterance}")
+    user_message = "\n\n".join(lines)
 
     return _build_persona_prompt("daily_checkin", instructions, persona, language, user_message)
 

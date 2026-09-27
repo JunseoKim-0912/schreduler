@@ -78,5 +78,6 @@
   "command.retry_ask": "Could you tell me the date and time again?",
   "command.not_found_suggest": "I couldn't find '{title}'. Did you mean one of these? {candidates}",
   "draft.ask_end_time": "What time does it end?",
-  "draft.ask_deadline": "When is it due?"
+  "draft.ask_deadline": "When is it due?",
+  "persona.fallback_default": "I'm not sure what you mean. Would you tell me about your day?"
 }

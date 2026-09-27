@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -27,6 +27,15 @@ class LocalizedExampleLines(BaseModel):
 
     ko: list[ExampleLine]
     en: list[ExampleLine]
+
+
+class LocalizedLines(BaseModel):
+    """언어별 대사 목록 {"ko": [...], "en": [...]}. 비어 있어도 된다."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ko: list[str] = []
+    en: list[str] = []
 
 
 class PersonaCreate(BaseModel):
@@ -69,6 +78,7 @@ class PersonaCreate(BaseModel):
     description: LocalizedText
     example_lines: LocalizedExampleLines | None = None
     backstory: LocalizedText | None = None
+    fallback_lines: LocalizedLines | None = None  # 의미 없는 입력에 LLM 없이 답할 대사
 
 
 class PersonaUpdate(PartialUpdate):
@@ -86,12 +96,13 @@ class PersonaUpdate(PartialUpdate):
         },
     )
 
-    NULLABLE_FIELDS = frozenset({"example_lines", "backstory"})
+    NULLABLE_FIELDS = frozenset({"example_lines", "backstory", "fallback_lines"})
 
     display_name: LocalizedText | None = None
     description: LocalizedText | None = None
     example_lines: LocalizedExampleLines | None = None
     backstory: LocalizedText | None = None
+    fallback_lines: LocalizedLines | None = None
 
 
 class PersonaRead(BaseModel):
@@ -102,6 +113,7 @@ class PersonaRead(BaseModel):
     description: LocalizedText
     example_lines: LocalizedExampleLines | None
     backstory: LocalizedText | None
+    fallback_lines: LocalizedLines | None = None
 
 
 class UserPersonaSelect(BaseModel):
@@ -127,6 +139,9 @@ class ConversationMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     created_at: datetime
+    # LLM을 부르지 않고 규칙 기반 필터로 답한 턴 (비용 추적용). 그 이유 (keyboard_mash, prompt_injection 등)
+    llm_skipped: bool = False
+    filter_reason: str | None = None
 
 
 class PersonaConversationRead(BaseModel):
@@ -137,3 +152,4 @@ class PersonaConversationRead(BaseModel):
     persona_id: str
     context_type: str
     messages: list[ConversationMessage]
+    conversation_date: date | None = None

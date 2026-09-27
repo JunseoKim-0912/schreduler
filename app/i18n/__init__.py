@@ -138,6 +138,7 @@ MessageKey = Literal[
     "command.not_found_suggest",
     "draft.ask_end_time",
     "draft.ask_deadline",
+    "persona.fallback_default",
     "weekday.MO",
     "weekday.TU",
     "weekday.WE",

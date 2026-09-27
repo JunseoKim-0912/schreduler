@@ -252,7 +252,12 @@ POST /daily-actual-logs/checkin {"user_id": 1, "utterance": "오늘 좀 피곤�
 POST /daily-actual-logs/checkin {"user_id": 1, "utterance": "내일은 잘할게", "conversation_id": 7}   // 같은 대화 이어가기
 ```
 
-- `conversation_id`를 저장해 두었다가 다음 턴에 보낸다. 페르소나를 선택하지 않은 사용자는 대화가 저장되지 않아 `null`이 온다.
+- `conversation_id`를 저장해 두었다가 다음 턴에 보낸다. 빠지면 그 페르소나의 **오늘 대화**에 이어서 저장된다.
+  화면에 들어오거나 페르소나를 바꾸면 `GET /personas/{persona_id}/conversations/current`로 오늘 대화를 불러와 이어 보여준다.
+  날짜가 바뀌면 새 대화가 되고, [새 대화]는 `POST /personas/{persona_id}/conversations`(이전 대화는 남는다).
+  페르소나를 선택하지 않은 사용자는 대화가 저장되지 않아 `null`이 온다.
+- 키보드 난타·같은 글자 반복·기호만·1000자 초과·알려진 프롬프트 인젝션은 LLM을 부르지 않고 페르소나의 `fallback_lines`로 답한다.
+  이런 턴은 대화 기록의 응답 메시지에 `llm_skipped: true`, `filter_reason`이 남는다.
 - 지난 대화: `GET /users/me/persona-conversations?context_type=daily_checkin`, `GET /users/me/persona-conversations/{id}`.
 - 하루 실제 기록을 남기려면 `POST /daily-actual-logs`.
 
@@ -388,8 +393,11 @@ GET /points/summary
 | `GET /personas/{name}` | 조회 | | `PersonaRead` |
 | `PUT /personas/{name}` | 수정 (부분) | `PersonaUpdate` | `PersonaRead` |
 | `DELETE /personas/{name}` | 삭제 (선택한 사용자·대화가 있으면 `409`) | | `204` |
+| `GET /personas/{persona_id}/conversations/current` 🔑 | 이 페르소나와의 오늘 대화 (`?context=checkin`, 없으면 `null`) (3.5) | | `PersonaConversationRead \| null` |
+| `POST /personas/{persona_id}/conversations` 🔑 | [새 대화]: 오늘 새 대화 시작, 이전 대화는 남김 (`?context=checkin`) | | `201 PersonaConversationRead` |
 
-`PersonaRead`: `name`, `display_name{ko,en}`, `description{ko,en}`, `example_lines{ko[],en[]}|null`, `backstory{ko,en}|null`.
+`PersonaRead`: `name`, `display_name{ko,en}`, `description{ko,en}`, `example_lines{ko[],en[]}|null`, `backstory{ko,en}|null`,
+`fallback_lines{ko[],en[]}|null`(의미 없는 입력에 LLM 없이 답할 대사, 비어 있으면 기본 문구).
 일반 사용자 앱은 `GET`만 쓰면 된다. 생성·수정·삭제는 관리자 화면용이다.
 
 ### users — 내 정보 🔑

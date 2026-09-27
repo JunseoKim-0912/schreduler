@@ -1291,6 +1291,85 @@
       "description": "대화 캐릭터(페르소나) 관리 (FR-9). 코드 수정 없이 추가·수정할 수 있다.",
       "item": [
         {
+          "name": "이 페르소나와의 오늘 대화",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/personas/:persona_id/conversations/current",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "personas",
+                ":persona_id",
+                "conversations",
+                "current"
+              ],
+              "query": [
+                {
+                  "key": "context",
+                  "value": "checkin",
+                  "description": "대화 상황",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "persona_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "(현재 사용자, 이 페르소나, 상황, 오늘)의 대화. 그날 [새 대화]를 눌렀으면 가장 최근 대화. 아직 없으면 `null`.\n\n탭을 옮겼다 오거나 페르소나를 바꿨다 돌아와도 이 대화를 불러와 이어 간다. 날짜가 바뀌면 새 대화다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+          },
+          "response": []
+        },
+        {
+          "name": "이 페르소나와 오늘 새 대화 시작",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/personas/:persona_id/conversations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "personas",
+                ":persona_id",
+                "conversations"
+              ],
+              "query": [
+                {
+                  "key": "context",
+                  "value": "checkin",
+                  "description": "대화 상황",
+                  "disabled": true
+                }
+              ],
+              "variable": [
+                {
+                  "key": "persona_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "[새 대화]: 오늘의 새 대화를 시작한다. 이전 대화는 지우지 않고 `/users/me/persona-conversations`에 남는다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+          },
+          "response": []
+        },
+        {
           "name": "페르소나 목록",
           "request": {
             "method": "GET",
