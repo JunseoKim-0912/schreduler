@@ -12,11 +12,14 @@ from app.models.enums import Importance
 from app.services.llm_client import (
     DateRangeOption,
     LLMClientError,
+    TokenUsage,
     _build_request_payload,
     _parse_response,
+    collect_chat_usage,
     fill_event_slots,
     fill_event_slots_for_user,
     get_date_range_options,
+    post_chat_completion,
 )
 
 
@@ -289,3 +292,37 @@ def test_fill_event_slots_for_user_with_no_registered_ranges_sends_empty_candida
     system_message = captured_payload["messages"][0]["content"]
     assert "등록된 기간(date_range) 후보: []" in system_message
     assert "date_range_id" in result.missing_slots
+
+
+def _usage_client(usage: dict) -> httpx.Client:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"model": "gpt-5.6-luna-2026-09-01", "choices": [{"message": {"content": "ok"}}], "usage": usage})
+
+    return httpx.Client(transport=httpx.MockTransport(handler))
+
+
+def test_chat_usage_reads_reasoning_tokens() -> None:
+    client = _usage_client(
+        {"prompt_tokens": 900, "completion_tokens": 300, "completion_tokens_details": {"reasoning_tokens": 256}}
+    )
+
+    result = post_chat_completion({"model": "gpt-5.6-luna", "messages": []}, client)
+
+    assert result.usage == TokenUsage(prompt_tokens=900, cached_tokens=0, completion_tokens=300, reasoning_tokens=256)
+
+
+def test_collect_chat_usage_records_calls_only_inside_the_block() -> None:
+    client = _usage_client({"prompt_tokens": 1500, "completion_tokens": 40, "prompt_tokens_details": {"cached_tokens": 1024}})
+    payload = {"model": "gpt-5.6-luna", "messages": [], "prompt_cache_key": "event_slot_fill:abc"}
+
+    post_chat_completion(payload, client)
+    with collect_chat_usage() as records:
+        post_chat_completion(payload, client)
+    post_chat_completion(payload, client)
+
+    assert len(records) == 1
+    record = records[0]
+    assert record.task == "event_slot_fill"
+    assert (record.requested_model, record.response_model, record.reasoning_effort) == ("gpt-5.6-luna", "gpt-5.6-luna-2026-09-01", None)
+    assert record.usage == TokenUsage(prompt_tokens=1500, cached_tokens=1024, completion_tokens=40)
+    assert record.latency_ms >= 0

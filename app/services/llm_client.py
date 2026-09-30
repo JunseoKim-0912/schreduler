@@ -4,6 +4,9 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date
 from datetime import date as dt_date
 from typing import Any, Literal, Protocol
@@ -658,7 +661,8 @@ def _parse_response(raw_content: str) -> EventSlotFillResult:
 class TokenUsage(BaseModel):
     prompt_tokens: int
     cached_tokens: int
-    completion_tokens: int
+    completion_tokens: int  # reasoning_tokens를 포함한 값 (과금 기준)
+    reasoning_tokens: int = 0
 
     @property
     def uncached_prompt_tokens(self) -> int:
@@ -679,7 +683,33 @@ def _parse_usage(body: dict[str, Any]) -> TokenUsage | None:
         prompt_tokens=usage.get("prompt_tokens", 0),
         cached_tokens=details.get("cached_tokens", 0),
         completion_tokens=usage.get("completion_tokens", 0),
+        reasoning_tokens=(usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0),
     )
+
+
+class ChatUsageRecord(BaseModel):
+    """Chat Completions 호출 한 번의 사용량. collect_chat_usage() 안에서만 모인다 (비교 스크립트용)."""
+
+    task: str
+    requested_model: str
+    response_model: str | None
+    reasoning_effort: str | None  # 요청에 넣은 값. None이면 보내지 않았다 = API 기본값
+    usage: TokenUsage | None
+    latency_ms: int
+
+
+_chat_usage_sink: ContextVar[list[ChatUsageRecord] | None] = ContextVar("chat_usage_sink", default=None)
+
+
+@contextmanager
+def collect_chat_usage() -> Iterator[list[ChatUsageRecord]]:
+    """이 블록 안(같은 스레드·컨텍스트)에서 성공한 Chat Completions 호출의 사용량을 목록으로 모은다."""
+    records: list[ChatUsageRecord] = []
+    token = _chat_usage_sink.set(records)
+    try:
+        yield records
+    finally:
+        _chat_usage_sink.reset(token)
 
 
 def _log_usage(payload: dict[str, object], usage: TokenUsage | None) -> None:
@@ -689,13 +719,14 @@ def _log_usage(payload: dict[str, object], usage: TokenUsage | None) -> None:
         return
     hit_ratio = usage.cached_tokens / usage.prompt_tokens if usage.prompt_tokens else 0.0
     logger.info(
-        "[LLM usage] cache_key=%s prompt=%d cached=%d (%.0f%%) uncached=%d completion=%d",
+        "[LLM usage] cache_key=%s prompt=%d cached=%d (%.0f%%) uncached=%d completion=%d reasoning=%d",
         cache_key,
         usage.prompt_tokens,
         usage.cached_tokens,
         hit_ratio * 100,
         usage.uncached_prompt_tokens,
         usage.completion_tokens,
+        usage.reasoning_tokens,
     )
 
 
@@ -719,6 +750,7 @@ def post_chat_completion(
 
     owns_client = http_client is None
     client = http_client or httpx.Client()
+    started = time.perf_counter()
     try:
         response = client.post(CHAT_COMPLETIONS_URL, json=payload, headers=headers, timeout=30)
     except httpx.HTTPError as exc:
@@ -738,6 +770,18 @@ def post_chat_completion(
 
     usage = _parse_usage(body)
     _log_usage(payload, usage)
+    sink = _chat_usage_sink.get()
+    if sink is not None:
+        sink.append(
+            ChatUsageRecord(
+                task=str(payload.get("prompt_cache_key", "-")).split(":")[0],
+                requested_model=str(payload.get("model")),
+                response_model=body.get("model"),
+                reasoning_effort=payload.get("reasoning_effort"),  # type: ignore[arg-type]
+                usage=usage,
+                latency_ms=round((time.perf_counter() - started) * 1000),
+            )
+        )
     return ChatCompletionResult(content=content, usage=usage)
 
 

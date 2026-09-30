@@ -1,0 +1,986 @@
+{
+ "run_at": "2026-09-30T19:01:27",
+ "criterion": "일정 하나를 확정할 때까지 (확정은 두 방식 모두 버튼 경로, LLM 호출 없음)",
+ "paths": {
+  "old": {
+   "endpoint": "/events/parse",
+   "api": "chat.completions",
+   "model": "gpt-5.6-luna",
+   "response_models": [
+    "gpt-5.6-luna"
+   ],
+   "effort": "미지정 (요청에 넣지 않음 → API 기본값)",
+   "summary": {
+    "cases": 10,
+    "confirmed": 8,
+    "correct": 8,
+    "totals": {
+     "llm_calls": 14,
+     "input_tokens": 56245,
+     "cached_tokens": 51285,
+     "output_tokens": 3989,
+     "reasoning_tokens": 1259,
+     "llm_latency_ms": 48529,
+     "turns": 17,
+     "wall_ms": 48991,
+     "cost_usd": 0.0068045
+    },
+    "averages": {
+     "llm_calls": 1.4,
+     "input_tokens": 5624.5,
+     "cached_tokens": 5128.5,
+     "output_tokens": 398.9,
+     "reasoning_tokens": 125.9,
+     "llm_latency_ms": 4852.9,
+     "turns": 1.7,
+     "wall_ms": 4899.1,
+     "cost_usd": 0.00068045
+    },
+    "cache_hit_rate": 0.9118143835007556,
+    "cost_per_1000_usd": 0.68045
+   }
+  },
+  "new": {
+   "endpoint": "/assistant/chat",
+   "api": "responses",
+   "model": "gpt-5.6-luna",
+   "response_models": [
+    "gpt-5.6-luna"
+   ],
+   "effort": "medium",
+   "summary": {
+    "cases": 10,
+    "confirmed": 10,
+    "correct": 10,
+    "totals": {
+     "llm_calls": 22,
+     "input_tokens": 77329,
+     "cached_tokens": 62711,
+     "output_tokens": 2198,
+     "reasoning_tokens": 779,
+     "llm_latency_ms": 45404,
+     "turns": 10,
+     "wall_ms": 45909,
+     "cost_usd": 0.00681542
+    },
+    "averages": {
+     "llm_calls": 2.2,
+     "input_tokens": 7732.9,
+     "cached_tokens": 6271.1,
+     "output_tokens": 219.8,
+     "reasoning_tokens": 77.9,
+     "llm_latency_ms": 4540.4,
+     "turns": 1.0,
+     "wall_ms": 4590.9,
+     "cost_usd": 0.000681542
+    },
+    "cache_hit_rate": 0.8109635453710768,
+    "cost_per_1000_usd": 0.6815420000000001
+   }
+  }
+ },
+ "prices": {
+  "checked": "2026-09-27",
+  "models": {
+   "gpt-5.6-luna": {
+    "input": 0.2,
+    "cached": 0.02,
+    "output": 1.2,
+    "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+   }
+  }
+ },
+ "cases": [
+  {
+   "id": "biweekly_lab_from_0922",
+   "say": "ECE360 Lab 매주 화요일 9-12시 Lecture period 동안 9/22일부터 2주마다 중요도 4",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "ECE360 Lab 매주 화요일 9-12시 Lecture period 동안 9/22일부터 2주마다 중요도 4",
+      "reply": "이 내용으로 만들까요?",
+      "llm_calls": 1,
+      "input_tokens": 4004,
+      "cached_tokens": 0,
+      "output_tokens": 310,
+      "reasoning_tokens": 121,
+      "llm_latency_ms": 4303,
+      "wall_ms": 4392
+     }
+    ],
+    "confirm_ms": 18,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null
+    ],
+    "totals": {
+     "llm_calls": 1,
+     "input_tokens": 4004,
+     "cached_tokens": 0,
+     "output_tokens": 310,
+     "reasoning_tokens": 121,
+     "llm_latency_ms": 4303,
+     "turns": 1
+    },
+    "wall_ms": 4410
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "ECE360 Lab 매주 화요일 9-12시 Lecture period 동안 9/22일부터 2주마다 중요도 4",
+      "reply": "ECE360 Lab을 **Lecture Period 동안 매주 화요일 격주**, **2026년 9월 22일부터 오전 9시~오후 12시**, 중요도 **4**로 추가할까요?",
+      "llm_calls": 2,
+      "input_tokens": 7119,
+      "cached_tokens": 3296,
+      "output_tokens": 228,
+      "reasoning_tokens": 64,
+      "llm_latency_ms": 4309,
+      "wall_ms": 4331
+     }
+    ],
+    "confirm_ms": 20,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 7119,
+     "cached_tokens": 3296,
+     "output_tokens": 228,
+     "reasoning_tokens": 64,
+     "llm_latency_ms": 4309,
+     "turns": 1
+    },
+    "wall_ms": 4351
+   }
+  },
+  {
+   "id": "study_11_to_1",
+   "say": "10월 2일 11:00-1:00 스터디 추가해줘",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "추가 질문 발생",
+    "correct": false,
+    "problems": [],
+    "turns": [
+     {
+      "say": "10월 2일 11:00-1:00 스터디 추가해줘",
+      "reply": "오전 11시인가요, 오후 11시인가요?",
+      "llm_calls": 1,
+      "input_tokens": 3995,
+      "cached_tokens": 3945,
+      "output_tokens": 281,
+      "reasoning_tokens": 68,
+      "llm_latency_ms": 3537,
+      "wall_ms": 3554
+     },
+     {
+      "say": "오전",
+      "reply": "이 일정의 중요도를 1에서 6 중 어느 정도로 설정할까요?",
+      "llm_calls": 0,
+      "input_tokens": 0,
+      "cached_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
+      "llm_latency_ms": 0,
+      "wall_ms": 0
+     }
+    ],
+    "confirm_ms": 0,
+    "questions": [
+     "오전 11시인가요, 오후 11시인가요?",
+     "이 일정의 중요도를 1에서 6 중 어느 정도로 설정할까요?"
+    ],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null
+    ],
+    "totals": {
+     "llm_calls": 1,
+     "input_tokens": 3995,
+     "cached_tokens": 3945,
+     "output_tokens": 281,
+     "reasoning_tokens": 68,
+     "llm_latency_ms": 3537,
+     "turns": 2
+    },
+    "wall_ms": 3554
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "10월 2일 11:00-1:00 스터디 추가해줘",
+      "reply": "10월 2일(금) 오전 11시~오후 1시에 **스터디**를 추가할까요? 중요도는 개인 일정으로 추정해 1로 설정했습니다.",
+      "llm_calls": 2,
+      "input_tokens": 6941,
+      "cached_tokens": 6551,
+      "output_tokens": 168,
+      "reasoning_tokens": 41,
+      "llm_latency_ms": 4058,
+      "wall_ms": 4083
+     }
+    ],
+    "confirm_ms": 17,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 6941,
+     "cached_tokens": 6551,
+     "output_tokens": 168,
+     "reasoning_tokens": 41,
+     "llm_latency_ms": 4058,
+     "turns": 1
+    },
+    "wall_ms": 4100
+   }
+  },
+  {
+   "id": "utkesa_meeting_one_hour",
+   "say": "10월 1일 8시에 \"UTKESA 썸포차 이벤트 미팅\" 1시간동안 추가해줘",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "10월 1일 8시에 \"UTKESA 썸포차 이벤트 미팅\" 1시간동안 추가해줘",
+      "reply": "오전 8시인가요, 오후 8시인가요?",
+      "llm_calls": 1,
+      "input_tokens": 4003,
+      "cached_tokens": 3945,
+      "output_tokens": 295,
+      "reasoning_tokens": 102,
+      "llm_latency_ms": 3966,
+      "wall_ms": 3984
+     },
+     {
+      "say": "오후",
+      "reply": "이 내용으로 만들까요?",
+      "llm_calls": 0,
+      "input_tokens": 0,
+      "cached_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
+      "llm_latency_ms": 0,
+      "wall_ms": 1
+     }
+    ],
+    "confirm_ms": 17,
+    "questions": [
+     "오전 8시인가요, 오후 8시인가요?"
+    ],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null
+    ],
+    "totals": {
+     "llm_calls": 1,
+     "input_tokens": 4003,
+     "cached_tokens": 3945,
+     "output_tokens": 295,
+     "reasoning_tokens": 102,
+     "llm_latency_ms": 3966,
+     "turns": 2
+    },
+    "wall_ms": 4002
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "10월 1일 8시에 \"UTKESA 썸포차 이벤트 미팅\" 1시간동안 추가해줘",
+      "reply": "10월 1일(목) 오후 8시~9시에 **“UTKESA 썸포차 이벤트 미팅”**을 추가할까요? 시간은 저녁 8시, 중요도는 미팅 기준 2로 추정했습니다.",
+      "llm_calls": 2,
+      "input_tokens": 7015,
+      "cached_tokens": 6559,
+      "output_tokens": 223,
+      "reasoning_tokens": 72,
+      "llm_latency_ms": 3950,
+      "wall_ms": 3972
+     }
+    ],
+    "confirm_ms": 19,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 7015,
+     "cached_tokens": 6559,
+     "output_tokens": 223,
+     "reasoning_tokens": 72,
+     "llm_latency_ms": 3950,
+     "turns": 1
+    },
+    "wall_ms": 3991
+   }
+  },
+  {
+   "id": "sleep_overnight",
+   "say": "밤 11시부터 새벽 7시까지 수면",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "밤 11시부터 새벽 7시까지 수면",
+      "reply": "수면 일정을 언제로 등록할까요?",
+      "llm_calls": 1,
+      "input_tokens": 3988,
+      "cached_tokens": 3945,
+      "output_tokens": 255,
+      "reasoning_tokens": 52,
+      "llm_latency_ms": 3077,
+      "wall_ms": 3095
+     },
+     {
+      "say": "오늘",
+      "reply": "이 내용으로 만들까요?",
+      "llm_calls": 1,
+      "input_tokens": 4069,
+      "cached_tokens": 3945,
+      "output_tokens": 275,
+      "reasoning_tokens": 87,
+      "llm_latency_ms": 3313,
+      "wall_ms": 3329
+     }
+    ],
+    "confirm_ms": 17,
+    "questions": [
+     "수면 일정을 언제로 등록할까요?"
+    ],
+    "models": [
+     "gpt-5.6-luna",
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null,
+     null
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 8057,
+     "cached_tokens": 7890,
+     "output_tokens": 530,
+     "reasoning_tokens": 139,
+     "llm_latency_ms": 6390,
+     "turns": 2
+    },
+    "wall_ms": 6441
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "밤 11시부터 새벽 7시까지 수면",
+      "reply": "오늘 밤 11시부터 내일 오전 7시까지 **수면** 일정을 제안했어요. 자정을 넘기는 일정이며, 날짜는 오늘로 추정했습니다. 이렇게 만들까요?",
+      "llm_calls": 2,
+      "input_tokens": 7223,
+      "cached_tokens": 6545,
+      "output_tokens": 410,
+      "reasoning_tokens": 282,
+      "llm_latency_ms": 6460,
+      "wall_ms": 6475
+     }
+    ],
+    "confirm_ms": 19,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 7223,
+     "cached_tokens": 6545,
+     "output_tokens": 410,
+     "reasoning_tokens": 282,
+     "llm_latency_ms": 6460,
+     "turns": 1
+    },
+    "wall_ms": 6494
+   }
+  },
+  {
+   "id": "mat389_deadline_2330",
+   "say": "9/29 화요일 11:30 pm에 MAT389 과제 제출날이야",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "9/29 화요일 11:30 pm에 MAT389 과제 제출날이야",
+      "reply": "이 내용으로 만들까요?",
+      "llm_calls": 1,
+      "input_tokens": 3995,
+      "cached_tokens": 3945,
+      "output_tokens": 331,
+      "reasoning_tokens": 146,
+      "llm_latency_ms": 4040,
+      "wall_ms": 4059
+     }
+    ],
+    "confirm_ms": 13,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null
+    ],
+    "totals": {
+     "llm_calls": 1,
+     "input_tokens": 3995,
+     "cached_tokens": 3945,
+     "output_tokens": 331,
+     "reasoning_tokens": 146,
+     "llm_latency_ms": 4040,
+     "turns": 1
+    },
+    "wall_ms": 4072
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "9/29 화요일 11:30 pm에 MAT389 과제 제출날이야",
+      "reply": "9월 29일(화) 오후 11시 30분 **MAT389 과제 제출 마감**으로 제안했어요. 중요도는 과제 제출로 추정해 4로 설정했습니다. 확인해 주세요.",
+      "llm_calls": 2,
+      "input_tokens": 6924,
+      "cached_tokens": 6551,
+      "output_tokens": 182,
+      "reasoning_tokens": 46,
+      "llm_latency_ms": 3538,
+      "wall_ms": 3568
+     }
+    ],
+    "confirm_ms": 110,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 6924,
+     "cached_tokens": 6551,
+     "output_tokens": 182,
+     "reasoning_tokens": 46,
+     "llm_latency_ms": 3538,
+     "turns": 1
+    },
+    "wall_ms": 3678
+   }
+  },
+  {
+   "id": "friday_lab_report_deadline",
+   "say": "금요일까지 ECE360 랩 리포트 제출해야 해",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "금요일까지 ECE360 랩 리포트 제출해야 해",
+      "reply": "마감 시각은 몇 시인가요?",
+      "llm_calls": 1,
+      "input_tokens": 3989,
+      "cached_tokens": 3945,
+      "output_tokens": 331,
+      "reasoning_tokens": 120,
+      "llm_latency_ms": 4631,
+      "wall_ms": 4648
+     },
+     {
+      "say": "밤 11시 59분",
+      "reply": "이 내용으로 만들까요?",
+      "llm_calls": 1,
+      "input_tokens": 4081,
+      "cached_tokens": 3945,
+      "output_tokens": 285,
+      "reasoning_tokens": 94,
+      "llm_latency_ms": 3831,
+      "wall_ms": 3852
+     }
+    ],
+    "confirm_ms": 19,
+    "questions": [
+     "마감 시각은 몇 시인가요?"
+    ],
+    "models": [
+     "gpt-5.6-luna",
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null,
+     null
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 8070,
+     "cached_tokens": 7890,
+     "output_tokens": 616,
+     "reasoning_tokens": 214,
+     "llm_latency_ms": 8462,
+     "turns": 2
+    },
+    "wall_ms": 8519
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "금요일까지 ECE360 랩 리포트 제출해야 해",
+      "reply": "ECE360 랩 리포트 제출 마감을 **10월 2일(금) 오후 11:59**로 제안했어요. 날짜·마감 시각·중요도 4는 추정한 값입니다. 확인해 주세요.",
+      "llm_calls": 2,
+      "input_tokens": 6954,
+      "cached_tokens": 6546,
+      "output_tokens": 209,
+      "reasoning_tokens": 61,
+      "llm_latency_ms": 3798,
+      "wall_ms": 3820
+     }
+    ],
+    "confirm_ms": 21,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 6954,
+     "cached_tokens": 6546,
+     "output_tokens": 209,
+     "reasoning_tokens": 61,
+     "llm_latency_ms": 3798,
+     "turns": 1
+    },
+    "wall_ms": 3841
+   }
+  },
+  {
+   "id": "dentist_next_tuesday_from_wednesday",
+   "say": "다음 주 화요일 3시 치과",
+   "now": "2026-09-30T10:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "다음 주 화요일 3시 치과",
+      "reply": "오전 3시인가요, 오후 3시인가요?",
+      "llm_calls": 1,
+      "input_tokens": 3984,
+      "cached_tokens": 3945,
+      "output_tokens": 318,
+      "reasoning_tokens": 109,
+      "llm_latency_ms": 3676,
+      "wall_ms": 3696
+     },
+     {
+      "say": "오후",
+      "reply": "치과 일정은 몇 시에 끝나나요?",
+      "llm_calls": 0,
+      "input_tokens": 0,
+      "cached_tokens": 0,
+      "output_tokens": 0,
+      "reasoning_tokens": 0,
+      "llm_latency_ms": 0,
+      "wall_ms": 0
+     },
+     {
+      "say": "4시",
+      "reply": "이 내용으로 만들까요?",
+      "llm_calls": 1,
+      "input_tokens": 4093,
+      "cached_tokens": 3945,
+      "output_tokens": 241,
+      "reasoning_tokens": 53,
+      "llm_latency_ms": 2692,
+      "wall_ms": 2709
+     }
+    ],
+    "confirm_ms": 16,
+    "questions": [
+     "오전 3시인가요, 오후 3시인가요?",
+     "치과 일정은 몇 시에 끝나나요?"
+    ],
+    "models": [
+     "gpt-5.6-luna",
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null,
+     null
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 8077,
+     "cached_tokens": 7890,
+     "output_tokens": 559,
+     "reasoning_tokens": 162,
+     "llm_latency_ms": 6368,
+     "turns": 3
+    },
+    "wall_ms": 6421
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "다음 주 화요일 3시 치과",
+      "reply": "다음 주 화요일(10월 6일) 오후 3시 치과 예약을 1시간 일정으로 제안했어요. 저장할까요?",
+      "llm_calls": 2,
+      "input_tokens": 6942,
+      "cached_tokens": 3270,
+      "output_tokens": 187,
+      "reasoning_tokens": 67,
+      "llm_latency_ms": 4740,
+      "wall_ms": 4756
+     }
+    ],
+    "confirm_ms": 21,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 6942,
+     "cached_tokens": 3270,
+     "output_tokens": 187,
+     "reasoning_tokens": 67,
+     "llm_latency_ms": 4740,
+     "turns": 1
+    },
+    "wall_ms": 4777
+   }
+  },
+  {
+   "id": "one_off_no_repeat",
+   "say": "10월 10일 토요일 오후 2시 동아리 모임, 반복 없이 한 번만",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "추가 질문 발생",
+    "correct": false,
+    "problems": [],
+    "turns": [
+     {
+      "say": "10월 10일 토요일 오후 2시 동아리 모임, 반복 없이 한 번만",
+      "reply": "이 일정의 중요도를 알려주세요.",
+      "llm_calls": 1,
+      "input_tokens": 3998,
+      "cached_tokens": 3945,
+      "output_tokens": 323,
+      "reasoning_tokens": 119,
+      "llm_latency_ms": 3225,
+      "wall_ms": 3243
+     }
+    ],
+    "confirm_ms": 0,
+    "questions": [
+     "이 일정의 중요도를 알려주세요."
+    ],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null
+    ],
+    "totals": {
+     "llm_calls": 1,
+     "input_tokens": 3998,
+     "cached_tokens": 3945,
+     "output_tokens": 323,
+     "reasoning_tokens": 119,
+     "llm_latency_ms": 3225,
+     "turns": 1
+    },
+    "wall_ms": 3243
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "10월 10일 토요일 오후 2시 동아리 모임, 반복 없이 한 번만",
+      "reply": "10월 10일(토) 오후 2시~3시 **동아리 모임**으로 한 번만 등록할까요? 종료 시각은 1시간, 중요도는 2로 추정했습니다.",
+      "llm_calls": 2,
+      "input_tokens": 6954,
+      "cached_tokens": 6554,
+      "output_tokens": 170,
+      "reasoning_tokens": 31,
+      "llm_latency_ms": 3547,
+      "wall_ms": 3575
+     }
+    ],
+    "confirm_ms": 17,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 6954,
+     "cached_tokens": 6554,
+     "output_tokens": 170,
+     "reasoning_tokens": 31,
+     "llm_latency_ms": 3547,
+     "turns": 1
+    },
+    "wall_ms": 3592
+   }
+  },
+  {
+   "id": "importance_update",
+   "say": "물리 퀴즈 중요도 5로 올려줘",
+   "now": "2026-09-27T14:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "물리 퀴즈 중요도 5로 올려줘",
+      "reply": "'물리 퀴즈'은(는) 반복 일정이에요. 이번 한 번만 바꿀까요, 반복 전체를 바꿀까요?",
+      "llm_calls": 1,
+      "input_tokens": 3989,
+      "cached_tokens": 3945,
+      "output_tokens": 221,
+      "reasoning_tokens": 38,
+      "llm_latency_ms": 2364,
+      "wall_ms": 2384
+     },
+     {
+      "say": "반복 전체",
+      "reply": "✔ '물리 퀴즈' 반복 전체: 중요도 4→5",
+      "llm_calls": 1,
+      "input_tokens": 4061,
+      "cached_tokens": 3945,
+      "output_tokens": 240,
+      "reasoning_tokens": 57,
+      "llm_latency_ms": 3013,
+      "wall_ms": 3047
+     }
+    ],
+    "confirm_ms": 0,
+    "questions": [
+     "'물리 퀴즈'은(는) 반복 일정이에요. 이번 한 번만 바꿀까요, 반복 전체를 바꿀까요?"
+    ],
+    "models": [
+     "gpt-5.6-luna",
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null,
+     null
+    ],
+    "totals": {
+     "llm_calls": 2,
+     "input_tokens": 8050,
+     "cached_tokens": 7890,
+     "output_tokens": 461,
+     "reasoning_tokens": 95,
+     "llm_latency_ms": 5377,
+     "turns": 2
+    },
+    "wall_ms": 5431
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "물리 퀴즈 중요도 5로 올려줘",
+      "reply": "반복 일정 **‘물리 퀴즈’의 중요도를 5로 변경**할까요?",
+      "llm_calls": 3,
+      "input_tokens": 10580,
+      "cached_tokens": 10050,
+      "output_tokens": 158,
+      "reasoning_tokens": 19,
+      "llm_latency_ms": 5067,
+      "wall_ms": 5085
+     }
+    ],
+    "confirm_ms": 20,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 3,
+     "input_tokens": 10580,
+     "cached_tokens": 10050,
+     "output_tokens": 158,
+     "reasoning_tokens": 19,
+     "llm_latency_ms": 5067,
+     "turns": 1
+    },
+    "wall_ms": 5105
+   }
+  },
+  {
+   "id": "quiz_today_5_to_6",
+   "say": "오늘 물리 퀴즈 5시에서 6시 시작으로 바꿔줘",
+   "now": "2026-09-26T13:00",
+   "old": {
+    "path": "old",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "오늘 물리 퀴즈 5시에서 6시 시작으로 바꿔줘",
+      "reply": "✔ '물리 퀴즈' 9/26 회차: 시간 17:00–18:00→18:00–19:00",
+      "llm_calls": 1,
+      "input_tokens": 3996,
+      "cached_tokens": 3945,
+      "output_tokens": 283,
+      "reasoning_tokens": 93,
+      "llm_latency_ms": 2861,
+      "wall_ms": 2898
+     }
+    ],
+    "confirm_ms": 0,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     null
+    ],
+    "totals": {
+     "llm_calls": 1,
+     "input_tokens": 3996,
+     "cached_tokens": 3945,
+     "output_tokens": 283,
+     "reasoning_tokens": 93,
+     "llm_latency_ms": 2861,
+     "turns": 1
+    },
+    "wall_ms": 2898
+   },
+   "new": {
+    "path": "new",
+    "status": "confirmed",
+    "correct": true,
+    "problems": [],
+    "turns": [
+     {
+      "say": "오늘 물리 퀴즈 5시에서 6시 시작으로 바꿔줘",
+      "reply": "오늘 물리 퀴즈 시작 시간을 오후 6시로 변경하면, **오후 6:00~7:00**이 됩니다. 이렇게 변경할까요?",
+      "llm_calls": 3,
+      "input_tokens": 10677,
+      "cached_tokens": 6789,
+      "output_tokens": 263,
+      "reasoning_tokens": 96,
+      "llm_latency_ms": 5937,
+      "wall_ms": 5956
+     }
+    ],
+    "confirm_ms": 24,
+    "questions": [],
+    "models": [
+     "gpt-5.6-luna"
+    ],
+    "efforts": [
+     "medium"
+    ],
+    "totals": {
+     "llm_calls": 3,
+     "input_tokens": 10677,
+     "cached_tokens": 6789,
+     "output_tokens": 263,
+     "reasoning_tokens": 96,
+     "llm_latency_ms": 5937,
+     "turns": 1
+    },
+    "wall_ms": 5980
+   }
+  }
+ ]
+}
