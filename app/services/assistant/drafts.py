@@ -22,7 +22,14 @@ from app.schemas.event import EventCreate
 from app.services import date_range_command_service as ranges
 from app.services import draft_rules as rules
 from app.services.assistant.context import Draft, DraftKind, TurnContext
-from app.services.event_command_service import CommandDescription, Target, find_location, new_times, same_title_events
+from app.services.event_command_service import (
+    CommandDescription,
+    Target,
+    detached_times,
+    find_location,
+    new_times,
+    same_title_events,
+)
 
 DEFAULT_DURATION_MINUTES = 60
 DEFAULT_DEADLINE = "23:59"
@@ -446,6 +453,30 @@ def _scope_of(targets: list[Target]) -> str:
     return "instance" if targets and all(t.instance is not None for t in targets) else "series"
 
 
+def _affected_occurrences(ctx: TurnContext, targets: list[Target]) -> int:
+    """확정하면 실제로 바뀌는 회차 수: 회차 대상은 1, 반복 전체는 오늘 이후 남은(취소되지 않은) 회차, 단발은 1."""
+    count = 0
+    for target in targets:
+        if target.instance is not None:
+            count += 1
+            continue
+        upcoming = [
+            i for i in target.event.instances if i.status != EventInstanceStatus.CANCELLED and i.date >= ctx.today
+        ]
+        count += len(upcoming) if _is_recurring(target.event) else 1
+    return count
+
+
+def _check_scope(problems: _Problems, scope: str, occurrences: int) -> None:
+    """scope=instance("이번만")인데 회차 2개 이상이 바뀌려 하면 확정 전에 막는다."""
+    if scope == "instance" and occurrences > 1:
+        problems.error(
+            "scope_mismatch",
+            f"scope=instance must change exactly one occurrence, but {occurrences} would change. For several specific dates "
+            "propose one update per date in the same turn; for every week use scope=series.",
+        )
+
+
 def _changes_target(
     target: Target,
     desc: CommandDescription,
@@ -461,6 +492,8 @@ def _changes_target(
         return True
     if desc.new_importance is not None and (event.importance is None or int(event.importance) != desc.new_importance):
         return True
+    if desc.new_event_type is not None and desc.new_event_type != event.event_type.value:
+        return True
     if desc.location_action == "remove":
         return event.location_id is not None
     if desc.location_action == "set" and location is not None:
@@ -474,9 +507,11 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     changes = args.get("changes") or {}
     scope = args.get("scope") or "series"
 
-    for unsupported in ("recurrence", "event_type"):
-        if changes.get(unsupported) is not None:
-            problems.error("unsupported_change", f"changing {unsupported} is not supported; propose delete + create instead")
+    if changes.get("recurrence") is not None:
+        problems.error("unsupported_change", "changing recurrence is not supported; propose delete + create instead")
+    new_event_type = changes.get("event_type")
+    if new_event_type not in (None, "scheduled", "deadline"):
+        problems.error("invalid_event_type", "changes.event_type must be scheduled or deadline")
     for key in ("start_time", "end_time"):
         _clock(changes.get(key), key, problems)
     importance = _importance(changes.get("importance"), problems)
@@ -497,12 +532,14 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     elif location_action not in (None, "remove"):
         problems.error("invalid_location_action", "changes.location.action must be set or remove")
 
-    location_only = location_action is not None and not any(
-        (changes.get("start_time"), changes.get("end_time"), changes.get("title"), importance is not None, new_date)
-    )
-    targets = load_targets(ctx, args.get("target_ids"), "series" if location_only else scope, problems)
+    targets = load_targets(ctx, args.get("target_ids"), scope, problems)
     if new_date is not None and any(_is_recurring(t.event) for t in targets):
         problems.error("unsupported_change", "changes.date only moves one-off events; for a repeating event change the time or delete one occurrence")
+    if new_event_type is not None and not all(t.instance is not None for t in targets):
+        problems.error(
+            "unsupported_change",
+            "changes.event_type only works for one occurrence of a repeating event (scope=instance); otherwise propose delete + create",
+        )
 
     desc = CommandDescription(
         intent="update",
@@ -516,9 +553,17 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
         location_action=location_action,
         new_location_name=location["name"] if location else None,
         new_location_minutes=location["travel_minutes"] if location else None,
+        new_event_type=new_event_type,
     )
     if not problems.errors and not desc.has_changes():
         problems.error("nothing_to_change", "changes has no values")
+    if desc.detaches_instance():
+        for target in targets:
+            if target.instance is not None and target.instance.status != EventInstanceStatus.PENDING:
+                problems.error(
+                    "occurrence_not_pending",
+                    f"the {target.instance.date} occurrence is already {target.instance.status.value}; only an upcoming occurrence can be changed on its own",
+                )
     if problems.errors:
         return _failed(problems, inferred)
 
@@ -532,7 +577,11 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
         else:
             before = (event.start_time, event.end_time)
             day = event.anchor_time.date()
-        after = new_times(desc, day, *before)
+        try:
+            after = detached_times(desc, instance) if instance is not None and desc.detaches_instance() else new_times(desc, day, *before)
+        except InvalidInputError as exc:
+            problems.error("invalid_change", str(exc))
+            continue
         changed = changed or _changes_target(target, desc, location, before, after)
         if after != before:
             spec = rules.DraftSpec(
@@ -552,11 +601,17 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
         )
     if problems.errors:
         return _failed(problems, inferred)
+    occurrences = _affected_occurrences(ctx, targets)
+    _check_scope(problems, desc.scope, occurrences)
+    if problems.errors:
+        return _failed(problems, inferred)
     if len(targets) > 1:
         problems.warn("multiple_targets", count=len(targets))
 
     card = {
         "scope": desc.scope,
+        "affected_count": occurrences,
+        "detaches": desc.detaches_instance() and desc.scope == "instance",
         "targets": cards,
         "changes": {
             "title": desc.new_title,
@@ -565,6 +620,7 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
             "end_time": desc.new_end_time,
             "importance": importance,
             "location": {"action": location_action, **(location or {})} if location_action else None,
+            "event_type": new_event_type,
         },
     }
     payload = {"description": desc.to_dict(), "targets": [[t.event.id, t.instance.id if t.instance else None] for t in targets]}
@@ -580,7 +636,11 @@ def propose_delete_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     if len(targets) > 1:
         problems.warn("multiple_targets", count=len(targets))
     desc = CommandDescription(intent="delete", title=targets[0].event.title, scope=_scope_of(targets))  # type: ignore[arg-type]
-    card = {"scope": desc.scope, "targets": [_target_card(t, ctx.language) for t in targets]}
+    occurrences = _affected_occurrences(ctx, targets)
+    _check_scope(problems, desc.scope, occurrences)
+    if problems.errors:
+        return _failed(problems, inferred)
+    card = {"scope": desc.scope, "affected_count": occurrences, "targets": [_target_card(t, ctx.language) for t in targets]}
     payload = {"description": desc.to_dict(), "targets": [[t.event.id, t.instance.id if t.instance else None] for t in targets]}
     return _accept(ctx, "delete_event", card, payload, problems, inferred, args.get("draft_id"))
 

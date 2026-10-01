@@ -66,12 +66,15 @@ def non_compliance_category_label(category: NonComplianceCategory, language: str
 
 MessageKey = Literal[
     "command.executed",
-    "command.title_applies_to_series",
     "summary.create",
     "summary.delete_series",
     "summary.delete_instance",
     "summary.update_series",
     "summary.update_instance",
+    "summary.detach_instance",
+    "change.event_type",
+    "event_type.scheduled",
+    "event_type.deadline",
     "summary.multiple",
     "summary.action.delete",
     "summary.action.update",

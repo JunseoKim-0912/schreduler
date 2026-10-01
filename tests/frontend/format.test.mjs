@@ -199,4 +199,16 @@ describe("어시스턴트 확인 카드", () => {
     assert.equal(assistantConfirmLabel([{ kind: "create_range" }, { kind: "create_event" }]), "만들기");
     assert.equal(assistantConfirmLabel([{ kind: "delete_event" }]), "실행");
   });
+
+  test("범위와 바뀌는 회차 수, 떼어내기 안내", () => {
+    const view = describeAssistantItem({
+      kind: "update_event", scope: "instance", affected_count: 1, detaches: true, warnings: [], inferred_fields: [],
+      targets: [{ title: "ECE355 Tutorial", date: "2026-10-07", recurring: true, time_display: "오전 11:00 – 오후 1:00 (2시간)" }],
+      changes: { title: "ECE355 Quiz 2", start_time: null, end_time: null, importance: null, location: null, event_type: null },
+    });
+    assert.equal(value(view, "scope").value, "이 회차만 · 1개 회차만 바뀌어요");
+    assert.deepEqual(view.notes, ["이 회차만 따로 떼어 단발 일정으로 바꿔요. 다른 회차는 그대로예요."]);
+    assert.equal(describeAssistantItem({ kind: "delete_event", scope: "series", affected_count: 12, targets: [], warnings: [] }).rows[0].value,
+      "반복 전체 · 12개 회차가 취소돼요");
+  });
 });

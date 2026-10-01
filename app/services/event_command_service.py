@@ -20,7 +20,7 @@ from app.core.clock import local_today
 from app.core.exceptions import ConflictError, InvalidInputError
 from app.i18n import render_message
 from app.models.action_history import ActionHistory
-from app.models.enums import ActionSource, ActionType, EventInstanceStatus, Importance
+from app.models.enums import ActionSource, ActionType, EventInstanceStatus, EventType, Importance
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.location import Location
@@ -56,12 +56,21 @@ class CommandDescription:
     location_action: Literal["set", "remove"] | None = None
     new_location_name: str | None = None
     new_location_minutes: int | None = None
+    # 종류(일반/마감) 바꾸기는 반복 일정의 한 회차를 떼어낼 때만 쓴다.
+    new_event_type: Literal["scheduled", "deadline"] | None = None
 
     def has_changes(self) -> bool:
         return any(
             v is not None
-            for v in (self.new_start_time, self.new_end_time, self.new_title, self.new_importance, self.location_action, self.new_date)
+            for v in (
+                self.new_start_time, self.new_end_time, self.new_title, self.new_importance, self.location_action, self.new_date,
+                self.new_event_type,
+            )
         )
+
+    def detaches_instance(self) -> bool:
+        """한 회차에 시간 말고 다른 값(제목·중요도·종류·장소)을 바꾸는지. 회차별 필드가 없어 그 회차를 시리즈에서 떼어낸다."""
+        return bool(self.new_title) or self.new_importance is not None or self.new_event_type is not None or self.location_action is not None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -209,6 +218,15 @@ def _describe_changes(lang: str, before: tuple[datetime | None, datetime], after
     if desc.new_importance is not None and event.importance != Importance(desc.new_importance):
         before_importance = event.importance.value if event.importance is not None else "-"
         changes.append(render_message("change.importance", lang, before=before_importance, after=desc.new_importance))
+    if desc.new_event_type is not None and desc.new_event_type != event.event_type.value:
+        changes.append(
+            render_message(
+                "change.event_type",
+                lang,
+                before=render_message(f"event_type.{event.event_type.value}", lang),  # type: ignore[arg-type]
+                after=render_message(f"event_type.{desc.new_event_type}", lang),  # type: ignore[arg-type]
+            )
+        )
     return ", ".join(changes) or "-"
 
 
@@ -248,9 +266,8 @@ def execute(
     instance_ids: set[int] = set()
     touched_dates: list[date] = []
     summaries: list[str] = []
-    notes: set[str] = set()
     affected = [to_command_target(t) for t in targets]
-    created: dict[str, list[int]] = {"created_children": [], "created_instances": [], "created_locations": []}
+    created: dict[str, list[int]] = {"created_children": [], "created_instances": [], "created_locations": [], "created_events": []}
 
     for target in targets:
         event, instance = target.event, target.instance
@@ -293,7 +310,14 @@ def execute(
             apply_event_update(db, event, changes)
             summaries.append(render_message("summary.update_series", lang, title=title_before, changes=change_text))
 
-        else:  # 한 회차만 수정
+        elif desc.detaches_instance():  # 한 회차만 제목·중요도·종류·장소 변경 → 그 회차를 떼어 단발 일정으로
+            change_text = _detach_instance(db, user, event, instance, desc, snapshot, created, event_ids, instance_ids)
+            touched_dates.append(instance.date)
+            summaries.append(
+                render_message("summary.detach_instance", lang, title=event.title, date=_format_date(instance.date), changes=change_text)
+            )
+
+        else:  # 한 회차만 시간 변경 → 회차 시간 override
             for item in [instance, *child_instances_on_same_date(db, instance)]:
                 snapshot.add_instance(item)
             before = (instance.effective_start, instance.effective_end)
@@ -303,11 +327,7 @@ def execute(
                 for item in set_instance_times(db, instance, *after):
                     instance_ids.add(item.id)
                     event_ids.add(item.event_id)
-            field_changes = _series_field_changes(desc)
-            if field_changes:  # 제목·중요도는 회차별 필드가 없어 반복 전체에 적용한다
-                snapshot.add_event_with_children(event)
-                apply_event_update(db, event, field_changes)
-                notes.add(render_message("command.title_applies_to_series", lang))
+            touched_dates.append(instance.date)
             summaries.append(
                 render_message("summary.update_instance", lang, title=event.title, date=_format_date(instance.date), changes=change_text)
             )
@@ -334,8 +354,96 @@ def execute(
     )
     finish_change(db, action, AfterCommit(user.id, set(event_ids), sorted(instance_ids), touched_dates), defer)
 
-    message = " ".join([render_message("command.executed", lang, summary=summary), *sorted(notes)])
+    message = render_message("command.executed", lang, summary=summary)
     return ExecutionResult(action=action, affected=affected, message=message)
+
+
+def detached_times(desc: CommandDescription, instance: EventInstance) -> tuple[datetime | None, datetime]:
+    """떼어낸 회차의 새 시각. 종류를 바꾸면 마감 ↔ 일반에 맞게 시작을 비우거나 채운다."""
+    event = instance.event
+    start, end = new_times(desc, instance.date, instance.effective_start, instance.effective_end)
+    new_type = desc.new_event_type or event.event_type.value
+    if new_type == "deadline":
+        # 일반 → 마감: 마감 시각을 말하지 않았으면 원래 끝나는 시각
+        return None, datetime.combine(instance.date, _hhmm(desc.new_end_time)) if desc.new_end_time else end
+    if start is None:
+        # 마감 → 일반: 시작 시각이 필요하다 (끝을 말하지 않으면 1시간)
+        if not desc.new_start_time:
+            raise InvalidInputError("changing a deadline into a scheduled event needs start_time")
+        start = datetime.combine(instance.date, _hhmm(desc.new_start_time))
+        end = datetime.combine(instance.date, _hhmm(desc.new_end_time)) if desc.new_end_time else start + timedelta(hours=1)
+    return start, end
+
+
+def _detach_instance(
+    db: Session,
+    user: User,
+    event: Event,
+    instance: EventInstance,
+    desc: CommandDescription,
+    snapshot: Snapshot,
+    created: dict[str, list[int]],
+    event_ids: set[int],
+    instance_ids: set[int],
+) -> str:
+    """반복 일정의 한 회차만 제목·중요도·종류·장소를 바꾼다. 회차별로 저장할 곳이 없으므로 그 회차를 cancelled로 두고
+    (반복 생성이 그 날짜를 다시 만들지 않게) 같은 날짜·시각에 바뀐 값의 단발 일정을 새로 만든다. 바꾸지 않은 값은
+    시리즈 값을 그대로 쓴다. 되돌리면 새 일정을 지우고 회차를 스냅샷으로 복구한다."""
+    lang = user.preferred_language
+    for item in [instance, *child_instances_on_same_date(db, instance)]:
+        snapshot.add_instance(item)
+    before = (instance.effective_start, instance.effective_end)
+    start, end = detached_times(desc, instance)
+
+    location_id = event.location_id
+    location_text = None
+    if desc.location_action == "remove":
+        location_id = None
+    elif desc.location_action == "set" and desc.new_location_name:
+        location = find_location(db, user.id, desc.new_location_name)
+        if location is None:
+            minutes = desc.new_location_minutes if desc.new_location_minutes is not None else 0
+            location = Location(user_id=user.id, name=desc.new_location_name, default_travel_minutes=minutes)
+            db.add(location)
+            db.flush()
+            created["created_locations"].append(location.id)
+        location_id = location.id
+    if location_id != event.location_id:
+        no_location = render_message("change.no_location", lang)
+        new_location = db.get(Location, location_id) if location_id is not None else None
+        location_text = render_message(
+            "change.location",
+            lang,
+            before=event.location.name if event.location else no_location,
+            after=new_location.name if new_location else no_location,
+        )
+
+    for item in cancel_instance(db, instance):
+        instance_ids.add(item.id)
+        event_ids.add(item.event_id)
+
+    detached = build_event(
+        db,
+        EventCreate(
+            user_id=user.id,
+            title=desc.new_title or event.title,
+            event_type=EventType(desc.new_event_type) if desc.new_event_type else event.event_type,
+            start_time=start,
+            end_time=end,
+            importance=Importance(desc.new_importance) if desc.new_importance is not None else event.importance,
+            is_recurring=False,
+            location_id=location_id,
+        ),
+    )
+    created["created_events"].append(detached.id)
+    for item in [detached, *detached.child_events]:
+        event_ids.add(item.id)
+        instance_ids.update(i.id for i in item.instances)
+
+    change_text = _describe_changes(lang, before, (start, end), event, desc)
+    if location_text:
+        change_text = location_text if change_text == "-" else f"{change_text}, {location_text}"
+    return change_text
 
 
 def _change_location(

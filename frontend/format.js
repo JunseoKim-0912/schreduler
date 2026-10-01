@@ -231,7 +231,9 @@ export function describeAssistantItem(item) {
       if (changes.location) {
         row("location", "장소", changes.location.action === "remove" ? "빼기" : describeLocation(changes.location));
       }
-      if (item.kind === "update_event" && item.scope) row("scope", "범위", SCOPES[item.scope] ?? item.scope);
+      if (changes.event_type) row("event_type", "새 종류", changes.event_type === "deadline" ? "마감" : "일반");
+      if (item.scope) row("scope", "범위", describeScope(item));
+      if (item.detaches) notes.push("이 회차만 따로 떼어 단발 일정으로 바꿔요. 다른 회차는 그대로예요.");
       break;
     }
     case "create_range":
@@ -262,6 +264,15 @@ export function describeAssistantItem(item) {
   }
   const warnings = (item.warnings ?? []).map((warning) => `⚠ ${warning.message}`);
   return { heading, rows, notes, targets, warnings };
+}
+
+// "이 회차만 · 1개 회차만 바뀌어요" / "반복 전체 · 12개 회차가 바뀌어요"
+export function describeScope(item) {
+  const scope = SCOPES[item.scope] ?? item.scope;
+  const count = item.affected_count;
+  if (count === undefined || count === null) return scope;
+  const verb = item.kind === "delete_event" ? "취소돼요" : "바뀌어요";
+  return count === 1 ? `${scope} · 1개 회차만 ${verb}` : `${scope} · ${count}개 회차가 ${verb}`;
 }
 
 // 카드의 실행 버튼 이름: 전부 새로 만드는 제안이면 "만들기", 수정·삭제가 섞이면 "실행".

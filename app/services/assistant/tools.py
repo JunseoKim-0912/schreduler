@@ -120,8 +120,10 @@ TOOLS: list[FunctionTool] = [
     FunctionTool(
         name="propose_update_event",
         description=(
-            "Draft changes to existing events found with search_events (not saved). scope=instance changes only the given "
-            "occurrences; series changes the whole event. Location is always series-wide. Leave unchanged fields null."
+            "Draft changes to existing events found with search_events (not saved). scope=instance changes exactly one "
+            "occurrence (give its instance_id); changing its title, importance, type or location separates that occurrence "
+            "into its own one-off event, times use an override. scope=series changes every occurrence. The result reports "
+            "affected_count. Leave unchanged fields null."
         ),
         parameters=_obj(
             {
@@ -134,6 +136,9 @@ TOOLS: list[FunctionTool] = [
                         "start_time": _nullable(_str(f"{_HHMM}. Changing only the start keeps the duration.")),
                         "end_time": _nullable(_str(f"{_HHMM}. For deadlines: the new due time.")),
                         "importance": _nullable({"type": "integer", "enum": [1, 2, 3, 4, 5, 6]}),
+                        "event_type": _nullable(
+                            {"type": "string", "enum": ["scheduled", "deadline"], "description": "Only with scope=instance"}
+                        ),
                         "location": _nullable(
                             _obj(
                                 {

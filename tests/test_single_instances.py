@@ -362,3 +362,22 @@ def test_no_similar_warning_far_away_or_for_a_different_title(client, engine, us
     chat = propose(client, monkeypatch, user_id, create(title=title, event_type="deadline", date=day, end_time="23:30"))
 
     assert [w["code"] for w in chat["proposal"]["items"][0]["warnings"]] == []
+
+
+def test_detaching_one_occurrence_moves_its_notification_jobs_to_the_new_event(client, engine, user_id, monkeypatch):
+    range_id = client.post(
+        "/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-25"}
+    ).json()["id"]
+    event_id = _create(client, user_id, "ECE355 Tutorial", "2026-09-30T11:00:00", "2026-09-30T13:00:00",
+                       is_recurring=True, recurrence_rule="FREQ=WEEKLY;BYDAY=WE", date_range_id=range_id)
+    target = next(i for i in _instances(engine, event_id) if i.date == date(2026, 10, 7))
+    assert _jobs(target.id)
+
+    run(client, monkeypatch, user_id, find(query="ECE355 Tutorial", date_from="2026-10-07", date_to="2026-10-07"),
+        update([(event_id, target.id)], scope="instance", title="ECE355 Quiz 2"))
+
+    assert _jobs(target.id) == {}, "취소된 시리즈 회차의 알림은 지운다"
+    with Session(engine) as session:
+        quiz = session.execute(select(Event).where(Event.title == "ECE355 Quiz 2")).scalar_one()
+        [instance] = quiz.instances
+    assert _jobs(instance.id) == {"start": datetime(2026, 10, 7, 11), "end": datetime(2026, 10, 7, 13)}

@@ -70,7 +70,7 @@ FIXED_INSTRUCTIONS = """[역할]
 - "격주", "2주마다", "every other week" → recurrence.interval=2. 반복 시작일을 말했으면 recurrence.start_date에 넣는다.
   말하지 않았으면 null로 두면 백엔드가 기간 시작일 이후 첫 해당 요일로 잡는다.
 - 새 장소의 이동 시간을 말하지 않았으면 상식으로 추정(보통 10~20분)하고 inferred_fields에 넣는다.
-- 반복 일정의 장소 변경은 반복 전체에 적용된다 (scope=series).
+- 반복 일정의 장소 변경은 사용자가 그 회차만이라고 하지 않으면 반복 전체(scope=series)다.
 
 [반복 기간 만들기 vs 고치기]
 - 사용자가 목록에 없는 새 이름을 말하거나 "등록해줘", "만들어줘"라고 하면 새 기간을 만든다 (propose_date_range
@@ -84,6 +84,15 @@ FIXED_INSTRUCTIONS = """[역할]
 [목록의 이름]
 - [반복 기간 목록]·[장소 목록]은 name="…" 형식이다. 도구 인자의 name에는 그 name 값만 그대로 쓴다. 이동 시간, 기간
   날짜, 괄호 설명을 이름에 붙이지 않는다.
+
+[범위: 이 회차만 vs 반복 전체]
+- "다음 주에만", "이번만", "이번 주 것만", "10/7 것만", "그날만", "오늘 것만" → scope=instance. search_events를 date_from/date_to로
+  불러 그 회차의 instance_id를 쓴다. 회차 하나만 바꾼다.
+- "앞으로 전부", "매주", "반복 전체", "다 같이" → scope=series.
+- 예: "ECE355 Tutorial을 다음주에만 ECE355 Quiz 2로 바꿔줘" → 다음 주 날짜로 search_events → 그 회차 instance_id로
+  propose_update_event(scope=instance, changes.title="ECE355 Quiz 2"). 그 회차만 따로 떼어져 바뀌고 다른 주는 그대로다.
+- 범위가 애매하면 문맥으로 추론해 초안을 만들고, 답변에 "이 회차만"인지 "반복 전체"인지와 결과의 affected_count(바뀌는 회차 수)를
+  분명히 말한다. 여러 특정 날짜를 바꾸려면 날짜마다 propose_update_event를 따로 부른다 (scope=instance는 한 회차만).
 
 [이미 있는 일정 바꾸기]
 - 이미 있는 일정이나 할 일(마감)을 바꾸는 요청("~로 바꿔줘", "옮겨줘", "미뤄줘", "마감 시간 ~로")은 반드시 search_events로

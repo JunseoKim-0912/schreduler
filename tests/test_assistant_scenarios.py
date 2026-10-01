@@ -9,7 +9,7 @@ from datetime import date, datetime
 import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -17,6 +17,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, Event, EventInstance, ImportantDateRange, Location, User
 from app.models.enums import EventInstanceStatus
+from app.services.assistant import agent
 from tests.assistant_flow import confirm, create, date_range, find, only_action, propose, run, undo, update
 
 TODAY = date(2026, 9, 26)
@@ -409,3 +410,123 @@ def test_start_date_on_the_wrong_weekday_is_warned_on_the_card(client, engine, u
     [card] = chat["proposal"]["items"]
     assert "start_weekday_mismatch" in [w["code"] for w in card["warnings"]]
     assert card["preview_dates"][0] == "2026-10-06", "9/23이 속한 주 기준 격주의 첫 화요일"
+
+
+# --- 한 회차만 제목·중요도·장소 바꾸기 → 그 회차를 떼어낸다 -------------------------------------------------
+
+
+def _instance_on(engine, event_id: int, day: date) -> EventInstance:
+    with Session(engine) as session:
+        instance = session.execute(select(EventInstance).where(EventInstance.event_id == event_id, EventInstance.date == day)).scalar_one()
+        session.expunge(instance)
+        return instance
+
+
+def _titles_on(engine, user_id: int) -> dict[date, list[str]]:
+    with Session(engine) as session:
+        rows = session.execute(
+            select(EventInstance.date, Event.title)
+            .join(Event, EventInstance.event_id == Event.id)
+            .where(Event.user_id == user_id, Event.parent_event_id.is_(None), EventInstance.status != CANCELLED)
+        ).all()
+    found: dict[date, list[str]] = {}
+    for day, title in rows:
+        found.setdefault(day, []).append(title)
+    return found
+
+
+NEXT_WEEK = date(2026, 10, 3)
+
+
+def _next_week_only(quiz: int, engine, **changes):
+    instance = _instance_on(engine, quiz, NEXT_WEEK)
+    return (
+        find(query="물리 퀴즈", date_from=NEXT_WEEK.isoformat(), date_to=NEXT_WEEK.isoformat()),
+        update([(quiz, instance.id)], scope="instance", **changes),
+    )
+
+
+def test_renaming_one_occurrence_detaches_it_and_leaves_other_weeks(client, engine, user_id, quiz, monkeypatch):
+    chat = propose(client, monkeypatch, user_id, *_next_week_only(quiz, engine, title="물리 쪽지시험"), message="다음 주에만 이름 바꿔줘")
+
+    [card] = chat["proposal"]["items"]
+    assert (card["scope"], card["affected_count"], card["detaches"]) == ("instance", 1, True)
+    confirm(client, user_id, chat)
+
+    titles = _titles_on(engine, user_id)
+    assert titles[NEXT_WEEK] == ["물리 쪽지시험"]
+    assert titles[date(2026, 9, 26)] == ["물리 퀴즈"] and titles[date(2026, 10, 10)] == ["물리 퀴즈"]
+    assert _instance_on(engine, quiz, NEXT_WEEK).status == CANCELLED
+    detached = _event(engine, title="물리 쪽지시험")
+    assert (detached.is_recurring, detached.start_time, detached.end_time, detached.importance) == (
+        False, datetime(2026, 10, 3, 17), datetime(2026, 10, 3, 18), _event(engine, id=quiz).importance
+    ), "바꾸지 않은 시간·중요도는 시리즈 값을 그대로"
+    assert _event(engine, id=quiz).title == "물리 퀴즈"
+
+
+def test_changing_importance_of_one_occurrence_detaches_only_it(client, engine, user_id, quiz, monkeypatch):
+    run(client, monkeypatch, user_id, *_next_week_only(quiz, engine, importance=6))
+
+    with Session(engine) as session:
+        importance = dict(session.execute(
+            select(Event.id, Event.importance).where(Event.user_id == user_id, Event.title == "물리 퀴즈")
+        ).all())
+    assert len(importance) == 2, "시리즈 + 떼어낸 단발 하나"
+    assert importance[quiz] is None, "시리즈 중요도는 그대로"
+    assert [int(v) for k, v in importance.items() if k != quiz] == [6]
+
+
+def test_changing_only_the_time_of_one_occurrence_still_uses_an_override(client, engine, user_id, quiz, monkeypatch):
+    run(client, monkeypatch, user_id, *_next_week_only(quiz, engine, start_time="19:00"))
+
+    instance = _instance_on(engine, quiz, NEXT_WEEK)
+    assert instance.status == PENDING and instance.start_time_override == datetime(2026, 10, 3, 19)
+    with Session(engine) as session:
+        assert session.execute(select(func.count()).select_from(Event).where(Event.title == "물리 퀴즈")).scalar_one() == 1
+
+
+def test_series_rename_changes_every_week(client, engine, user_id, quiz, monkeypatch):
+    chat = propose(client, monkeypatch, user_id, find(query="물리 퀴즈"), update([(quiz, None)], title="물리 쪽지시험"))
+
+    upcoming = len([d for d in _instances(engine, quiz) if d >= TODAY])
+    assert chat["proposal"]["items"][0]["affected_count"] == upcoming > 1
+    confirm(client, user_id, chat)
+    assert {t for titles in _titles_on(engine, user_id).values() for t in titles} == {"물리 쪽지시험"}
+
+
+def test_undoing_a_detach_restores_the_occurrence_and_removes_the_new_event(client, engine, user_id, quiz, monkeypatch):
+    before = _instances(engine, quiz)
+    action_id = only_action(run(client, monkeypatch, user_id, *_next_week_only(quiz, engine, title="물리 쪽지시험")))
+
+    assert undo(client, user_id, action_id).status_code == 200
+
+    assert _instances(engine, quiz) == before
+    assert _event(engine, title="물리 쪽지시험") is None
+
+
+def test_detaching_with_a_location_gives_the_new_event_its_travel_child(client, engine, user_id, quiz, monkeypatch):
+    with Session(engine) as session:
+        session.add(Location(user_id=user_id, name="Bahen", default_travel_minutes=20))
+        session.commit()
+
+    run(client, monkeypatch, user_id, *_next_week_only(quiz, engine, location={"action": "set", "name": "Bahen", "travel_minutes": None}))
+
+    detached = _event(engine, title="물리 퀴즈", is_recurring=False)
+    child = _child(engine, detached.id)
+    assert (child.start_time, child.end_time) == (datetime(2026, 10, 3, 16, 40), datetime(2026, 10, 3, 17))
+    assert _event(engine, id=quiz).location_id is None, "시리즈 장소는 그대로"
+
+
+def test_instance_scope_that_would_change_two_occurrences_is_refused(client, engine, user_id, quiz, monkeypatch):
+    first, second = (_instance_on(engine, quiz, day) for day in (NEXT_WEEK, date(2026, 10, 10)))
+
+    chat = propose(
+        client, monkeypatch, user_id,
+        find(query="물리 퀴즈", date_from="2026-10-03", date_to="2026-10-10"),
+        update([(quiz, first.id), (quiz, second.id)], scope="instance", title="물리 쪽지시험"),
+    )
+
+    assert chat["proposal"] is None
+    fake = agent.ResponsesClient()  # propose()가 바꿔 둔 가짜 클라이언트
+    errors = fake.requests[-1].tool_outputs()
+    assert any(e["code"] == "scope_mismatch" for output in errors.values() for e in output.get("errors", []))

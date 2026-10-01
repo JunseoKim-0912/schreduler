@@ -205,7 +205,8 @@ def _restore(db: Session, snapshot: dict[str, list[dict[str, Any]]]) -> list[dat
     return touched_dates
 
 
-def _undo_create(db: Session, action: ActionHistory) -> list[date]:
+def _remove_created_events(db: Session, action: ActionHistory) -> list[date]:
+    """이 기록이 새로 만든 일정(생성, 또는 반복 회차를 떼어낸 단발 일정)과 그 하위 일정을 지운다."""
     touched_dates: list[date] = []
     for event_id in action.affected_ids.get("created_events", []):
         event = db.get(Event, event_id)
@@ -215,6 +216,11 @@ def _undo_create(db: Session, action: ActionHistory) -> list[date]:
             touched_dates.extend(instance.date for instance in item.instances)
         remove_event(db, event)
     db.flush()
+    return touched_dates
+
+
+def _undo_create(db: Session, action: ActionHistory) -> list[date]:
+    touched_dates = _remove_created_events(db, action)
     # 이벤트를 만들면서 같이 만든 기간은 다른 일정이 쓰지 않을 때만 지운다. 기간만 만든 기록인데 그사이 그 기간을
     # 쓰는 일정이 생겼다면 지울 수 없으므로 되돌리기를 거절한다.
     for range_id in action.affected_ids.get("created_date_ranges", []):
@@ -289,7 +295,8 @@ def undo_action(db: Session, user: User, action_id: int) -> ActionHistory:
     if action.action_type == ActionType.CREATE:
         touched_dates = _undo_create(db, action)
     else:
-        touched_dates = _remove_created_children(db, action) + _delete_created_instances(db, action)
+        touched_dates = _remove_created_events(db, action) + _remove_created_children(db, action)
+        touched_dates += _delete_created_instances(db, action)
         touched_dates += _restore(db, action.snapshot_before)
         _delete_unused_created_locations(db, action)
 

@@ -396,6 +396,27 @@ cases:
           executed_min: 1
           db_events: [{title_contains: MAT389 과제, count: 1}]
 
+  - id: rename_next_week_only
+    tags: [수정]
+    now: "2026-09-30T10:00"  # 수요일
+    seed:
+      events:
+        - {title: ECE355 Tutorial, days: [WE], start: "2026-09-09T11:00", end: "2026-09-09T13:00", range: Lecture Period, importance: 3}
+    turns:
+      - say: "ECE355 Tutorial을 다음주에만 ECE355 Quiz 2로 바꿔줘"
+        expect:
+          db_unchanged: true
+          proposal:
+            count: 1
+            items:
+              - {kind: update_event, scope: instance, target_titles: [ECE355 Tutorial], target_dates: ["2026-10-07"],
+                 target_count: 1, changes: {title: ECE355 Quiz 2}}
+      - say: "좋아"
+        expect:
+          executed_min: 1
+          # 다음 주 회차만 떼어 새 일정이 되고, 시리즈 이름은 그대로
+          db_events: [{title_contains: ECE355 Quiz 2, count: 1}, {title_contains: ECE355 Tutorial, count: 1}]
+
   - id: importance_update
     tags: [수정]
     now: "2026-09-27T14:00"
