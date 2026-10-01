@@ -13,6 +13,7 @@
 #   previous_status                   직전 턴 제안의 상태 (예: superseded)
 #   same_as_previous: [필드...]       첫 카드의 값이 직전 턴 첫 카드와 같음
 #   reply_language: ko|en             답변 언어 (한글 포함 여부로 판별)
+#   reply_contains: [문자열...]        답변에 들어 있어야 하는 말 (대소문자 무시)
 #   db_events: [{title_contains, location, count}]   턴 뒤 DB에 있어야 하는 일정
 # 카드 조건: kind, title_contains, event_type, date, start, end, start_in, duration_minutes, importance, importance_in,
 #   recurring, rrule_contains, rrule_not_contains, recurrence_start, preview_dates, date_range, date_range_start,
@@ -341,6 +342,73 @@ cases:
             count: 1
             items:
               - {kind: create_event, start: "19:00", end: "20:00"}
+
+  # 확인 카드를 채팅으로 고치기 (옛 test_draft_edit에서 옮김)
+  - id: draft_add_recurrence
+    tags: [수정]
+    now: "2026-09-27T14:00"
+    turns:
+      - say: "10월 5일 월요일 오후 4시 알고리즘 스터디 추가해줘"
+        expect:
+          proposal:
+            count: 1
+            items:
+              - {kind: create_event, date: "2026-10-05", start: "16:00", recurring: false}
+      - say: "매주 반복으로 바꿔줘, Lecture Period 동안"
+        expect:
+          db_unchanged: true
+          previous_status: superseded
+          proposal:
+            count: 1
+            items:
+              - {kind: create_event, start: "16:00", recurring: true, rrule_contains: [BYDAY=MO], rrule_not_contains: [INTERVAL=2],
+                 date_range: Lecture Period}
+
+  - id: draft_remove_recurrence
+    tags: [수정]
+    now: "2026-09-27T14:00"
+    turns:
+      - say: "매주 수요일 오후 3시 스터디 Lecture Period 동안 추가해줘"
+        expect:
+          proposal:
+            count: 1
+            items:
+              - {kind: create_event, start: "15:00", recurring: true, rrule_contains: [BYDAY=WE]}
+      - say: "아 반복 말고 이번 주 수요일 한 번만"
+        expect:
+          db_unchanged: true
+          previous_status: superseded
+          proposal:
+            count: 1
+            items:
+              - {kind: create_event, date: "2026-09-30", start: "15:00", recurring: false}
+
+  - id: draft_switch_to_deadline
+    tags: [수정]
+    now: "2026-09-27T14:00"
+    turns:
+      - say: "10월 5일 오후 3시 ECE360 랩 리포트"
+        expect:
+          proposal: {count: 1}
+      - say: "아 그거 3시까지 제출하는 마감이야"
+        expect:
+          db_unchanged: true
+          proposal:
+            count: 1
+            items:
+              - {kind: create_event, event_type: deadline, date: "2026-10-05", end: "15:00"}
+
+  # 목록 질문: 옛 방식의 list_message 대신 프롬프트의 기간 목록으로 답한다
+  - id: list_ranges
+    tags: [기간]
+    now: "2026-09-27T14:00"
+    turns:
+      - say: "등록된 반복 기간 보여줘"
+        expect:
+          db_unchanged: true
+          proposal: null
+          reply_contains: [2026-2학기, Lecture Period]
+          tools_not_called: [propose_create_event, propose_update_event, propose_delete_event, propose_date_range, confirm_pending]
 
   # --- 확인안전 -------------------------------------------------------------------------
   - id: approve_creates

@@ -1,4 +1,4 @@
-"""단발(비반복) 일정의 회차 하나: 생성·알림 job·완료/놓침·수정·되돌리기. LLM은 가짜로 바꿔 호출하지 않는다."""
+"""단발(비반복) 일정의 회차 하나: 생성·알림 job·완료/놓침·수정·되돌리기. 자연어 변경은 가짜 LLM 대본으로 어시스턴트를 거친다."""
 
 from datetime import date, datetime
 
@@ -14,10 +14,9 @@ from app.core.scheduler import scheduler, shutdown_scheduler, start_scheduler
 from app.main import app
 from app.models import Base, Event, EventInstance, Location, User
 from app.models.enums import EventInstanceStatus
-from app.services import event_parse_service, notification
-from app.services.llm_client import EventSlotFillResult
+from app.services import notification
 from app.services.points import recalculate_points_since
-from app.services.slot_fill_session import clear_all_sessions
+from tests.assistant_flow import create, find, only_action, run, update
 
 TODAY = date(2026, 9, 26)
 
@@ -33,11 +32,9 @@ def paused_scheduler():
     # 알림 job은 스케줄러가 돌고 있을 때만 등록된다. 실행은 되지 않게 멈춰 두고 등록 결과만 본다.
     start_scheduler()
     scheduler.pause()
-    clear_all_sessions()
     yield
     scheduler.remove_all_jobs()
     shutdown_scheduler()
-    clear_all_sessions()
 
 
 @pytest.fixture
@@ -203,12 +200,9 @@ def test_put_update_moves_the_instance_and_its_jobs(client, engine, user_id):
 
 def test_nl_update_of_one_off_event_changes_the_event_and_instance_follows(client, engine, user_id, monkeypatch):
     event_id = _create(client, user_id, "스터디", "2026-09-26T17:00:00", "2026-09-26T18:00:00")
-    result = EventSlotFillResult(intent="update", target_title="스터디", target_date=TODAY, new_start_time="18:00")
-    monkeypatch.setattr(event_parse_service, "fill_event_slots_for_user", lambda *a, **k: result)
 
-    body = client.post("/events/parse", json={"user_id": user_id, "utterance": "오늘 스터디 6시로 옮겨줘"}).json()
+    run(client, monkeypatch, user_id, find(query="스터디"), update([(event_id, None)], scope="instance", start_time="18:00"))
 
-    assert body["command"]["status"] == "executed" and body["command"]["scope"] == "series"
     with Session(engine) as session:
         event = session.get(Event, event_id)
         assert (event.start_time, event.end_time) == (datetime(2026, 9, 26, 18), datetime(2026, 9, 26, 19))
@@ -218,20 +212,19 @@ def test_nl_update_of_one_off_event_changes_the_event_and_instance_follows(clien
 
 
 def test_undoing_nl_create_removes_the_instance_and_its_jobs(client, engine, user_id, monkeypatch):
-    date_range = client.post(
-        "/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-11"}
-    ).json()["id"]
-    result = EventSlotFillResult(
-        title="강의", frequency="WEEKLY", by_day=["MO"], start_time="09:00", end_time="10:00", date_range_id=date_range
+    client.post("/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-11"})
+    confirmed = run(
+        client, monkeypatch, user_id,
+        create(title="강의", start_time="09:00", end_time="10:00",
+               recurrence={"frequency": "WEEKLY", "interval": 1, "by_day": ["MO"], "start_date": None},
+               date_range={"name": "학기", "start_date": None, "end_date": None}),
     )
-    monkeypatch.setattr(event_parse_service, "fill_event_slots_for_user", lambda *a, **k: result)
-    token = client.post("/events/parse", json={"user_id": user_id, "utterance": "매주 월요일 오전 9시 강의"}).json()["command"]["confirmation_token"]
-    confirmed = client.post("/events/commands/confirm", json={"user_id": user_id, "token": token}).json()
-    [event_id] = [a["event_id"] for a in confirmed["command"]["affected"]]
+    with Session(engine) as session:
+        event_id = session.execute(select(Event.id).where(Event.title == "강의")).scalar_one()
     instance_ids = [i.id for i in _instances(engine, event_id)]
     assert instance_ids and all(_jobs(i) for i in instance_ids)
 
-    response = client.post(f"/actions/{confirmed['command']['action_id']}/undo", headers=_headers(user_id))
+    response = client.post(f"/actions/{only_action(confirmed)}/undo", headers=_headers(user_id))
 
     assert response.status_code == 200
     assert _instances(engine, event_id) == []
@@ -285,3 +278,13 @@ def test_startup_registers_jobs_for_pending_instances_from_yesterday_on(engine, 
     assert notification.register_upcoming_notifications() == 1
 
     assert sorted({job.id.rsplit("_", 1)[0] for job in scheduler.get_jobs()}) == ["event_instance_2"]
+
+
+def test_one_off_created_by_the_assistant_gets_one_instance_and_notification_jobs(client, engine, user_id, monkeypatch):
+    run(client, monkeypatch, user_id, create(title="UTKESA 미팅", date="2026-10-01", start_time="20:00", end_time="21:00"))
+
+    with Session(engine) as session:
+        event = session.execute(select(Event).where(Event.title == "UTKESA 미팅")).scalar_one()
+        [instance] = session.execute(select(EventInstance).where(EventInstance.event_id == event.id)).scalars().all()
+        assert (event.is_recurring, instance.date) == (False, date(2026, 10, 1))
+    assert _jobs(instance.id) == {"start": datetime(2026, 10, 1, 20), "end": datetime(2026, 10, 1, 21)}

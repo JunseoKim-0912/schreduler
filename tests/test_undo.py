@@ -1,7 +1,6 @@
-"""FR-2 v3.6 되돌리기. LLM은 fill_event_slots_for_user를 가짜로 바꿔 호출하지 않는다."""
+"""FR-2 되돌리기. 자연어 변경은 가짜 LLM 대본으로 어시스턴트를 거쳐 만든다 (tests/assistant_flow)."""
 
-from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 import pytest
@@ -15,10 +14,8 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, ComplianceReport, EventInstance, User
 from app.models.enums import EventInstanceStatus, NonComplianceCategory
-from app.services import event_parse_service
-from app.services.llm_client import EventSlotFillResult
 from app.services.points import recalculate_points_since
-from app.services.slot_fill_session import clear_all_sessions
+from tests.assistant_flow import create, delete, find, only_action, run, update
 
 TODAY = date(2026, 9, 26)  # 토요일
 TABLES = ("events", "event_instances", "compliance_reports", "points_ledger")
@@ -28,13 +25,6 @@ TABLES = ("events", "event_instances", "compliance_reports", "points_ledger")
 def frozen_today():
     with freeze_time("2026-09-26 09:00:00") as frozen:
         yield frozen
-
-
-@pytest.fixture(autouse=True)
-def reset_sessions():
-    clear_all_sessions()
-    yield
-    clear_all_sessions()
 
 
 @pytest.fixture
@@ -67,18 +57,6 @@ def user_id(engine) -> int:
         session.add(user)
         session.commit()
         return user.id
-
-
-@pytest.fixture
-def llm(monkeypatch: pytest.MonkeyPatch) -> Callable[..., None]:
-    queue: list[EventSlotFillResult] = []
-
-    def fake(db, user_id, utterance, **kwargs) -> EventSlotFillResult:
-        assert queue, f"예상하지 못한 LLM 호출: {utterance!r}"
-        return queue.pop(0)
-
-    monkeypatch.setattr(event_parse_service, "fill_event_slots_for_user", fake)
-    return lambda **fields: queue.append(EventSlotFillResult(**fields))
 
 
 def _dump(engine) -> dict[str, list[dict[str, Any]]]:
@@ -118,10 +96,11 @@ def _one_off(client: TestClient, user_id: int, title: str, day: str = "2026-09-2
     return response.json()["id"]
 
 
-def _parse(client: TestClient, user_id: int, utterance: str) -> dict:
-    response = client.post("/events/parse", json={"user_id": user_id, "utterance": utterance})
-    assert response.status_code == 200, response.text
-    return response.json()
+def _instance_id(engine, event_id: int, day: date) -> int:
+    with Session(engine) as session:
+        return session.execute(
+            select(EventInstance.id).where(EventInstance.event_id == event_id, EventInstance.date == day)
+        ).scalar_one()
 
 
 def _undo(client: TestClient, user_id: int, action_id: int):
@@ -192,59 +171,67 @@ def test_ui_delete_then_undo_restores_every_row_with_same_ids(client, engine, us
     assert _dump(engine) == before
 
 
-def test_nl_instance_update_then_undo_restores_values(client, engine, user_id, llm):
+def test_nl_instance_update_then_undo_restores_values(client, engine, user_id, monkeypatch):
     event_id = _weekly_quiz(client, user_id)
+    instance_id = _instance_id(engine, event_id, TODAY)
     before = _dump(engine)
-    llm(intent="update", target_title="물리 퀴즈", target_date=TODAY, new_start_time="18:00")
 
-    action_id = _parse(client, user_id, "오늘 물리 퀴즈 6시로 옮겨줘")["command"]["action_id"]
+    action_id = only_action(run(
+        client, monkeypatch, user_id,
+        find(query="물리 퀴즈", date_from=TODAY.isoformat(), date_to=TODAY.isoformat()),
+        update([(event_id, instance_id)], scope="instance", start_time="18:00"),
+    ))
     assert _dump(engine) != before
 
     assert _undo(client, user_id, action_id).status_code == 200
     assert _dump(engine) == before
 
 
-def test_nl_series_update_then_undo_restores_event_and_children(client, engine, user_id, llm):
+def test_nl_series_update_then_undo_restores_event_and_children(client, engine, user_id, monkeypatch):
     event_id = _weekly_quiz(client, user_id)
     _add_prep_child(client, user_id, event_id)
     before = _dump(engine)
-    llm(intent="update", target_title="물리 퀴즈", target_scope="series", new_start_time="16:00", new_title="물리 쪽지시험")
 
-    action_id = _parse(client, user_id, "물리 퀴즈 전체를 4시로, 이름은 물리 쪽지시험으로")["command"]["action_id"]
+    action_id = only_action(run(
+        client, monkeypatch, user_id,
+        find(query="물리 퀴즈"),
+        update([(event_id, None)], start_time="16:00", title="물리 쪽지시험"),
+    ))
     assert _dump(engine)["events"] != before["events"]
 
     assert _undo(client, user_id, action_id).status_code == 200
     assert _dump(engine) == before
 
 
-def test_delete_all_is_undone_in_one_step(client, engine, user_id, llm):
-    _one_off(client, user_id, "물리 과제 1", "2026-09-28")
-    _one_off(client, user_id, "물리 과제 2", "2026-09-29")
+def test_delete_all_is_undone_in_one_step(client, engine, user_id, monkeypatch):
+    first = _one_off(client, user_id, "물리 과제 1", "2026-09-28")
+    second = _one_off(client, user_id, "물리 과제 2", "2026-09-29")
     _one_off(client, user_id, "스터디")
     before = _dump(engine)
-    llm(intent="delete", target_title="물리 과제", target_all=True)
-    token = _parse(client, user_id, "물리 과제 전부 없애줘")["command"]["confirmation_token"]
-    confirmed = client.post("/events/commands/confirm", json={"user_id": user_id, "token": token}).json()
+    action_id = only_action(run(client, monkeypatch, user_id, find(query="물리 과제"), delete([(first, None), (second, None)])))
     assert len(_dump(engine)["events"]) == 1
 
-    response = _undo(client, user_id, confirmed["command"]["action_id"])
+    response = _undo(client, user_id, action_id)
 
     assert response.status_code == 200
     assert _dump(engine) == before
 
 
-def test_nl_create_then_undo_removes_the_event(client, engine, user_id, llm):
-    date_range = client.post(
+def test_nl_create_then_undo_removes_the_event(client, engine, user_id, monkeypatch):
+    client.post(
         "/date-ranges",
         json={"user_id": user_id, "name": "가을학기", "start_date": "2026-09-01", "end_date": "2026-10-31"},
-    ).json()["id"]
+    )
     before = _dump(engine)
-    llm(title="치과 교정", frequency="WEEKLY", by_day=["MO"], start_time="10:00", end_time="11:00", importance=2, date_range_id=date_range)
-    token = _parse(client, user_id, "매주 월요일 오전 10시 치과 교정")["command"]["confirmation_token"]
-    confirmed = client.post("/events/commands/confirm", json={"user_id": user_id, "token": token}).json()
+    action_id = only_action(run(
+        client, monkeypatch, user_id,
+        create(title="치과 교정", start_time="10:00", end_time="11:00", importance=2,
+               recurrence={"frequency": "WEEKLY", "interval": 1, "by_day": ["MO"], "start_date": None},
+               date_range={"name": "가을학기", "start_date": None, "end_date": None}),
+    ))
     assert len(_dump(engine)["events"]) == 1
 
-    response = _undo(client, user_id, confirmed["command"]["action_id"])
+    response = _undo(client, user_id, action_id)
 
     assert response.status_code == 200
     assert response.json()["action_type"] == "create"
@@ -262,12 +249,16 @@ def test_undo_twice_is_rejected(client, engine, user_id):
     assert len(_dump(engine)["events"]) == 1
 
 
-def test_older_action_cannot_be_undone_while_newer_one_on_same_event_remains(client, engine, user_id, llm):
+def test_older_action_cannot_be_undone_while_newer_one_on_same_event_remains(client, engine, user_id, monkeypatch):
     event_id = _weekly_quiz(client, user_id)
     _settle_points(engine, user_id)
+    instance_id = _instance_id(engine, event_id, TODAY)
     before = _dump(engine)
-    llm(intent="update", target_title="물리 퀴즈", target_date=TODAY, new_start_time="18:00")
-    update_id = _parse(client, user_id, "오늘 물리 퀴즈 6시로")["command"]["action_id"]
+    update_id = only_action(run(
+        client, monkeypatch, user_id,
+        find(query="물리 퀴즈", date_from=TODAY.isoformat(), date_to=TODAY.isoformat()),
+        update([(event_id, instance_id)], scope="instance", start_time="18:00"),
+    ))
     delete_id = int(client.delete(f"/events/{event_id}").headers["X-Action-Id"])
 
     blocked = _undo(client, user_id, update_id)
@@ -279,16 +270,20 @@ def test_older_action_cannot_be_undone_while_newer_one_on_same_event_remains(cli
     assert _dump(engine) == before
 
 
-def test_undoing_past_instance_delete_restores_points_ledger(client, engine, user_id, llm):
+def test_undoing_past_instance_delete_restores_points_ledger(client, engine, user_id, monkeypatch):
     event_id = _weekly_quiz(client, user_id)
     past_days = [date(2026, 9, 5), date(2026, 9, 12), date(2026, 9, 19)]
     _set_status(engine, event_id, past_days, EventInstanceStatus.DONE)
     _settle_points(engine, user_id)
+    instance_id = _instance_id(engine, event_id, date(2026, 9, 12))
     before = _dump(engine)
     assert len(before["points_ledger"]) == 3
-    llm(intent="delete", target_title="물리 퀴즈", target_date=date(2026, 9, 12))
 
-    action_id = _parse(client, user_id, "9월 12일 물리 퀴즈 지워줘")["command"]["action_id"]
+    action_id = only_action(run(
+        client, monkeypatch, user_id,
+        find(query="물리 퀴즈", date_from="2026-09-12", date_to="2026-09-12"),
+        delete([(event_id, instance_id)], scope="instance"),
+    ))
 
     assert _dump(engine)["points_ledger"] != before["points_ledger"], "지난 회차 삭제는 그날 이후 포인트를 바꾼다"
     assert _undo(client, user_id, action_id).status_code == 200

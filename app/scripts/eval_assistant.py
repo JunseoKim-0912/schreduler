@@ -311,6 +311,10 @@ def turn_problems(
             diffs = {f: v for f, v in diffs.items() if v[0] != v[1]}
             if diffs:
                 problems.append(f"changed besides the asked field: {diffs}")
+        elif key == "reply_contains":
+            missing = [part for part in want if part.casefold() not in record.reply.casefold()]
+            if missing:
+                problems.append(f"reply lacks {missing}: {record.reply[:80]!r}")
         elif key == "reply_language":
             if (want == "en") == _has_hangul(record.reply):
                 problems.append(f"reply language is not {want}: {record.reply[:60]!r}")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from freezegun import freeze_time
@@ -9,9 +10,11 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.main import app
 from app.models import Base, Event, User
+from app.services import llm_client
 from app.services.assistant import agent
 from tests.fake_responses import FakeResponsesClient, call, say
 
@@ -155,3 +158,23 @@ def test_expired_confirm_is_410(client, users, script) -> None:
             "/assistant/confirm", json={"session_id": body["session_id"], "token": body["proposal"]["token"]}, headers={"X-User-Id": str(me)}
         )
     assert response.status_code == 410
+
+
+def test_llm_failures_keep_their_status_codes(client, engine, users, monkeypatch: pytest.MonkeyPatch) -> None:
+    """옛 /events/parse에서 옮김: 모델 호출 실패는 502, 키가 없으면 500. 사용자 말은 대화에 남는다."""
+    me, _ = users
+    monkeypatch.setattr(settings, "llm_api_key", "test-key")
+    real_client = httpx.Client
+    down = httpx.MockTransport(lambda request: httpx.Response(500, text="upstream is down"))
+    monkeypatch.setattr(llm_client.httpx, "Client", lambda *a, **k: real_client(transport=down))
+
+    failed = client.post("/assistant/chat", json={"message": "스터디 추가"}, headers={"X-User-Id": str(me)})
+
+    assert failed.status_code == 502 and "detail" in failed.json()
+
+    monkeypatch.setattr(settings, "llm_api_key", None)
+    missing = client.post("/assistant/chat", json={"message": "스터디 추가"}, headers={"X-User-Id": str(me)})
+
+    assert missing.status_code == 500 and "detail" in missing.json()
+    current = client.get("/assistant/sessions/current", headers={"X-User-Id": str(me)}).json()
+    assert [m["text"] for m in current["messages"]] == ["스터디 추가"]

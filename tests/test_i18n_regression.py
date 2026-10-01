@@ -27,11 +27,12 @@ from app.models import EngagementScope, Event, EventInstance, EventInstanceStatu
 from app.models.base import Base
 from app.services import daily_checkin as daily_checkin_module
 from app.services import engagement_service
+from app.services.assistant import agent
 from app.services import llm_client as llm_client_module
 from app.services import notification as notification_module
 from app.services import sleep_checkin as sleep_checkin_module
 from app.services.engagement_service import evaluate_escalation, get_or_create_engagement_state
-from app.services.slot_fill_session import clear_all_sessions
+from tests.assistant_flow import confirm, create, propose
 
 LANGUAGES = ("ko", "en")
 HANGUL = re.compile(r"[가-힣]")
@@ -39,12 +40,8 @@ _REAL_HTTPX_CLIENT = httpx.Client  # 몽키패치 전에 원본을 캡처 (안 �
 
 # 가짜 모델이 preferred_language를 보고 고르는 응답
 FAKE_REPLIES = {"ko": "오늘도 수고했어요!", "en": "Great job today!"}
-FAKE_QUESTIONS = {"ko": "얼마나 자주 반복하나요?", "en": "How often should it repeat?"}
 NATIVE_REPLY_RULES = {"ko": "반드시 한국어로만 답하세요.", "en": "Respond only in English."}
-NATIVE_QUESTION_RULES = {
-    "ko": "되묻는 질문은 반드시 한국어로만 작성하세요.",
-    "en": "Write every clarifying question in English only.",
-}
+ASSISTANT_LANGUAGE_RULES = {"ko": "반드시 한국어로 답하세요.", "en": "Respond only in English."}
 
 
 def assert_in_language(text: str, language: str) -> None:
@@ -55,13 +52,6 @@ def assert_in_language(text: str, language: str) -> None:
 
 
 # --- fixtures ---
-
-
-@pytest.fixture(autouse=True)
-def reset_slot_sessions() -> Iterator[None]:
-    clear_all_sessions()
-    yield
-    clear_all_sessions()
 
 
 @pytest.fixture
@@ -122,23 +112,7 @@ def llm_requests(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
         payload = json.loads(request.content)
         captured.append(payload)
         language = re.search(r"preferred_language: (\w+)", payload["messages"][0]["content"]).group(1)
-        if "response_format" in payload:
-            content = json.dumps(
-                {
-                    "title": "스터디" if language == "ko" else "Study",
-                    "frequency": None,
-                    "by_day": None,
-                    "start_time": None,
-                    "end_time": None,
-                    "importance": None,
-                    "date_range_id": None,
-                    "missing_slots": ["frequency"],
-                    "clarifying_questions": [{"slot": "frequency", "question": FAKE_QUESTIONS[language]}],
-                },
-                ensure_ascii=False,
-            )
-        else:
-            content = FAKE_REPLIES[language]
+        content = FAKE_REPLIES[language]
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
     monkeypatch.setattr(settings, "llm_api_key", "test-key")
@@ -242,11 +216,17 @@ def _persona_replies(client: TestClient, world: dict[str, int], llm_requests: li
     return [checkin.json()["reply"], feedback.json()["llm_feedback"]], list(llm_requests)
 
 
-def _slot_fill_question(client: TestClient, world: dict[str, int], llm_requests: list) -> tuple[str, dict]:
-    llm_requests.clear()
-    response = client.post("/events/parse", json={"user_id": world["user"], "utterance": "study"})
-    assert response.status_code == 200
-    return response.json()["next_question"]["question"], llm_requests[0]
+def _assistant_texts(client: TestClient, world: dict[str, int], monkeypatch: pytest.MonkeyPatch) -> tuple[list[str], str]:
+    """어시스턴트 카드의 경고(자정 넘김)와 [만들기] 뒤 실행 문구, 그리고 모델에 보낸 입력 전체."""
+    chat = propose(
+        client, monkeypatch, world["user"],
+        create(title="Study", date="2026-10-01", start_time="22:00", end_time="06:00"),
+    )
+    [card] = chat["proposal"]["items"]
+    done = confirm(client, world["user"], chat)
+    fake = agent.ResponsesClient()  # propose()가 바꿔 둔 가짜 클라이언트
+    sent = json.dumps(fake.requests[0].input_items, ensure_ascii=False)
+    return [w["message"] for w in card["warnings"]] + [done["reply"]], sent
 
 
 # --- 1. 카테고리 라벨 ---
@@ -321,29 +301,29 @@ def test_persona_replies(
         assert {"ko": "정말 잘했어요!", "en": "You did great!"}[language] in system_message
 
 
-# --- 4. 슬롯필링 되묻는 질문 ---
+# --- 4. 일정 어시스턴트의 카드 경고·실행 문구 ---
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_slot_fill_question(client: TestClient, engine, world: dict[str, int], llm_requests: list, language: str) -> None:
+def test_assistant_texts(client: TestClient, engine, world: dict[str, int], monkeypatch: pytest.MonkeyPatch, language: str) -> None:
     _set_language(engine, world["user"], language)
 
-    question, request = _slot_fill_question(client, world, llm_requests)
+    texts, sent = _assistant_texts(client, world, monkeypatch)
 
-    assert question == FAKE_QUESTIONS[language]
-    assert_in_language(question, language)
-    system_message = request["messages"][0]["content"]
-    assert f"preferred_language: {language}" in system_message
-    assert NATIVE_QUESTION_RULES[language] in system_message
+    assert len(texts) == 2  # 자정 넘김 경고 + "✔ … 생성"
+    for text in texts:
+        assert_in_language(text, language)
+    assert ASSISTANT_LANGUAGE_RULES[language] in sent
     other = "en" if language == "ko" else "ko"
-    assert NATIVE_QUESTION_RULES[other] not in system_message
+    assert ASSISTANT_LANGUAGE_RULES[other] not in sent
 
 
 # --- 같은 사용자의 언어를 바꿔가며 전부 따라 바뀌는지 ---
 
 
 def test_switching_language_updates_every_output(
-    client: TestClient, engine, world: dict[str, int], pushes: list, telegrams: list, llm_requests: list
+    client: TestClient, engine, world: dict[str, int], pushes: list, telegrams: list, llm_requests: list,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     seen: dict[str, dict[str, object]] = {}
 
@@ -352,19 +332,19 @@ def test_switching_language_updates_every_output(
         labels = _category_labels(client, world)
         texts = _notifications(engine, world, pushes, telegrams)
         replies, persona_requests = _persona_replies(client, world, llm_requests)
-        question, slot_request = _slot_fill_question(client, world, llm_requests)
+        assistant, _ = _assistant_texts(client, world, monkeypatch)
 
-        snapshot = {"labels": labels, "notifications": texts, "replies": replies, "question": question}
+        snapshot = {"labels": labels, "notifications": texts, "replies": replies, "assistant": assistant}
         if language in seen:
             assert snapshot == seen[language], "같은 언어로 돌아왔는데 출력이 다르다 (이전 언어가 캐시됐을 가능성)"
         seen[language] = snapshot
 
-        for request in [*persona_requests, slot_request]:
+        for request in persona_requests:
             assert f"preferred_language: {language}" in request["messages"][0]["content"]
 
     assert seen["ko"]["labels"] != seen["en"]["labels"]
     assert seen["ko"]["notifications"] != seen["en"]["notifications"]
     assert seen["ko"]["replies"] != seen["en"]["replies"]
-    assert seen["ko"]["question"] != seen["en"]["question"]
-    for text in [*seen["en"]["labels"], *seen["en"]["notifications"], *seen["en"]["replies"], seen["en"]["question"]]:
+    assert seen["ko"]["assistant"] != seen["en"]["assistant"]
+    for text in [*seen["en"]["labels"], *seen["en"]["notifications"], *seen["en"]["replies"], *seen["en"]["assistant"]]:
         assert_in_language(text, "en")

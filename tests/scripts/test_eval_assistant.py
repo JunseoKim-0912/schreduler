@@ -25,7 +25,7 @@ def _case(data: dict, case_id: str) -> dict:
 
 def test_cases_are_well_formed(data: dict) -> None:
     cases = data["cases"]
-    assert 25 <= len(cases) <= 30
+    assert 25 <= len(cases) <= 40
     assert len({c["id"] for c in cases}) == len(cases)
     for case in cases:
         assert set(case["tags"]) <= TAGS, case["id"]
@@ -79,3 +79,13 @@ def test_summary_applies_the_selection_criteria() -> None:
 
     results[0].passed = False
     assert not ev.summarize(results)["meets_criteria"], "필수 범주(격주)가 100%가 아니면 탈락"
+
+
+def test_list_question_is_checked_against_the_reply(data: dict) -> None:
+    case = _case(data, "list_ranges")
+
+    listed = ev.run_case(case, data["seed"], _fake(say("등록된 기간: 2026-2학기(9/1~12/20), Lecture Period(9/3~12/8)")), "gpt-5.6-luna")
+    vague = ev.run_case(case, data["seed"], _fake(say("기간이 두 개 있어요.")), "gpt-5.6-luna")
+
+    assert listed.passed, listed.reasons
+    assert not vague.passed and "reply lacks" in vague.reasons[0]
