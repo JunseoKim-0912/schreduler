@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from functools import cache
 from pathlib import Path
 from typing import Literal
@@ -33,6 +34,47 @@ _I18N_DIR = Path(__file__).parent
 
 def to_language(value: str | None) -> Language:
     return "en" if value == "en" else DEFAULT_LANGUAGE
+
+
+# 언어를 판단할 근거가 못 되는 짧은 대답. 이런 입력에는 화면 언어로 답한다.
+_ACKNOWLEDGEMENTS = {
+    "ok", "okay", "k", "kk", "yes", "yeah", "yep", "no", "nope", "sure", "thanks", "thank you", "thx", "cool", "great", "fine",
+    "좋아", "좋아요", "응", "웅", "네", "넹", "예", "아니", "아니요", "아뇨", "그래", "그래요", "알겠어", "알겠어요", "고마워", "고마워요",
+    "감사", "감사합니다", "ㅇㅋ", "ㅇㅇ", "ㄱㄱ", "오케이",
+}
+# 대문자로 시작해도 이름이 아니라 영어 문장의 근거가 되는 흔한 단어 (문장 첫 단어 "Add", "Delete" 등).
+_COMMON_ENGLISH = {
+    "a", "add", "after", "all", "an", "and", "are", "at", "before", "can", "cancel", "change", "could", "create", "delete",
+    "do", "every", "for", "from", "how", "i", "i'm", "is", "it", "just", "make", "move", "my", "next", "on", "please",
+    "put", "remove", "schedule", "set", "show", "the", "this", "to", "today", "tomorrow", "what", "when", "where", "why",
+    "will", "with", "would", "you", "hi", "hello", "hey",
+}
+_HANGUL = re.compile(r"[가-힣]")
+_LATIN_WORD = re.compile(r"[A-Za-z']+")
+
+
+def reply_language(text: str | None, screen_language: str | None) -> Language:
+    """대화 답변 언어: 사용자가 마지막에 입력한 말의 언어를 따른다. 판단하기 애매한 입력("ok", "좋아", 이름·과목 코드·
+    숫자만 있는 입력)은 화면 언어(preferred_language)를 따른다. 카드·경고·알림 같은 고정 문구는 이 함수와 상관없이
+    항상 화면 언어다."""
+    fallback = to_language(screen_language)
+    if not text:
+        return fallback
+    stripped = re.sub(r"[\s.!?~,]+$", "", text.strip()).casefold()
+    if stripped in _ACKNOWLEDGEMENTS:
+        return fallback
+    hangul = len(_HANGUL.findall(text))
+    # 소문자로 시작하는 단어와 흔한 영어 단어만 영어의 근거로 센다 — "Bahen Centre", "ECE360 Lab" 같은 이름·코드는 빼고.
+    english = [w for w in _LATIN_WORD.findall(text) if w[0].islower() or w.casefold() in _COMMON_ENGLISH]
+    english_letters = sum(len(w) for w in english)
+    if hangul >= 2 and english_letters == 0:
+        return "ko"
+    if english_letters >= 2 and hangul == 0:
+        return "en"
+    if hangul and english_letters:
+        # 한글 한 글자는 영어 2~3글자 정도의 정보량이라 2배로 센다.
+        return "ko" if hangul * 2 >= english_letters else "en"
+    return fallback
 
 
 @cache
@@ -112,6 +154,12 @@ MessageKey = Literal[
     "assistant.warning.multiple_targets",
     "assistant.warning.range_in_use",
     "assistant.warning.similar_exists",
+    "checkin.summary.total",
+    "checkin.summary.missed",
+    "checkin.summary.due",
+    "checkin.summary.reason",
+    "checkin.summary.no_reason",
+    "child.travel_title",
     "assistant.proposal_ready",
     "assistant.limit_with_drafts",
     "assistant.limit_no_drafts",

@@ -4,6 +4,57 @@ import { initEventsPanel } from "./events.js";
 import { initPersonasPanel } from "./personas.js";
 import { initPointsPanel } from "./points.js";
 import { initTasksPanel } from "./tasks.js";
+import { getLang, onLangChange, setLang, t } from "./i18n.js";
+
+// --- 화면 언어 (Eng | Kor) ------------------------------------------------------
+// 처음 방문하면 영어. 고른 언어는 localStorage에 남고, 백엔드 User.preferred_language도 같이 바꿔서 알림·경고·
+// 시간 표시·카테고리 라벨이 같은 언어로 나오게 한다.
+
+const langButtons = [...document.querySelectorAll(".lang-switch [data-lang]")];
+
+function applyStaticText() {
+  document.documentElement.lang = getLang();
+  for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
+  for (const node of document.querySelectorAll("[data-i18n-placeholder]")) node.placeholder = t(node.dataset.i18nPlaceholder);
+  for (const node of document.querySelectorAll("[data-i18n-aria-label]")) node.setAttribute("aria-label", t(node.dataset.i18nAriaLabel));
+  for (const button of langButtons) {
+    const selected = button.dataset.lang === getLang();
+    button.setAttribute("aria-checked", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  }
+}
+
+async function syncBackendLanguage() {
+  if (!getUserId()) return;
+  try {
+    await apiFetch("/users/me/language", { method: "PUT", body: { language: getLang() }, showError: false });
+  } catch {
+    // 서버가 꺼져 있어도 화면 언어는 바뀐다. 다음에 언어를 고르거나 사용자 ID를 저장할 때 다시 맞춘다.
+  }
+}
+
+for (const button of langButtons) {
+  button.addEventListener("click", () => setLang(button.dataset.lang));
+  button.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    const other = langButtons.find((b) => b.dataset.lang !== getLang());
+    setLang(other.dataset.lang);
+    other.focus();
+  });
+}
+
+onLangChange(async () => {
+  applyStaticText();
+  await syncBackendLanguage();
+  // 화면에 그려 둔 목록·카드도 새 언어로 다시 그린다 (지금 탭만 다시 불러오고, 나머지는 열 때 불러온다).
+  hideError();
+  panels.tasks.relabel();
+  for (const panel of Object.values(panels)) panel.reset();
+  panels[activeTab]?.refresh();
+});
+
+applyStaticText();
 
 // --- 에러 배너 ---------------------------------------------------------------
 
@@ -32,21 +83,21 @@ const userIdStatus = document.getElementById("user-id-status");
 function saveUserId() {
   const value = userIdInput.value.trim();
   if (value && !/^[1-9]\d*$/.test(value)) {
-    userIdStatus.textContent = "숫자(1 이상)만 입력할 수 있어요.";
+    userIdStatus.textContent = t("user.invalid");
     userIdStatus.dataset.state = "error";
     return;
   }
   const changed = value !== getUserId();
   const saved = setUserId(value);
   userIdStatus.dataset.state = saved ? "ok" : "error";
-  if (!saved) userIdStatus.textContent = "브라우저 저장소를 쓸 수 없어 새로고침하면 사라져요.";
-  else userIdStatus.textContent = value ? "저장됨" : "사용자 ID를 지웠어요.";
+  if (!saved) userIdStatus.textContent = t("user.storageBlocked");
+  else userIdStatus.textContent = value ? t("user.saved") : t("user.cleared");
   if (changed && saved) {
     // 모든 탭의 이전 사용자 상태는 지우고, 다시 불러오는 건 지금 보이는 탭만 한다
     // (숨은 탭의 요청 에러가 배너에 뜨지 않게). 다른 탭은 열 때 activateTab이 불러온다.
     hideError();
     for (const panel of Object.values(panels)) panel.reset();
-    panels[activeTab]?.refresh();
+    syncBackendLanguage().then(() => panels[activeTab]?.refresh());
   }
 }
 
@@ -107,8 +158,8 @@ for (const tab of tabs) {
   });
 }
 
-// 페이지를 열면 항상 캘린더 탭부터 보여준다.
-activateTab("calendar");
+// 페이지를 열면 항상 캘린더 탭부터 보여준다. 백엔드 언어를 먼저 화면 언어로 맞춘다 (처음 방문이면 영어).
+syncBackendLanguage().then(() => activateTab("calendar"));
 
 // --- 서버 연결 확인 (공통 fetch 동작 확인용) ----------------------------------
 
@@ -117,13 +168,13 @@ const healthStatus = document.getElementById("health-status");
 
 healthButton.addEventListener("click", async () => {
   healthButton.disabled = true;
-  healthStatus.textContent = "확인 중…";
+  healthStatus.textContent = t("health.checking");
   try {
     const data = await apiFetch("/health");
-    healthStatus.textContent = data?.status === "ok" ? "서버 연결 정상" : "응답이 예상과 달라요";
+    healthStatus.textContent = data?.status === "ok" ? t("health.ok") : t("health.unexpected");
     hideError();
   } catch {
-    healthStatus.textContent = "연결 실패";
+    healthStatus.textContent = t("health.failed");
   } finally {
     healthButton.disabled = false;
   }

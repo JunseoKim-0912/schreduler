@@ -10,6 +10,7 @@ from app.core.openapi import CURRENT_USER
 from app.models.persona_conversation import PersonaConversation
 from app.models.user import User
 from app.schemas.persona import PersonaConversationRead, PersonaRead, UserPersonaRead, UserPersonaSelect
+from app.schemas.user import UserLanguageRead, UserLanguageUpdate
 from app.services import persona_conversation_service, persona_service
 
 router = APIRouter(prefix="/users/me", tags=["users"])
@@ -18,6 +19,15 @@ router = APIRouter(prefix="/users/me", tags=["users"])
 def _to_user_persona_read(user: User) -> UserPersonaRead:
     selected = PersonaRead.model_validate(user.selected_persona) if user.selected_persona else None
     return UserPersonaRead(user_id=user.id, selected_persona=selected)
+
+
+@router.put("/language", response_model=UserLanguageRead, summary="내 언어 바꾸기", responses=CURRENT_USER)
+def set_my_language(data: UserLanguageUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> UserLanguageRead:
+    """화면의 [Eng | Kor] 전환. 알림·경고·카테고리 라벨·시간 표시 문자열 등 서버가 만드는 고정 문구가 이 언어로 나온다.
+    대화 답변은 사용자가 마지막에 쓴 말의 언어를 따른다 (애매하면 이 언어)."""
+    user.preferred_language = data.language
+    db.commit()
+    return UserLanguageRead(user_id=user.id, language=user.preferred_language)
 
 
 @router.get("/persona", response_model=UserPersonaRead, summary="내 페르소나 조회", responses=CURRENT_USER)

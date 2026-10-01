@@ -47,7 +47,8 @@ def test_daily_checkin_puts_persona_in_prefix_and_summary_after(monkeypatch) -> 
     assert first["messages"][1]["content"] == "오늘 요약:\n요약 A\n\n사용자 발화: 안녕"
 
 
-def test_persona_block_follows_user_language(monkeypatch) -> None:
+def test_persona_and_reply_follow_the_language_of_the_users_message(monkeypatch) -> None:
+    # 화면은 영어지만 한국어로 사유를 적었다 → 한국어로 답하고, 페르소나 설정도 한국어판을 쓴다.
     payload = _capture_payload(
         monkeypatch,
         llm_client.generate_compliance_feedback,
@@ -58,9 +59,8 @@ def test_persona_block_follows_user_language(monkeypatch) -> None:
     )
 
     system_message = payload["messages"][0]["content"]
-    assert "Rordon Gamsay" in system_message
-    assert "Faster to grill a steak in Antarctica." in system_message
-    assert "반드시 영어(English)로만 답하라" in system_message
+    assert "로든 갬지" in system_message and "남극에서 스테이크 굽는 게 더 빠르겠군." in system_message
+    assert "reply_language: ko" in system_message and system_message.endswith("반드시 한국어로만 답하세요.")
     assert "버스가 안 왔어요" in payload["messages"][1]["content"]
 
 
@@ -87,8 +87,8 @@ def test_language_block_is_last_system_block(build: str, language: str, name: st
     language_block = system_message.split("\n\n")[-1]
 
     assert language_block.startswith("[응답 언어]")
-    assert f"preferred_language: {language}" in language_block
-    assert f"반드시 {name}로만 답하라" in language_block
+    assert f"reply_language: {language}" in language_block
+    assert f"처음부터 끝까지 {name}로만 쓴다" in language_block
     assert language_block.endswith(native_rule)
     assert "[응답 언어]" not in payload["messages"][1]["content"]
 
@@ -112,12 +112,30 @@ def test_unsupported_language_falls_back_to_korean() -> None:
     assert _payload("daily_checkin", "ja")["messages"][0] == _payload("daily_checkin", "ko")["messages"][0]
 
 
-def _payload(build: str, language: str) -> dict:
+def _payload(build: str, language: str, said: str = "ok") -> dict:
+    """said가 애매한 입력("ok", 과목 코드)이면 화면 언어(language)로 답한다."""
     if build == "daily_checkin":
-        return llm_client.build_daily_checkin_payload("요약", "안녕", persona=RORDON, language=language)
-    return llm_client.build_compliance_feedback_payload(
-        NonComplianceCategory.OTHER, "버스가 늦었어요", persona=RORDON, language=language
-    )
+        return llm_client.build_daily_checkin_payload("요약", said, persona=RORDON, language=language)
+    reason = "ECE360" if said == "ok" else said
+    return llm_client.build_compliance_feedback_payload(NonComplianceCategory.OTHER, reason, persona=RORDON, language=language)
+
+
+@pytest.mark.parametrize("build", ["daily_checkin", "compliance_feedback"])
+@pytest.mark.parametrize(
+    ("screen", "said", "expected"),
+    [
+        ("en", "오늘 버스가 늦게 와서 못 갔어", "ko"),  # 영어 화면에서 한국어로 말하면 한국어로 답한다
+        ("ko", "the bus was late so I missed it", "en"),  # 한국어 화면에서 영어로 말하면 영어로 답한다
+        ("en", "좋아", "en"),  # 애매한 입력은 화면 언어
+        ("ko", "ok", "ko"),
+        ("ko", "Bahen Centre", "ko"),  # 이름만 있는 입력도 화면 언어
+    ],
+)
+def test_reply_follows_the_last_message_or_the_screen_when_unclear(build: str, screen: str, said: str, expected: str) -> None:
+    system_message = _payload(build, screen, said)["messages"][0]["content"]
+
+    assert f"reply_language: {expected}" in system_message
+    assert system_message.endswith({"ko": "반드시 한국어로만 답하세요.", "en": "Respond only in English."}[expected])
 
 
 def test_persona_backstory_is_included_in_users_language() -> None:

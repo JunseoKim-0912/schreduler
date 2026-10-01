@@ -1,5 +1,6 @@
 import { apiFetch, getUserId } from "./api.js";
 import { badge, el, setStatus } from "./dom.js";
+import { getLang, t } from "./i18n.js";
 
 // 페르소나 대화 탭
 // - 목록: GET /personas, 현재 선택: GET /users/me/persona, 선택: PUT /users/me/persona (X-User-Id 헤더)
@@ -26,7 +27,7 @@ export function initPersonasPanel() {
   let loadedFor = null; // 지금 대화창에 불러온 페르소나 (다시 불러오지 않게)
 
   // 앱 UI가 한국어라 페르소나 이름·설명도 ko를 우선 보여준다 (없으면 en).
-  const localized = (value) => value?.ko || value?.en || "";
+  const localized = (value) => value?.[getLang()] || value?.en || value?.ko || "";
 
   function selectedPersona() {
     return personas.find((persona) => persona.name === selectedName) ?? null;
@@ -40,10 +41,8 @@ export function initPersonasPanel() {
     summaryBox.hidden = true;
     setStatus(chatStatus, "");
     const persona = selectedPersona();
-    chatTitle.textContent = persona ? `${localized(persona.display_name)}와(과) 저녁 체크인` : "저녁 체크인";
-    input.placeholder = persona
-      ? "오늘 하루 어땠는지 이야기해 보세요"
-      : "페르소나를 선택하지 않으면 기본 코치가 답하고, 대화는 저장되지 않아요";
+    chatTitle.textContent = persona ? t("checkin.headingWith", { name: localized(persona.display_name) }) : t("checkin.heading");
+    input.placeholder = persona ? t("checkin.placeholder") : t("checkin.placeholderNoPersona");
   }
 
   function addBubble(role, text, speaker) {
@@ -63,7 +62,7 @@ export function initPersonasPanel() {
           [
             el("span", { className: "persona-name" }, [
               el("span", { text: localized(persona.display_name) }),
-              selected ? badge("선택됨", "done") : null,
+              selected ? badge(t("persona.selected"), "done") : null,
             ]),
             el("span", { className: "persona-description", text: localized(persona.description) }),
           ],
@@ -76,7 +75,7 @@ export function initPersonasPanel() {
 
   function showConversation(conversation) {
     const persona = selectedPersona();
-    const speaker = persona ? localized(persona.display_name) : "코치";
+    const speaker = persona ? localized(persona.display_name) : t("persona.coach");
     for (const message of conversation?.messages ?? []) {
       if (message.role === "user") addBubble("user", message.content);
       else addBubble("assistant", message.content, speaker);
@@ -95,7 +94,7 @@ export function initPersonasPanel() {
       showConversation(conversation);
       loadedFor = name;
     } catch {
-      setStatus(chatStatus, "오늘 대화를 불러오지 못했어요.");
+      setStatus(chatStatus, t("checkin.loadFailed"));
     }
   }
 
@@ -118,14 +117,14 @@ export function initPersonasPanel() {
     if (!utterance) return;
     const userId = getUserId();
     if (!userId) {
-      setStatus(chatStatus, "위에서 사용자 ID를 먼저 입력해 주세요.");
+      setStatus(chatStatus, t("user.required"));
       return;
     }
 
     addBubble("user", utterance);
     input.value = "";
     sendButton.disabled = true;
-    setStatus(chatStatus, "답장을 기다리는 중…");
+    setStatus(chatStatus, t("checkin.waiting"));
     try {
       const body = { user_id: Number(userId), utterance };
       if (conversationId) body.conversation_id = conversationId;
@@ -134,15 +133,15 @@ export function initPersonasPanel() {
       summaryBox.textContent = result.summary;
       summaryBox.hidden = false;
       const persona = selectedPersona();
-      addBubble("assistant", result.reply, persona ? localized(persona.display_name) : "코치");
+      addBubble("assistant", result.reply, persona ? localized(persona.display_name) : t("persona.coach"));
       setStatus(chatStatus, "");
     } catch (error) {
       // 저장된 대화를 못 찾으면(다른 사용자·서버 데이터 초기화 등) 새 대화로 시작한다.
       if (error.status === 404 && conversationId) {
         conversationId = null;
-        setStatus(chatStatus, "이전 대화를 찾을 수 없어 새 대화로 시작해요. 다시 보내 주세요.");
+        setStatus(chatStatus, t("checkin.sessionGone"));
       } else {
-        setStatus(chatStatus, "보내지 못했어요. 위의 안내를 확인해 주세요.");
+        setStatus(chatStatus, t("checkin.sendFailed"));
       }
     } finally {
       sendButton.disabled = false;
@@ -153,20 +152,20 @@ export function initPersonasPanel() {
   async function refresh() {
     if (!getUserId()) {
       personaList.replaceChildren();
-      setStatus(personaStatus, "사용자 ID를 입력하면 페르소나를 고를 수 있어요.");
+      setStatus(personaStatus, t("persona.needUser"));
       return;
     }
-    setStatus(personaStatus, "불러오는 중…");
+    setStatus(personaStatus, t("common.loading"));
     try {
       const [list, mine] = await Promise.all([apiFetch("/personas"), apiFetch("/users/me/persona")]);
       personas = list;
       const previous = selectedName;
       selectedName = mine.selected_persona?.name ?? null;
       renderPersonas();
-      setStatus(personaStatus, personas.length ? "" : "등록된 페르소나가 없어요. (python -m app.scripts.seed_personas)");
+      setStatus(personaStatus, personas.length ? "" : t("persona.empty"));
       if (previous !== selectedName || loadedFor !== selectedName) await loadCurrentConversation();
     } catch {
-      setStatus(personaStatus, "페르소나를 불러오지 못했어요.");
+      setStatus(personaStatus, t("persona.loadFailed"));
     }
   }
 
@@ -180,9 +179,9 @@ export function initPersonasPanel() {
         const conversation = await apiFetch(`/personas/${encodeURIComponent(name)}/conversations?context=checkin`, { method: "POST" });
         conversationId = conversation.id;
         loadedFor = name;
-        setStatus(chatStatus, "새 대화를 시작했어요. 이전 대화는 기록에 남아 있어요.");
+        setStatus(chatStatus, t("checkin.newDone"));
       } catch {
-        setStatus(chatStatus, "새 대화를 시작하지 못했어요.");
+        setStatus(chatStatus, t("checkin.newFailed"));
       }
     }
     input.focus();

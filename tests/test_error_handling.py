@@ -287,7 +287,7 @@ def test_unexpected_error_is_json_500_and_logged_without_leaking(handler_client:
         response = handler_client.get("/boom")
 
     assert response.status_code == 500
-    assert response.json() == {"detail": "서버 내부 오류가 발생했습니다"}
+    assert response.json() == {"detail": "Internal server error"}
     assert "secret internal detail" not in response.text
     assert "GET /boom -> 500" in caplog.text
     assert "secret internal detail" in caplog.text  # 원인은 로그에만 남긴다

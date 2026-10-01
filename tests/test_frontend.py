@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app import frontend_serving
 from app.main import FRONTEND_DIR, app
 
 client = TestClient(app)
@@ -17,7 +18,7 @@ def test_app_path_serves_index_html() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "사용자 ID" in response.text
+    assert "User ID" in response.text  # 처음 화면은 영어 (i18n.js가 고른 언어로 바꾼다)
 
 
 def test_app_without_trailing_slash_redirects_to_index() -> None:
@@ -50,10 +51,11 @@ def test_every_asset_referenced_by_index_exists() -> None:
 
 
 def test_layout_has_five_tabs_with_calendar_first() -> None:
-    tabs = re.findall(r'role="tab"[^>]*aria-controls="([\w-]+)"[^>]*>([^<]+)<', INDEX)
+    tabs = re.findall(r'role="tab"[^>]*aria-controls="([\w-]+)"[^>]*data-i18n="([\w.]+)"[^>]*>([^<]+)<', INDEX)
 
-    assert [label for _, label in tabs] == ["캘린더", "이벤트", "할 일(Task)", "포인트", "페르소나 대화"]
-    for panel_id, _ in tabs:
+    assert [key for _, key, _ in tabs] == ["tab.calendar", "tab.events", "tab.tasks", "tab.points", "tab.chat"]
+    assert [label for _, _, label in tabs] == ["Calendar", "Events", "Tasks", "Points", "Persona chat"]
+    for panel_id, _, _ in tabs:
         assert f'id="{panel_id}"' in INDEX
     # 첫 탭(캘린더) 패널만 처음부터 보이고 나머지는 숨겨져 있다 (JS가 켜지기 전에도 한 섹션만 보이게)
     assert re.search(r'id="panel-calendar"[^>]*role="tabpanel"[^>]*>', INDEX).group(0).find("hidden") == -1
@@ -82,3 +84,34 @@ def test_frontend_js_unit_tests() -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("asset", ["app.js", "i18n.js", "styles.css"])
+def test_directly_requested_files_are_revalidated(asset: str) -> None:
+    first = client.get(f"/app/{asset}")
+
+    assert first.headers["cache-control"] == "no-cache"
+    again = client.get(f"/app/{asset}", headers={"If-None-Match": first.headers["etag"]})
+    assert again.status_code == 304
+
+
+def test_index_points_scripts_at_a_versioned_path_so_edits_show_up(tmp_path, monkeypatch) -> None:
+    """index.html은 매번 새로 받고, app.js·styles.css는 파일이 바뀌면 달라지는 /app/v/<버전>/ 주소로 불러온다.
+    app.js가 import하는 모듈도 같은 버전 경로 아래에서 풀리므로 예전에 캐시한 모듈을 쓰지 않는다."""
+    response = client.get("/app/")
+
+    assert response.headers["cache-control"] == "no-cache"
+    version = re.search(r'src="v/([0-9a-f]{12})/app\.js"', response.text).group(1)
+    assert f'href="v/{version}/styles.css"' in response.text
+    module = client.get(f"/app/v/{version}/api.js")
+    assert module.status_code == 200 and "javascript" in module.headers["content-type"]
+    assert "immutable" in module.headers["cache-control"]
+    assert client.get(f"/app/v/{version}/../app/main.py").status_code == 404
+
+    site = tmp_path / "frontend"
+    site.mkdir()
+    (site / "index.html").write_text('<script src="app.js"></script>', encoding="utf-8")
+    (site / "app.js").write_text("1", encoding="utf-8")
+    before = frontend_serving.frontend_version(site)
+    (site / "app.js").write_text("22", encoding="utf-8")
+    assert frontend_serving.frontend_version(site) != before, "파일을 고치면 버전(주소)이 바뀐다"

@@ -112,7 +112,7 @@ def llm_requests(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         captured.append(payload)
-        language = re.search(r"preferred_language: (\w+)", payload["messages"][0]["content"]).group(1)
+        language = re.search(r"reply_language: (\w+)", payload["messages"][0]["content"]).group(1)
         content = FAKE_REPLIES[language]
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
@@ -208,10 +208,10 @@ def _notifications(engine, world: dict[str, int], pushes: list, telegrams: list)
 
 def _persona_replies(client: TestClient, world: dict[str, int], llm_requests: list) -> tuple[list[str], list[dict]]:
     llm_requests.clear()
-    checkin = client.post("/daily-actual-logs/checkin", json={"user_id": world["user"], "utterance": "hello"})
+    checkin = client.post("/daily-actual-logs/checkin", json={"user_id": world["user"], "utterance": "ok"})  # 애매한 입력 → 화면 언어로 답한다
     feedback = client.post(
         "/compliance-reports",
-        json={"event_instance_id": world["scheduled_instance"], "reason_category": "other", "reason_text": "bus was late"},
+        json={"event_instance_id": world["scheduled_instance"], "reason_category": "other", "reason_text": "ECE360"},
     )
     assert checkin.status_code == 200 and feedback.status_code == 201
     return [checkin.json()["reply"], feedback.json()["llm_feedback"]], list(llm_requests)
@@ -222,6 +222,7 @@ def _assistant_texts(client: TestClient, world: dict[str, int], monkeypatch: pyt
     chat = propose(
         client, monkeypatch, world["user"],
         create(title="Study", date="2026-10-01", start_time="22:00", end_time="06:00"),
+        message="ok",
     )
     [card] = chat["proposal"]["items"]
     done = confirm(client, world["user"], chat)
@@ -299,7 +300,7 @@ def test_persona_replies(
     assert len(requests) == 2  # 체크인 + 미준수 피드백
     for request in requests:
         system_message = request["messages"][0]["content"]
-        assert f"preferred_language: {language}" in system_message
+        assert f"reply_language: {language}" in system_message
         assert system_message.endswith(NATIVE_REPLY_RULES[language])
         assert {"ko": "하나", "en": "Hana"}[language] in system_message  # 페르소나 설정도 같은 언어
         assert {"ko": "정말 잘했어요!", "en": "You did great!"}[language] in system_message
@@ -344,7 +345,7 @@ def test_switching_language_updates_every_output(
         seen[language] = snapshot
 
         for request in persona_requests:
-            assert f"preferred_language: {language}" in request["messages"][0]["content"]
+            assert f"reply_language: {language}" in request["messages"][0]["content"]
 
     assert seen["ko"]["labels"] != seen["en"]["labels"]
     assert seen["ko"]["notifications"] != seen["en"]["notifications"]

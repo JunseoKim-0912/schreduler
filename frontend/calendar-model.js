@@ -2,9 +2,10 @@
 // 서버 일시는 타임존 없는 로컬 시각("2026-09-24T19:00:00")이다. new Date(문자열)이나 toISOString()처럼
 // UTC를 거치는 변환을 쓰지 않고, 연·월·일·시·분을 그대로 브라우저 로컬 시각으로 다룬다.
 
+import { dateRangeTitle, monthDayWeekday, prefillDate, t, weekdayName } from "./i18n.js";
+
 export const HOUR_HEIGHT = 48; // px, CSS의 --hour와 같은 값
 export const MIN_BLOCK_MINUTES = 20; // 아주 짧은 일정도 글자가 보이게 하는 최소 높이(겹침 계산에도 같은 값을 써야 서로 가리지 않는다)
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const pad = (n) => String(n).padStart(2, "0");
 
 export function parseLocalDateTime(value) {
@@ -42,18 +43,11 @@ export function stepDays(mode) {
 }
 
 export function weekdayLabel(date) {
-  return WEEKDAYS[date.getDay()];
+  return weekdayName(date.getDay());
 }
 
 export function formatRangeTitle(days) {
-  const first = days[0];
-  const last = days.at(-1);
-  const [y1, m1, d1] = [first.getFullYear(), first.getMonth() + 1, first.getDate()];
-  const [y2, m2, d2] = [last.getFullYear(), last.getMonth() + 1, last.getDate()];
-  if (days.length === 1) return `${y1}년 ${m1}월 ${d1}일 (${weekdayLabel(first)})`;
-  if (y1 !== y2) return `${y1}년 ${m1}월 ${d1}일 – ${y2}년 ${m2}월 ${d2}일`;
-  if (m1 !== m2) return `${y1}년 ${m1}월 ${d1}일 – ${m2}월 ${d2}일`;
-  return `${y1}년 ${m1}월 ${d1}일 – ${d2}일`;
+  return dateRangeTitle(days[0], days.at(-1));
 }
 
 function dayNumber(date) {
@@ -136,10 +130,8 @@ export function importanceClass(importance) {
   return Number(importance) >= 6 ? "imp-max" : `imp-${importance}`;
 }
 
-const STATUS_LABELS = { pending: "예정", done: "완료", missed: "놓침", cancelled: "취소됨" };
-
 export function statusLabel(status) {
-  return STATUS_LABELS[status] ?? status;
+  return ["pending", "done", "missed", "cancelled"].includes(status) ? t(`status.${status}`) : status;
 }
 
 // 이번 날짜들 중 오늘이 있으면 현재 시각 선의 위치
@@ -152,18 +144,18 @@ export function hourFromOffset(offsetY, hourHeight = HOUR_HEIGHT) {
   return Math.min(23, Math.max(0, Math.floor(offsetY / hourHeight)));
 }
 
-// 빈 칸을 눌렀을 때 자연어 입력창에 미리 채울 문구
+// 빈 칸을 눌렀을 때 어시스턴트 입력창에 미리 채울 문구 ("Oct 6 at 14:00 " / "10월 6일 14시에 ")
 export function prefillText(day, hour) {
-  return `${day.getMonth() + 1}월 ${day.getDate()}일 ${hour}시에 `;
+  return t("cal.prefill", { date: prefillDate(day.getMonth() + 1, day.getDate()), hour });
 }
 
 function formatDay(value) {
   const d = parseLocalDateTime(value);
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${weekdayLabel(d)})`;
+  return monthDayWeekday(d.getMonth() + 1, d.getDate(), d.getDay());
 }
 
 export function describeItemTime(item) {
-  if (item.event_type === "deadline" || !item.start_time) return `${formatDay(item.end_time)} ${timeOf(item.end_time)} 마감`;
+  if (item.event_type === "deadline" || !item.start_time) return t("cal.dueAt", { date: formatDay(item.end_time), time: timeOf(item.end_time) });
   const sameDay = item.start_time.slice(0, 10) === item.end_time.slice(0, 10);
   const end = sameDay ? timeOf(item.end_time) : `${formatDay(item.end_time)} ${timeOf(item.end_time)}`;
   return `${formatDay(item.start_time)} ${timeOf(item.start_time)}–${end}`;

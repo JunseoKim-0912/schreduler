@@ -1,6 +1,7 @@
 import { apiFetch, getUserId } from "./api.js";
 import { badge, el, setStatus } from "./dom.js";
 import { assistantConfirmLabel, describeAssistantItem } from "./format.js";
+import { t } from "./i18n.js";
 
 // 이벤트 탭의 새 어시스턴트 (docs/assistant_design.md §1, §5, §11).
 // 대화 기록과 대기 중인 제안은 서버(assistant_sessions)에 있다. 탭에 들어오면 GET /assistant/sessions/current로 이어 그린다.
@@ -40,14 +41,14 @@ export function initAssistantChat({ undo, dataChanged }) {
   function addResult(summary, actionId) {
     const button = el("button", {
       className: "button button-secondary button-small",
-      text: "되돌리기",
+      text: t("common.undo"),
       attrs: { type: "button", "data-action-id": actionId },
     });
     button.addEventListener("click", async () => {
       button.disabled = true;
       try {
         const action = await undo(actionId);
-        addMessage("assistant", `↩ 되돌렸어요: ${action.summary_text}`);
+        addMessage("assistant", t("common.undoneMessage", { summary: action.summary_text }));
       } catch (error) {
         button.disabled = false;
         if (error.status === 409) addMessage("error", error.detail);
@@ -57,7 +58,7 @@ export function initAssistantChat({ undo, dataChanged }) {
   }
 
   function showThinking() {
-    const node = append(el("li", { className: "bubble bubble-assistant bubble-thinking", text: "생각 중…", attrs: { "aria-busy": "true" } }));
+    const node = append(el("li", { className: "bubble bubble-assistant bubble-thinking", text: t("assistant.thinking"), attrs: { "aria-busy": "true" } }));
     return () => node.remove();
   }
 
@@ -70,7 +71,7 @@ export function initAssistantChat({ undo, dataChanged }) {
       { className: "assistant-fields" },
       view.rows.flatMap((row) => [
         el("dt", { text: row.label }),
-        el("dd", {}, [el("span", { text: row.value ?? "" }), row.inferred ? badge("추정", "inferred") : null]),
+        el("dd", {}, [el("span", { text: row.value ?? "" }), row.inferred ? badge(t("assistant.inferred"), "inferred") : null]),
       ]),
     );
     return el("section", { className: "assistant-item" }, [
@@ -86,11 +87,11 @@ export function initAssistantChat({ undo, dataChanged }) {
     activeCard?.supersede();
     const items = proposal.items ?? [];
     const run = el("button", { className: "button", text: assistantConfirmLabel(items), attrs: { type: "button" } });
-    const cancel = el("button", { className: "button button-secondary", text: "취소", attrs: { type: "button" } });
+    const cancel = el("button", { className: "button button-secondary", text: t("common.cancel"), attrs: { type: "button" } });
     const buttons = el("div", { className: "actions" }, [run, cancel]);
     const cardStatus = el("p", { className: "hint", attrs: { role: "status" } });
     cardStatus.hidden = true;
-    const title = el("p", { className: "command-card-title", text: items.length > 1 ? `이렇게 할까요? (${items.length}개)` : "이렇게 할까요?" });
+    const title = el("p", { className: "command-card-title", text: items.length > 1 ? t("assistant.cardTitleMany", { count: items.length }) : t("assistant.cardTitle") });
     const node = append(el("li", { className: "command-card assistant-card" }, [title, ...items.map(renderItem), buttons, cardStatus]));
 
     const card = {
@@ -108,7 +109,7 @@ export function initAssistantChat({ undo, dataChanged }) {
         card.setBusy(true);
         buttons.remove();
         node.classList.add("is-superseded");
-        title.prepend(badge("변경됨", "muted"), " ");
+        title.prepend(badge(t("assistant.changed"), "muted"), " ");
         if (activeCard === card) activeCard = null;
       },
     };
@@ -117,13 +118,13 @@ export function initAssistantChat({ undo, dataChanged }) {
     // 409·410·404는 카드 안에서 직접 안내하고, 나머지(서버 연결 등)는 카드 상태 줄에 서버 문구를 보여준다.
     async function answer(path, onDone) {
       card.setBusy(true);
-      setStatus(cardStatus, "처리하는 중…");
+      setStatus(cardStatus, t("assistant.working"));
       try {
         const result = await apiFetch(path, { method: "POST", body: { session_id: sessionId, token: card.token }, showError: false });
         await onDone(result);
       } catch (error) {
-        if (error.status === 410) card.close("제안이 만료됐어요 (30분). 다시 말해 주세요.");
-        else if (error.status === 409 || error.status === 404) card.close("이미 처리됐거나 바뀐 제안이에요. 다시 말해 주세요.");
+        if (error.status === 410) card.close(t("assistant.expired"));
+        else if (error.status === 409 || error.status === 404) card.close(t("assistant.stale"));
         else {
           setStatus(cardStatus, error.message);
           card.setBusy(false);
@@ -133,13 +134,13 @@ export function initAssistantChat({ undo, dataChanged }) {
 
     run.addEventListener("click", () =>
       answer("/assistant/confirm", async (result) => {
-        card.close("실행했어요.");
+        card.close(t("assistant.done"));
         await showExecuted(result.executed);
       }),
     );
     cancel.addEventListener("click", () =>
       answer("/assistant/cancel", async (result) => {
-        card.close("취소했어요. 아무것도 바뀌지 않았어요.");
+        card.close(t("assistant.cancelled"));
         addMessage("assistant", result.reply);
         input.focus();
       }),
@@ -160,7 +161,7 @@ export function initAssistantChat({ undo, dataChanged }) {
   async function handleReply(result) {
     const executed = result.executed ?? [];
     if (result.reply && !isExecutedEcho(result.reply, executed)) addMessage("assistant", result.reply);
-    if (executed.length) activeCard?.close("채팅으로 승인해서 실행했어요.");
+    if (executed.length) activeCard?.close(t("assistant.doneByChat"));
     if (result.proposal) renderProposal(result.proposal);
     await showExecuted(executed);
   }
@@ -168,7 +169,7 @@ export function initAssistantChat({ undo, dataChanged }) {
   async function send(message) {
     if (sending || !message) return;
     if (!getUserId()) {
-      setStatus(status, "위에서 사용자 ID를 먼저 입력해 주세요.");
+      setStatus(status, t("user.required"));
       return;
     }
     setStatus(status, "");
@@ -189,8 +190,8 @@ export function initAssistantChat({ undo, dataChanged }) {
       hideThinking();
       if (error.status === 404 && sessionId) {
         sessionId = null;
-        activeCard?.close("대화가 끝나 이 제안은 쓸 수 없어요.");
-        addMessage("error", "이전 대화를 찾을 수 없어 새 대화로 시작해요. 한 번 더 보내 주세요.");
+        activeCard?.close(t("assistant.sessionGoneCard"));
+        addMessage("error", t("assistant.sessionGone"));
       } else {
         addMessage("error", error.message);
       }
@@ -217,28 +218,33 @@ export function initAssistantChat({ undo, dataChanged }) {
     if (sending) return;
     if (!userId) {
       reset();
-      setStatus(status, "사용자 ID를 입력하면 어시스턴트와 대화할 수 있어요.");
+      setStatus(status, t("assistant.needUser"));
+      status.dataset.kind = "notice";
       return;
     }
     try {
       const data = await apiFetch("/assistant/sessions/current", { showError: false });
       if (sending || getUserId() !== userId) return;
-      if (status.textContent.startsWith("사용자 ID") || status.textContent.startsWith("대화를 불러오지")) setStatus(status, "");
+      if (status.dataset.kind === "notice") {
+        setStatus(status, "");
+        delete status.dataset.kind;
+      }
       if (loadedFor === userId && data.session_id === sessionId) {
-        if (activeCard && data.proposal?.token !== activeCard.token) activeCard.close("제안이 만료됐어요. 다시 말해 주세요.");
+        if (activeCard && data.proposal?.token !== activeCard.token) activeCard.close(t("assistant.expired"));
         return;
       }
       loadedFor = userId;
       renderSession(data);
     } catch (error) {
-      setStatus(status, `대화를 불러오지 못했어요. ${error.message}`);
+      setStatus(status, t("assistant.loadFailed", { error: error.message }));
+      status.dataset.kind = "notice";
     }
   }
 
   async function startNewSession() {
     if (sending) return;
     if (!getUserId()) {
-      setStatus(status, "위에서 사용자 ID를 먼저 입력해 주세요.");
+      setStatus(status, t("user.required"));
       return;
     }
     resetButton.disabled = true;
@@ -249,7 +255,7 @@ export function initAssistantChat({ undo, dataChanged }) {
       setStatus(status, "");
       input.focus();
     } catch (error) {
-      setStatus(status, `새 대화를 시작하지 못했어요. ${error.message}`);
+      setStatus(status, t("assistant.newFailed", { error: error.message }));
     } finally {
       resetButton.disabled = false;
     }

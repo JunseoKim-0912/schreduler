@@ -125,9 +125,20 @@ FIXED_INSTRUCTIONS = """[역할]
 
 
 def _language_block(language: str) -> str:
+    """화면 언어와 답변 언어 규칙. 이번 턴의 답변 언어는 사용자 발화 바로 앞의 reply_language_block이 정한다."""
+    lang = to_language(language)
+    return (
+        f"[언어]\n화면 언어(preferred_language): {LANGUAGE_NAMES[lang]}. 확인 카드·경고·버튼 같은 고정 문구는 앱이 화면 언어로 "
+        "만든다. 너의 답변은 [이번 답변 언어] 블록의 언어로만 쓴다 — 사용자가 마지막에 쓴 말의 언어이고, \"ok\", \"좋아\", "
+        "이름·숫자만 있는 입력처럼 애매하면 화면 언어다. 한 답변 안에서 언어를 섞지 않는다. 도구 인자의 제목·이름은 사용자가 "
+        "쓴 표현 그대로 둔다."
+    )
+
+
+def reply_language_block(language: str) -> str:
     lang = to_language(language)
     native = {"ko": "반드시 한국어로 답하세요.", "en": "Respond only in English."}[lang]
-    return f"[응답 언어]\n사용자 preferred_language: {LANGUAGE_NAMES[lang]}. 모든 답변을 이 언어로 쓴다. {native}"
+    return f"[이번 답변 언어]\n{LANGUAGE_NAMES[lang]}. {native}"
 
 
 def instruction_blocks() -> list[str]:
@@ -220,12 +231,15 @@ def turn_input(
     history: list[ResponsesInputItem],
     pending: str | None,
     message: str,
+    reply_language: str | None = None,
 ) -> list[ResponsesInputItem]:
+    # 답변 언어는 매 턴 바뀔 수 있어 캐시 프리픽스가 아닌 사용자 발화 바로 앞에 둔다.
     return [
         {"role": "developer", "content": context_block},
         {"role": "developer", "content": time_block},
         *history,
         *([{"role": "developer", "content": pending}] if pending else []),
+        *([{"role": "developer", "content": reply_language_block(reply_language)}] if reply_language else []),
         {"role": "user", "content": message},
     ]
 

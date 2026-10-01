@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.clock import local_now
 from app.core.config import settings
 from app.core.exceptions import ConflictError, ExpiredError, NotFoundError
-from app.i18n import render_message
+from app.i18n import render_message, reply_language
 from app.models.assistant import AssistantMessage, AssistantSession, AssistantTurnLog, PendingProposal
 from app.models.user import User
 from app.services.assistant import prompt
@@ -215,6 +215,7 @@ def chat(
         history=history,
         pending=prompt.pending_block(pending),
         message=message,
+        reply_language=reply_language(message, user.preferred_language),
     )
 
     usage = _Usage()

@@ -1,6 +1,8 @@
 // 모든 API 호출이 거치는 공통 레이어. DOM에 의존하지 않아 Node에서도 테스트할 수 있다.
 // 화면에 에러를 띄우는 일은 onApiError로 등록한 핸들러(app.js)가 맡는다.
 
+import { t } from "./i18n.js";
+
 // 같은 서버(FastAPI)가 /app에서 이 파일을 서빙하므로 API는 같은 origin이다 — CORS 설정이 필요 없다.
 export const API_BASE = "";
 
@@ -76,22 +78,22 @@ function formatValidationErrors(items) {
 export function describeError({ status, detail, method = "GET", path = "" }) {
   const llm = isLlmEndpoint(method, path);
 
-  if (status === 0) return "서버에 연결할 수 없어요. 서버가 켜져 있는지 확인해 주세요.";
-  if (status === 401) return "사용자 ID를 먼저 입력해 주세요.";
-  if (status === 422 && Array.isArray(detail)) return `입력값을 확인해 주세요.\n${formatValidationErrors(detail)}`;
+  if (status === 0) return t("api.offline");
+  if (status === 401) return t("api.needUser");
+  if (status === 422 && Array.isArray(detail)) return `${t("api.checkInput")}\n${formatValidationErrors(detail)}`;
 
   if (llm) {
-    if (status === 422) return "AI가 요청을 제대로 이해하지 못했어요. 표현을 조금 바꿔서 다시 시도해 주세요.";
-    if (status === 500) return "AI 기능이 아직 서버에 설정되지 않았어요. 관리자에게 문의해 주세요.";
-    if (status === 502) return "AI 서버와 연결이 원활하지 않아요. 잠시 후 다시 시도해 주세요.";
+    if (status === 422) return t("api.llm422");
+    if (status === 500) return t("api.llm500");
+    if (status === 502) return t("api.llm502");
   }
 
   const serverMessage = typeof detail === "string" && detail ? detail : "";
-  if (status === 404) return serverMessage ? `요청한 항목을 찾을 수 없어요. (${serverMessage})` : "요청한 항목을 찾을 수 없어요.";
-  if (status === 409) return serverMessage ? `지금은 처리할 수 없어요: ${serverMessage}` : "다른 데이터와 충돌해서 처리할 수 없어요.";
-  if (status === 422) return serverMessage ? `입력값을 확인해 주세요: ${serverMessage}` : "입력값을 확인해 주세요.";
-  if (status >= 500) return "서버에서 문제가 생겼어요. 잠시 후 다시 시도해 주세요.";
-  return serverMessage || `요청을 처리하지 못했어요. (HTTP ${status})`;
+  if (status === 404) return serverMessage ? t("api.notFoundDetail", { detail: serverMessage }) : t("api.notFound");
+  if (status === 409) return serverMessage ? t("api.conflictDetail", { detail: serverMessage }) : t("api.conflict");
+  if (status === 422) return serverMessage ? t("api.checkInputDetail", { detail: serverMessage }) : t("api.checkInput");
+  if (status >= 500) return t("api.server");
+  return serverMessage || t("api.other", { status });
 }
 
 async function readBody(response) {

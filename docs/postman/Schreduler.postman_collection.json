@@ -1614,6 +1614,44 @@
       "description": "현재 사용자(`X-User-Id`)의 페르소나 선택과 대화 기록.",
       "item": [
         {
+          "name": "내 언어 바꾸기",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "X-User-Id",
+                "value": "{{userId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/me/language",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                "language"
+              ]
+            },
+            "description": "화면의 [Eng | Kor] 전환. 알림·경고·카테고리 라벨·시간 표시 문자열 등 서버가 만드는 고정 문구가 이 언어로 나온다.\n대화 답변은 사용자가 마지막에 쓴 말의 언어를 따른다 (애매하면 이 언어).\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"en\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
           "name": "내 페르소나 조회",
           "request": {
             "method": "GET",

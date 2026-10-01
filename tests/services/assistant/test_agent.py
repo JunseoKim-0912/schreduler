@@ -592,3 +592,29 @@ def test_confirmed_recurring_event_keeps_rhythm_but_creates_only_upcoming_instan
 def test_one_off_in_the_past_still_warns(db: Session, user: User) -> None:
     result, _ = _turn(db, user, [call("propose_create_event", **_create(date="2026-09-25")), say("초안")], "9/25 스터디")
     assert [w["code"] for w in result.proposal["items"][0]["warnings"]] == ["past_date"]
+
+
+# --- 답변 언어: 마지막에 쓴 말의 언어, 애매하면 화면 언어 (FR-11) -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("screen", "message", "expected"),
+    [
+        ("en", "10월 2일 3시 스터디 추가해줘", "반드시 한국어로 답하세요."),  # 영어 화면 + 한국어 입력 → 한국어 답
+        ("ko", "add a study session on Oct 2 at 3pm", "Respond only in English."),  # 한국어 화면 + 영어 입력 → 영어 답
+        ("en", "좋아", "Respond only in English."),  # 애매한 입력 → 화면 언어
+        ("ko", "ok", "반드시 한국어로 답하세요."),
+    ],
+)
+def test_reply_language_follows_the_message_and_falls_back_to_the_screen(
+    db: Session, user: User, screen: str, message: str, expected: str
+) -> None:
+    user.preferred_language = screen
+    db.commit()
+
+    _, fake = _turn(db, user, [say("…")], message)
+
+    items = fake.requests[0].input_items
+    reply_block = items[-2]["content"]
+    assert reply_block.startswith("[이번 답변 언어]") and reply_block.endswith(expected)
+    assert items[-1] == {"role": "user", "content": message}, "답변 언어 블록은 사용자 발화 바로 앞 (캐시 프리픽스 밖)"

@@ -18,11 +18,15 @@ import {
   sortEvents,
   toApiDateTime,
 } from "../../frontend/format.js";
+import { setLang } from "../../frontend/i18n.js";
+
+// 아래 기대값은 한국어 화면 기준이다. 영어 기본값은 i18n.test.mjs에서 본다.
+setLang("ko");
 
 describe("날짜·시간", () => {
   test("타임존 없는 서버 일시를 요일과 함께 보여준다", () => {
-    assert.equal(formatDateTime("2026-09-25T18:00:00"), "2026-09-25 (금) 18:00");
-    assert.equal(formatDate("2026-09-01T19:00:00"), "2026-09-01 (화)");
+    assert.equal(formatDateTime("2026-09-25T18:00:00"), "9/25 (금) 18:00");
+    assert.equal(formatDate("2026-09-01T19:00:00"), "9/1 (화)");
     assert.equal(formatTime("2026-09-01T07:05:00"), "07:05");
   });
 
@@ -59,18 +63,18 @@ describe("이벤트 표시", () => {
   test("scheduled는 시작–종료, deadline은 마감 시각", () => {
     assert.equal(
       describeEventTime({ event_type: "scheduled", start_time: "2026-09-01T19:00:00", end_time: "2026-09-01T21:00:00" }),
-      "2026-09-01 (화) 19:00–21:00",
+      "9/1 (화) 19:00–21:00",
     );
     assert.equal(
       describeEventTime({ event_type: "deadline", start_time: null, end_time: "2026-09-25T23:59:00" }),
-      "2026-09-25 (금) 23:59 마감",
+      "9/25 (금) 23:59 마감",
     );
   });
 
   test("날짜를 넘기는 일정은 종료 날짜도 보여준다", () => {
     assert.equal(
       describeEventTime({ event_type: "scheduled", start_time: "2026-09-01T23:00:00", end_time: "2026-09-02T07:00:00" }),
-      "2026-09-01 (화) 23:00–2026-09-02 (수) 07:00",
+      "9/1 (화) 23:00–9/2 (수) 07:00",
     );
   });
 
@@ -115,8 +119,8 @@ describe("포인트", () => {
 
 describe("최근 변경", () => {
   test("변경 기록은 출처와 시각을 보여준다", () => {
-    assert.equal(describeAction({ source: "ui", created_at: "2026-09-26T09:05:12.345678" }), "목록에서 삭제 · 2026-09-26 (토) 09:05");
-    assert.equal(describeAction({ source: "nl", created_at: "2026-09-26T21:00:00" }), "자연어 · 2026-09-26 (토) 21:00");
+    assert.equal(describeAction({ source: "ui", created_at: "2026-09-26T09:05:12.345678" }), "목록에서 삭제 · 9/26 (토) 09:05");
+    assert.equal(describeAction({ source: "nl", created_at: "2026-09-26T21:00:00" }), "자연어 · 9/26 (토) 21:00");
   });
 });
 
@@ -143,7 +147,7 @@ describe("어시스턴트 확인 카드", () => {
   test("반복 일정: 시간 문자열 그대로, 미리보기 3회차, 기준일 보조 문구, 추정 배지", () => {
     const view = describeAssistantItem(biweekly);
     assert.equal(value(view, "time").value, "오전 9:00 – 오후 12:00 (3시간)");
-    assert.equal(value(view, "recurrence").value, "격주 화요일");
+    assert.equal(value(view, "recurrence").value, "격주 화");
     assert.equal(value(view, "preview").value, "10/6, 10/20, 11/3");
     assert.equal(value(view, "date_range").value, "Lecture Period (9/3~12/8)");
     assert.deepEqual(view.notes, ["9/22 기준 격주"]);
@@ -182,7 +186,7 @@ describe("어시스턴트 확인 카드", () => {
       ],
     });
     assert.equal(view.heading, "삭제할 일정 2개");
-    assert.deepEqual(view.targets, ["물리 퀴즈 · 2026-09-29 (화) · 오후 6:00 – 오후 7:00 (1시간)", "물리 강의 · 반복 전체"]);
+    assert.deepEqual(view.targets, ["물리 퀴즈 · 9/29 (화) · 오후 6:00 – 오후 7:00 (1시간)", "물리 강의 · 반복 전체"]);
   });
 
   test("수정 초안은 바뀐 시간을 화살표로", () => {
@@ -191,7 +195,7 @@ describe("어시스턴트 확인 카드", () => {
       targets: [{ title: "물리 퀴즈", date: "2026-09-29", recurring: true, time_display: "오후 6:00 – 오후 7:00 (1시간)", new_time_display: "오후 7:00 – 오후 8:00 (1시간)" }],
       changes: { start_time: "19:00", end_time: null, title: null, date: null, importance: null, location: null },
     });
-    assert.equal(view.targets[0], "물리 퀴즈 · 2026-09-29 (화) · 오후 6:00 – 오후 7:00 (1시간) → 오후 7:00 – 오후 8:00 (1시간)");
+    assert.equal(view.targets[0], "물리 퀴즈 · 9/29 (화) · 오후 6:00 – 오후 7:00 (1시간) → 오후 7:00 – 오후 8:00 (1시간)");
     assert.equal(value(view, "time").value, "19:00 – 그대로");
   });
 

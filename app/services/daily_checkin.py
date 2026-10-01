@@ -81,7 +81,7 @@ def handle_daily_checkin_message(
     if conversation is None and user.selected_persona_id is not None:
         # 탭을 옮겼다 오거나 새로고침해도 그 페르소나의 오늘 대화에 이어서 쓴다.
         conversation = current_conversation(db, user.id, user.selected_persona_id, DAILY_CHECKIN_CONTEXT_TYPE, day)
-    summary = build_daily_checkin_summary(db, user_id, day)
+    summary = build_daily_checkin_summary(db, user_id, day, user.preferred_language)
     persona = PersonaRead.model_validate(user.selected_persona) if user.selected_persona else None
 
     reason = input_filter.check(utterance)

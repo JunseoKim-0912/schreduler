@@ -22,10 +22,10 @@ import {
   weekdayLabel,
 } from "./calendar-model.js";
 import { describeRecurrence, importanceLabel } from "./format.js";
+import { t } from "./i18n.js";
 
 const NARROW_QUERY = "(max-width: 699px)";
 const SCROLL_TO_HOUR = 7;
-const CHILD_KIND_LABELS = { travel: "이동시간", custom: "준비" };
 
 // 캘린더 탭: GET /event-instances로 주(좁은 화면은 하루) 단위 회차를 그린다.
 // onDataChanged: 완료·삭제·되돌리기 뒤 다른 탭을 다시 불러오게 app.js가 넘겨준다.
@@ -98,7 +98,7 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
   function dayColumn(day, isToday) {
     const column = el("div", {
       className: isToday ? "cal-col is-today" : "cal-col",
-      attrs: { "data-date": toIsoDate(day), title: "빈 칸을 누르면 이 시간에 일정을 추가해요" },
+      attrs: { "data-date": toIsoDate(day), title: t("cal.emptySlotHint") },
     }, scheduledSegments(items, day).map(block));
     column.addEventListener("click", (event) => {
       if (event.target !== column) return;
@@ -112,8 +112,8 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
     const ds = days();
     const todayIso = toIsoDate(now);
     rangeTitle.textContent = formatRangeTitle(ds);
-    prevButton.textContent = mode === "day" ? "◀ 이전 날" : "◀ 이전 주";
-    nextButton.textContent = mode === "day" ? "다음 날 ▶" : "다음 주 ▶";
+    prevButton.textContent = mode === "day" ? t("cal.prevDay") : t("cal.prevWeek");
+    nextButton.textContent = mode === "day" ? t("cal.nextDay") : t("cal.nextWeek");
     grid.style.setProperty("--days", ds.length);
 
     const heads = ds.map((day) => {
@@ -132,7 +132,7 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
     for (const [h, label] of hours.entries()) label.style.top = `${h * HOUR_HEIGHT}px`;
 
     grid.replaceChildren(
-      el("div", { className: "cal-corner" }, [el("span", { text: "마감" })]),
+      el("div", { className: "cal-corner" }, [el("span", { text: t("cal.deadlines") })]),
       ...heads,
       el("div", { className: "cal-gutter", attrs: { "aria-hidden": "true" } }, hours),
       ...ds.map((day) => dayColumn(day, toIsoDate(day) === todayIso)),
@@ -167,7 +167,7 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
     if (!getUserId()) {
       items = [];
       render();
-      setStatus(status, "사용자 ID를 입력하면 캘린더가 보여요.");
+      setStatus(status, t("cal.needUser"));
       return;
     }
     const seq = ++loadSeq;
@@ -180,7 +180,7 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
       render();
       setStatus(status, "");
     } catch {
-      if (seq === loadSeq) setStatus(status, "캘린더를 불러오지 못했어요.");
+      if (seq === loadSeq) setStatus(status, t("cal.loadFailed"));
     } finally {
       if (seq === loadSeq) grid.removeAttribute("aria-busy");
     }
@@ -208,12 +208,12 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
   function showToast(text, { actionId = null, state = "ok" } = {}) {
     const children = [el("span", { text })];
     if (actionId) {
-      const undoButton = el("button", { className: "button button-secondary button-small", text: "되돌리기", attrs: { type: "button" } });
+      const undoButton = el("button", { className: "button button-secondary button-small", text: t("common.undo"), attrs: { type: "button" } });
       undoButton.addEventListener("click", async () => {
         undoButton.disabled = true;
         try {
           const action = await apiFetch(`/actions/${actionId}/undo`, { method: "POST", showError: (e) => e.status !== 409 });
-          showToast(`↩ 되돌렸어요: ${action.summary_text}`);
+          showToast(t("common.undoneMessage", { summary: action.summary_text }));
           await changed();
         } catch (error) {
           if (error.status === 409) showToast(error.detail, { state: "error" });
@@ -259,19 +259,22 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
     closePopover();
     popoverAnchor = anchorEl;
     const rows = [
-      ["날짜·시간", describeItemTime(item)],
-      ["중요도", importanceLabel(item.importance)],
-      ["반복", item.is_recurring ? describeRecurrence(item.recurrence_rule) : "반복 안 함"],
-      ["상태", statusLabel(item.status) + (isOverdue(item, new Date()) ? " (마감 지남)" : "")],
+      [t("cal.field.when"), describeItemTime(item)],
+      [t("cal.field.importance"), importanceLabel(item.importance)],
+      [t("cal.field.repeat"), item.is_recurring ? describeRecurrence(item.recurrence_rule) : t("repeat.none")],
+      [t("cal.field.status"), statusLabel(item.status) + (isOverdue(item, new Date()) ? t("cal.overdueSuffix") : "")],
     ];
-    rows.push(["장소", item.location_name ?? "없음"]);
-    if (item.child_kind) rows.push(["종류", `${CHILD_KIND_LABELS[item.child_kind] ?? item.child_kind} (하위 일정)`]);
-    if (item.time_overridden) rows.push(["참고", "이 회차만 시간이 바뀌었어요"]);
+    rows.push([t("cal.field.location"), item.location_name ?? t("common.none")]);
+    if (item.child_kind) {
+      const kind = ["travel", "custom"].includes(item.child_kind) ? t(`cal.child.${item.child_kind}`) : item.child_kind;
+      rows.push([t("cal.field.kind"), t("cal.childSuffix", { kind })]);
+    }
+    if (item.time_overridden) rows.push([t("cal.field.note"), t("cal.timeOverridden")]);
 
     const statusLine = el("p", { className: "hint", attrs: { role: "status" } });
     statusLine.hidden = true;
     const actions = el("div", { className: "actions" });
-    const closeButton = el("button", { className: "cal-popover-close", text: "×", attrs: { type: "button", "aria-label": "닫기" } });
+    const closeButton = el("button", { className: "cal-popover-close", text: "×", attrs: { type: "button", "aria-label": t("common.close") } });
     closeButton.addEventListener("click", closePopover);
 
     popover.replaceChildren(
@@ -298,8 +301,8 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
 
   function showMainActions(item, actions, statusLine) {
     const done = item.status === "done";
-    const completeButton = smallButton(done ? "완료됨" : "완료", { primary: true, disabled: done });
-    const deleteButton = smallButton("삭제", { danger: true });
+    const completeButton = smallButton(done ? t("cal.completed") : t("cal.complete"), { primary: true, disabled: done });
+    const deleteButton = smallButton(t("common.delete"), { danger: true });
     completeButton.addEventListener("click", () => complete(item, completeButton, statusLine));
     deleteButton.addEventListener("click", () => showDeleteConfirm(item, actions, statusLine));
     // 회차가 없는 건 회차 생성 이전에 만든 지난 단발 일정뿐이다 (백필 대상 아님). 완료할 회차가 없어 삭제만 둔다.
@@ -309,21 +312,21 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
 
   // 브라우저 confirm() 대신 패널 안에서 한 번 더 확인한다. 반복 일정은 이 회차만/반복 전체를 고른다.
   function showDeleteConfirm(item, actions, statusLine) {
-    const cancel = smallButton("취소");
+    const cancel = smallButton(t("common.cancel"));
     cancel.addEventListener("click", () => showMainActions(item, actions, statusLine));
     if (item.is_recurring && item.event_instance_id !== null) {
-      const onlyThis = smallButton("이 회차만 삭제", { primary: true, danger: true });
-      const series = smallButton("반복 전체 삭제", { danger: true });
+      const onlyThis = smallButton(t("cal.deleteThis"), { primary: true, danger: true });
+      const series = smallButton(t("cal.deleteSeries"), { danger: true });
       onlyThis.addEventListener("click", () => remove(item, "instance", statusLine, [onlyThis, series, cancel]));
       series.addEventListener("click", () => remove(item, "series", statusLine, [onlyThis, series, cancel]));
       actions.replaceChildren(onlyThis, series, cancel);
-      setStatus(statusLine, "어떻게 삭제할까요? 삭제한 뒤에도 되돌릴 수 있어요.");
+      setStatus(statusLine, t("cal.deleteAskRepeat"));
       onlyThis.focus();
     } else {
-      const confirmButton = smallButton("삭제", { primary: true, danger: true });
+      const confirmButton = smallButton(t("common.delete"), { primary: true, danger: true });
       confirmButton.addEventListener("click", () => remove(item, "series", statusLine, [confirmButton, cancel]));
       actions.replaceChildren(confirmButton, cancel);
-      setStatus(statusLine, "이 일정을 삭제할까요? 삭제한 뒤에도 되돌릴 수 있어요.");
+      setStatus(statusLine, t("cal.deleteAsk"));
       confirmButton.focus();
     }
   }
@@ -335,11 +338,11 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
     try {
       await apiFetch(path, { method: "PUT" });
       closePopover();
-      showToast(`✔ '${item.title}' 완료했어요.`);
+      showToast(t("cal.completedToast", { title: item.title }));
       await changed();
     } catch {
       button.disabled = false;
-      setStatus(statusLine, "완료 처리하지 못했어요. 위의 안내를 확인해 주세요.");
+      setStatus(statusLine, t("cal.completeFailed"));
     }
   }
 
@@ -350,11 +353,11 @@ export function initCalendarPanel({ onDataChanged = async () => {}, onCreateAt =
     try {
       await apiFetch(path, { method: "DELETE", onHeaders: (headers) => (actionId = headers.get("X-Action-Id")) });
       closePopover();
-      showToast(scope === "instance" ? `'${item.title}' 이 회차를 삭제했어요.` : `'${item.title}' 일정을 삭제했어요.`, { actionId });
+      showToast(t(scope === "instance" ? "cal.deletedOne" : "cal.deletedSeries", { title: item.title }), { actionId });
       await changed();
     } catch {
       for (const b of buttons) b.disabled = false;
-      setStatus(statusLine, "삭제하지 못했어요. 위의 안내를 확인해 주세요.");
+      setStatus(statusLine, t("cal.deleteFailed"));
     }
   }
 

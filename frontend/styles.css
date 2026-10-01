@@ -1194,3 +1194,55 @@ select:focus-visible {
     flex-basis: 100%;
   }
 }
+
+/* --- 머리글: 사용자 ID + 언어 전환 [Eng | Kor] --- */
+
+.header-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  margin-left: auto;
+}
+
+.lang-switch {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  padding: 2px;
+}
+
+.lang-switch button {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lang-switch button[aria-checked="true"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+
+.lang-switch button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 영어 문구가 길어도 좁은 화면에서 버튼·탭이 넘치지 않게 */
+.tabs {
+  flex-wrap: wrap;
+}
+
+.list-item .actions,
+.actions {
+  flex-wrap: wrap;
+}

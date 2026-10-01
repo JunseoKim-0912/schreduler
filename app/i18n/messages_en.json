@@ -50,5 +50,11 @@
   "assistant.limit_with_drafts": "This took a while, so here is the draft so far. Please check it.",
   "assistant.limit_no_drafts": "I couldn't finish that request. Could you say it a bit more specifically?",
   "assistant.empty_reply": "How can I help?",
-  "assistant.cancelled": "Cancelled the proposal."
+  "assistant.cancelled": "Cancelled the proposal.",
+  "checkin.summary.total": "Planned {total} today, finished {done}.",
+  "checkin.summary.missed": "Missed:",
+  "checkin.summary.due": "due {time}",
+  "checkin.summary.reason": "reason: {reason}",
+  "checkin.summary.no_reason": "no reason given",
+  "child.travel_title": "Travel: {title}"
 }

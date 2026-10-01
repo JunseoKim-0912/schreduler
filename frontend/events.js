@@ -2,14 +2,8 @@ import { apiFetch, getUserId } from "./api.js";
 import { initAssistantChat } from "./assistant.js";
 import { badge, el, setStatus } from "./dom.js";
 import { describeAction, describeEventTime, describeRecurrence, formatShortDate, importanceLabel, sortEvents } from "./format.js";
+import { t } from "./i18n.js";
 
-const NO_ACTIONS = "아직 변경 기록이 없어요.";
-
-// 사용 중인 반복 기간을 지울 때 고르는 처리 (DELETE /date-ranges/{id}?mode=)
-const RANGE_DELETE_OPTIONS = {
-  range_only: "기간만 삭제 (일정은 마지막 회차까지 유지)",
-  with_events: "일정도 함께 삭제",
-};
 
 // 예전 [새 어시스턴트 | 기존 방식] 스위치가 저장하던 값. 스위치가 없어졌으므로 남은 값을 지운다.
 try {
@@ -50,7 +44,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     const action = await apiFetch(`/actions/${actionId}/undo`, { method: "POST", showError: bannerUnless(409) });
     for (const button of panel.querySelectorAll(`button[data-action-id="${actionId}"]`)) {
       button.disabled = true;
-      button.textContent = "되돌림";
+      button.textContent = t("common.undone");
     }
     await dataChanged();
     return action;
@@ -63,7 +57,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
 
   function renderAction(action) {
     const main = el("div", { className: "list-main" }, [
-      el("div", { className: "list-title" }, [action.undone ? badge("되돌림", "muted") : null, el("span", { text: action.summary_text })]),
+      el("div", { className: "list-title" }, [action.undone ? badge(t("common.undone"), "muted") : null, el("span", { text: action.summary_text })]),
       el("div", { className: "list-meta", text: describeAction(action) }),
     ]);
     const item = el("li", { className: action.undone ? "list-item is-undone" : "list-item" }, [main]);
@@ -71,15 +65,15 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
 
     const button = el("button", {
       className: "button button-secondary button-small",
-      text: "되돌리기",
-      attrs: { type: "button", "aria-label": `${action.summary_text} 되돌리기` },
+      text: t("common.undo"),
+      attrs: { type: "button", "aria-label": t("actions.undoLabel", { summary: action.summary_text }) },
     });
     button.addEventListener("click", async () => {
       button.disabled = true;
       setActionsStatus("");
       try {
         const undone = await undo(action.id);
-        setActionsStatus(`↩ 되돌렸어요: ${undone.summary_text}`);
+        setActionsStatus(t("common.undoneMessage", { summary: undone.summary_text }));
       } catch (error) {
         button.disabled = false;
         if (error.status === 409) setActionsStatus(error.detail, "error");
@@ -92,7 +86,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   async function refreshActions() {
     if (!getUserId()) {
       actionList.replaceChildren();
-      setActionsStatus("사용자 ID를 입력하면 최근 변경이 보여요.");
+      setActionsStatus(t("actions.needUser"));
       return;
     }
     actionsRefreshButton.disabled = true;
@@ -100,10 +94,10 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       const actions = await apiFetch("/actions?limit=10");
       actionList.replaceChildren(...actions.map(renderAction));
       // "되돌렸어요"·409 안내는 남기고, 빈 목록 안내만 목록 상태에 맞춘다.
-      if (!actions.length) setActionsStatus(NO_ACTIONS);
-      else if (actionsStatus.textContent === NO_ACTIONS) setActionsStatus("");
+      if (!actions.length) setActionsStatus(t("actions.empty"));
+      else if (actionsStatus.textContent === t("actions.empty")) setActionsStatus("");
     } catch {
-      setActionsStatus("최근 변경을 불러오지 못했어요.", "error");
+      setActionsStatus(t("actions.loadFailed"), "error");
     } finally {
       actionsRefreshButton.disabled = false;
     }
@@ -128,8 +122,8 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     const item = el("li", { className: "list-item range-item" });
 
     function showSummary() {
-      const edit = rangeButton("수정");
-      const remove = rangeButton("삭제");
+      const edit = rangeButton(t("common.edit"));
+      const remove = rangeButton(t("common.delete"));
       edit.addEventListener("click", showEditForm);
       remove.addEventListener("click", showDeleteConfirm);
       item.replaceChildren(
@@ -137,7 +131,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
           el("div", { className: "list-title" }, [el("span", { text: range.name })]),
           el("div", {
             className: "list-meta",
-            text: `${formatShortDate(range.start_date)}~${formatShortDate(range.end_date)} · 일정 ${range.event_count}개`,
+            text: t("ranges.meta", { span: `${formatShortDate(range.start_date)}~${formatShortDate(range.end_date)}`, count: range.event_count }),
           }),
         ]),
         el("div", { className: "actions" }, [edit, remove]),
@@ -145,11 +139,11 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     }
 
     function showEditForm() {
-      const name = el("input", { attrs: { type: "text", value: range.name, maxlength: "100", "aria-label": "기간 이름" } });
-      const start = el("input", { attrs: { type: "date", value: range.start_date, "aria-label": "시작일" } });
-      const end = el("input", { attrs: { type: "date", value: range.end_date, "aria-label": "종료일" } });
-      const save = rangeButton("저장", { primary: true });
-      const cancel = rangeButton("취소");
+      const name = el("input", { attrs: { type: "text", value: range.name, maxlength: "100", "aria-label": t("ranges.nameLabel") } });
+      const start = el("input", { attrs: { type: "date", value: range.start_date, "aria-label": t("ranges.start") } });
+      const end = el("input", { attrs: { type: "date", value: range.end_date, "aria-label": t("ranges.end") } });
+      const save = rangeButton(t("common.save"), { primary: true });
+      const cancel = rangeButton(t("common.cancel"));
       cancel.addEventListener("click", showSummary);
       save.addEventListener("click", async () => {
         save.disabled = cancel.disabled = true;
@@ -159,7 +153,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
             body: { name: name.value.trim(), start_date: start.value, end_date: end.value },
             showError: bannerUnless(422),
           });
-          setRangesStatus(`'${name.value.trim()}' 기간을 수정했어요. 반복 일정의 회차도 맞췄어요.`);
+          setRangesStatus(t("ranges.updated", { name: name.value.trim() }));
           await dataChanged();
         } catch (error) {
           save.disabled = cancel.disabled = false;
@@ -168,9 +162,9 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       });
       item.replaceChildren(
         el("div", { className: "range-form" }, [
-          el("label", {}, [el("span", { text: "이름" }), name]),
-          el("label", {}, [el("span", { text: "시작일" }), start]),
-          el("label", {}, [el("span", { text: "종료일" }), end]),
+          el("label", {}, [el("span", { text: t("common.name") }), name]),
+          el("label", {}, [el("span", { text: t("ranges.start") }), start]),
+          el("label", {}, [el("span", { text: t("ranges.end") }), end]),
         ]),
         el("div", { className: "actions" }, [save, cancel]),
       );
@@ -184,16 +178,16 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
         const events = await apiFetch(`/events?user_id=${encodeURIComponent(getUserId())}`);
         users = events.filter((e) => e.date_range_id === range.id && e.parent_event_id === null).map((e) => e.title);
       }
-      const cancel = rangeButton("취소");
+      const cancel = rangeButton(t("common.cancel"));
       cancel.addEventListener("click", showSummary);
       const choices = users.length ? ["range_only", "with_events"] : [null];
       const buttons = choices.map((mode, index) => {
-        const button = rangeButton(mode ? RANGE_DELETE_OPTIONS[mode] : "삭제", { primary: index === 0 });
+        const button = rangeButton(mode ? t(`ranges.mode.${mode}`) : t("common.delete"), { primary: index === 0 });
         button.addEventListener("click", async () => {
           for (const b of [...buttons, cancel]) b.disabled = true;
           try {
             await apiFetch(`/date-ranges/${range.id}${mode ? `?mode=${mode}` : ""}`, { method: "DELETE" });
-            setRangesStatus(`'${range.name}' 기간을 삭제했어요. 최근 변경에서 되돌릴 수 있어요.`);
+            setRangesStatus(t("ranges.deleted", { name: range.name }));
             await dataChanged();
           } catch {
             for (const b of [...buttons, cancel]) b.disabled = false;
@@ -202,8 +196,8 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
         return button;
       });
       const text = users.length
-        ? `이 기간을 쓰는 반복 일정 ${users.length}개: ${users.join(", ")}. 어떻게 할까요?`
-        : "이 기간을 삭제할까요?";
+        ? t("ranges.deleteInUse", { count: users.length, titles: users.join(", ") })
+        : t("ranges.deleteAsk");
       item.replaceChildren(el("p", { className: "range-confirm", text }), el("div", { className: "actions" }, [...buttons, cancel]));
       buttons[0].focus();
     }
@@ -216,17 +210,17 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     const userId = getUserId();
     if (!userId) {
       rangeList.replaceChildren();
-      setRangesStatus("사용자 ID를 입력하면 반복 기간이 보여요.");
+      setRangesStatus(t("ranges.needUser"));
       return;
     }
     rangesRefreshButton.disabled = true;
     try {
       const ranges = await apiFetch(`/date-ranges?user_id=${encodeURIComponent(userId)}`);
       rangeList.replaceChildren(...ranges.map(renderRange));
-      if (!ranges.length) setRangesStatus("아직 반복 기간이 없어요.");
-      else if (rangesStatus.textContent === "아직 반복 기간이 없어요.") setRangesStatus("");
+      if (!ranges.length) setRangesStatus(t("ranges.empty"));
+      else if (rangesStatus.textContent === t("ranges.empty")) setRangesStatus("");
     } catch {
-      setRangesStatus("반복 기간을 불러오지 못했어요.", "error");
+      setRangesStatus(t("ranges.loadFailed"), "error");
     } finally {
       rangesRefreshButton.disabled = false;
     }
@@ -243,26 +237,26 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     const item = el("li", { className: "list-item range-item" });
 
     function showSummary() {
-      const edit = rangeButton("수정");
-      const remove = rangeButton("삭제");
+      const edit = rangeButton(t("common.edit"));
+      const remove = rangeButton(t("common.delete"));
       edit.addEventListener("click", showEditForm);
       remove.addEventListener("click", showDeleteConfirm);
       item.replaceChildren(
         el("div", { className: "list-main" }, [
           el("div", { className: "list-title" }, [el("span", { text: location.name })]),
-          el("div", { className: "list-meta", text: `이동 ${location.default_travel_minutes}분` }),
+          el("div", { className: "list-meta", text: t("locations.travel", { minutes: location.default_travel_minutes }) }),
         ]),
         el("div", { className: "actions" }, [edit, remove]),
       );
     }
 
     function showEditForm() {
-      const name = el("input", { attrs: { type: "text", value: location.name, maxlength: "100", "aria-label": "장소 이름" } });
+      const name = el("input", { attrs: { type: "text", value: location.name, maxlength: "100", "aria-label": t("locations.nameLabel") } });
       const minutes = el("input", {
-        attrs: { type: "number", min: "0", value: String(location.default_travel_minutes), "aria-label": "이동 시간(분)" },
+        attrs: { type: "number", min: "0", value: String(location.default_travel_minutes), "aria-label": t("locations.minutesLabel") },
       });
-      const save = rangeButton("저장", { primary: true });
-      const cancel = rangeButton("취소");
+      const save = rangeButton(t("common.save"), { primary: true });
+      const cancel = rangeButton(t("common.cancel"));
       cancel.addEventListener("click", showSummary);
       save.addEventListener("click", async () => {
         save.disabled = cancel.disabled = true;
@@ -272,7 +266,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
             body: { name: name.value.trim(), default_travel_minutes: Number(minutes.value) },
             showError: bannerUnless(422),
           });
-          setLocationsStatus(`'${name.value.trim()}' 장소를 수정했어요.`);
+          setLocationsStatus(t("locations.updated", { name: name.value.trim() }));
           await dataChanged();
         } catch (error) {
           save.disabled = cancel.disabled = false;
@@ -281,8 +275,8 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
       });
       item.replaceChildren(
         el("div", { className: "range-form" }, [
-          el("label", {}, [el("span", { text: "이름" }), name]),
-          el("label", {}, [el("span", { text: "이동 시간(분)" }), minutes]),
+          el("label", {}, [el("span", { text: t("common.name") }), name]),
+          el("label", {}, [el("span", { text: t("locations.minutesLabel") }), minutes]),
         ]),
         el("div", { className: "actions" }, [save, cancel]),
       );
@@ -290,22 +284,22 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     }
 
     function showDeleteConfirm() {
-      const confirmButton = rangeButton("삭제", { primary: true });
-      const cancel = rangeButton("취소");
+      const confirmButton = rangeButton(t("common.delete"), { primary: true });
+      const cancel = rangeButton(t("common.cancel"));
       cancel.addEventListener("click", showSummary);
       confirmButton.addEventListener("click", async () => {
         confirmButton.disabled = cancel.disabled = true;
         try {
           await apiFetch(`/locations/${location.id}`, { method: "DELETE", showError: bannerUnless(409) });
-          setLocationsStatus(`'${location.name}' 장소를 삭제했어요.`);
+          setLocationsStatus(t("locations.deleted", { name: location.name }));
           await refreshLocations();
         } catch (error) {
           confirmButton.disabled = cancel.disabled = false;
           // 이 장소를 쓰는 일정이 있으면 409 — 서버 문구를 그대로 보여준다.
-          if (error.status === 409) setLocationsStatus(`${error.detail} — 일정에서 장소를 먼저 빼 주세요.`, "error");
+          if (error.status === 409) setLocationsStatus(t("locations.inUse", { detail: error.detail }), "error");
         }
       });
-      item.replaceChildren(el("p", { className: "range-confirm", text: "이 장소를 삭제할까요?" }), el("div", { className: "actions" }, [confirmButton, cancel]));
+      item.replaceChildren(el("p", { className: "range-confirm", text: t("locations.deleteAsk") }), el("div", { className: "actions" }, [confirmButton, cancel]));
       confirmButton.focus();
     }
 
@@ -317,17 +311,17 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     const userId = getUserId();
     if (!userId) {
       locationList.replaceChildren();
-      setLocationsStatus("사용자 ID를 입력하면 장소가 보여요.");
+      setLocationsStatus(t("locations.needUser"));
       return;
     }
     locationsRefreshButton.disabled = true;
     try {
       const locations = await apiFetch(`/locations?user_id=${encodeURIComponent(userId)}`);
       locationList.replaceChildren(...locations.map(renderLocation));
-      if (!locations.length) setLocationsStatus("아직 등록된 장소가 없어요.");
-      else if (locationsStatus.textContent === "아직 등록된 장소가 없어요.") setLocationsStatus("");
+      if (!locations.length) setLocationsStatus(t("locations.empty"));
+      else if (locationsStatus.textContent === t("locations.empty")) setLocationsStatus("");
     } catch {
-      setLocationsStatus("장소를 불러오지 못했어요.", "error");
+      setLocationsStatus(t("locations.loadFailed"), "error");
     } finally {
       locationsRefreshButton.disabled = false;
     }
@@ -337,13 +331,13 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
 
   function renderEvent(event) {
     const badges = [
-      event.event_type === "deadline" ? badge("마감", "deadline") : badge("일정", "scheduled"),
-      event.child_kind === "travel" ? badge("이동", "muted") : null,
-      event.child_kind === "custom" ? badge("준비", "muted") : null,
+      event.event_type === "deadline" ? badge(t("events.badge.deadline"), "deadline") : badge(t("events.badge.scheduled"), "scheduled"),
+      event.child_kind === "travel" ? badge(t("events.badge.travel"), "muted") : null,
+      event.child_kind === "custom" ? badge(t("events.badge.custom"), "muted") : null,
     ];
     const meta = [describeEventTime(event)];
     if (event.is_recurring) meta.push(describeRecurrence(event.recurrence_rule));
-    if (event.importance !== null) meta.push(`중요도 ${importanceLabel(event.importance)}`);
+    if (event.importance !== null) meta.push(t("events.importance", { label: importanceLabel(event.importance) }));
 
     return el("li", { className: "list-item" }, [
       el("div", { className: "list-main" }, [
@@ -357,17 +351,17 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     const userId = getUserId();
     if (!userId) {
       list.replaceChildren();
-      setStatus(listStatus, "사용자 ID를 입력하면 이벤트 목록이 보여요.");
+      setStatus(listStatus, t("events.needUser"));
       return;
     }
     refreshButton.disabled = true;
-    setStatus(listStatus, "불러오는 중…");
+    setStatus(listStatus, t("common.loading"));
     try {
       const events = await apiFetch(`/events?user_id=${encodeURIComponent(userId)}`);
       list.replaceChildren(...sortEvents(events).map(renderEvent));
-      setStatus(listStatus, events.length ? "" : "아직 이벤트가 없어요.");
+      setStatus(listStatus, events.length ? "" : t("events.empty"));
     } catch {
-      setStatus(listStatus, "목록을 불러오지 못했어요.");
+      setStatus(listStatus, t("events.loadFailed"));
     } finally {
       refreshButton.disabled = false;
     }

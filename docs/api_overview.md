@@ -344,6 +344,7 @@ GET /points/summary
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
+| `PUT /users/me/language` | 화면 언어 바꾸기 — 알림·경고·라벨·시간 표시 등 서버 고정 문구의 언어 | `{language: "en"|"ko"}` | `{user_id, language}` |
 | `GET /users/me/persona` | 내 페르소나 조회 | | `{user_id, selected_persona: PersonaRead|null}` |
 | `PUT /users/me/persona` | 내 페르소나 선택/해제 | `{persona_name: string|null}` | 위와 같음 |
 | `GET /users/me/persona-conversations` | 내 페르소나 대화 목록 (최신순, `?context_type=`) | | `PersonaConversationRead[]` |

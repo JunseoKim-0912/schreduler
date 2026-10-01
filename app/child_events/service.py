@@ -6,11 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.enums import ChildEventKind, EventType, Importance
+from app.i18n import render_message
 from app.models.event import Event
 from app.services.recurrence import create_single_instance, generate_event_instances
-
-TRAVEL_CHILD_TITLE_PREFIX = "이동"
-
 
 def list_child_events(session: Session, parent_event_id: int) -> list[Event]:
     """parent_event_id에 딸린 모든 Child 이벤트를 종류(TRAVEL/CUSTOM) 상관없이 반환한다."""
@@ -70,7 +68,7 @@ def create_child_event(session: Session, parent_event: Event) -> Event | None:
 
     child = Event(
         user_id=parent_event.user_id,
-        title=f"{TRAVEL_CHILD_TITLE_PREFIX}: {parent_event.title}",
+        title=render_message("child.travel_title", parent_event.user.preferred_language if parent_event.user else "ko", title=parent_event.title),
         start_time=parent_event.start_time - timedelta(minutes=location.default_travel_minutes),
         end_time=parent_event.start_time,
         importance=parent_event.importance,

@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
 import { ApiError, apiFetch, describeError, getUserId, isLlmEndpoint, onApiError, setUserId } from "../../frontend/api.js";
+import { setLang } from "../../frontend/i18n.js";
+
+// 아래 기대값은 한국어 화면 기준이다. 영어 기본값은 i18n.test.mjs에서 본다.
+setLang("ko");
 
 class MemoryStorage {
   #data = new Map();

@@ -19,6 +19,10 @@ import {
   toIsoDate,
   visibleDays,
 } from "../../frontend/calendar-model.js";
+import { setLang } from "../../frontend/i18n.js";
+
+// 아래 기대값은 한국어 화면 기준이다. 영어 기본값은 i18n.test.mjs에서 본다.
+setLang("ko");
 
 const day = (iso) => parseLocalDateTime(iso);
 const scheduled = (id, start, end, extra = {}) => ({ event_id: id, event_type: "scheduled", start_time: start, end_time: end, ...extra });
@@ -135,8 +139,8 @@ describe("마감·색·기타", () => {
   });
 
   test("상세 패널의 날짜·시간 문구", () => {
-    assert.equal(describeItemTime(scheduled(1, "2026-09-24T09:00:00", "2026-09-24T10:30:00")), "9월 24일 (목) 09:00–10:30");
-    assert.equal(describeItemTime(scheduled(1, "2026-09-24T23:00:00", "2026-09-25T01:00:00")), "9월 24일 (목) 23:00–9월 25일 (금) 01:00");
-    assert.equal(describeItemTime(task), "9월 24일 (목) 18:00 마감");
+    assert.equal(describeItemTime(scheduled(1, "2026-09-24T09:00:00", "2026-09-24T10:30:00")), "9/24 (목) 09:00–10:30");
+    assert.equal(describeItemTime(scheduled(1, "2026-09-24T23:00:00", "2026-09-25T01:00:00")), "9/24 (목) 23:00–9/25 (금) 01:00");
+    assert.equal(describeItemTime(task), "9/24 (목) 18:00 마감");
   });
 });

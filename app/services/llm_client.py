@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.exceptions import AppError
-from app.i18n import Language, non_compliance_category_label, to_language
+from app.i18n import Language, non_compliance_category_label, reply_language, to_language
 from app.models.enums import NonComplianceCategory
 from app.schemas.persona import PersonaRead
 
@@ -112,13 +112,14 @@ def _build_persona_block(persona: PersonaRead | None, language: Language) -> str
 
 
 def _build_language_block(language: Language) -> str:
-    """FR-11: User.preferred_language로 응답 언어를 강제한다. 시스템 프롬프트의 마지막 블록으로 둔다."""
+    """FR-11 답변 언어. language는 reply_language()가 정한 이번 답변의 언어다 (사용자가 마지막에 쓴 말의 언어, 애매하면
+    화면 언어). 언어별로 두 가지뿐이라 캐시 프리픽스의 마지막 블록에 둔다."""
     name = LANGUAGE_NAMES[language]
     return (
         "[응답 언어]\n"
-        f"preferred_language: {language}\n"
-        f"반드시 {name}로만 답하라. 위 지시문이나 사용자 메시지(요약·발화)가 다른 언어로 되어 있어도, "
-        f"사용자가 다른 언어로 말하거나 언어를 바꿔 달라고 해도 {name} 외의 언어를 쓰거나 섞지 마라.\n"
+        f"reply_language: {language}\n"
+        f"이번 답변은 처음부터 끝까지 {name}로만 쓴다 (사용자가 마지막에 쓴 말의 언어다). 위 지시문이나 요약이 다른 "
+        "언어로 되어 있어도 따라 쓰지 말고, 한 답변 안에서 언어를 섞지 마라.\n"
         f"{_NATIVE_LANGUAGE_RULES[language]}"
     )
 
@@ -300,7 +301,8 @@ def build_compliance_feedback_payload(
     if reason_text:
         user_message += f"\n사용자가 직접 적은 이유: {reason_text}"
 
-    return _build_persona_prompt("compliance_feedback", instructions, persona, language, user_message)
+    reply = reply_language(reason_text, language)
+    return _build_persona_prompt("compliance_feedback", instructions, persona, reply, user_message)
 
 
 def generate_daily_checkin_reply(
@@ -349,7 +351,8 @@ def build_daily_checkin_payload(
     lines.append(f"사용자 발화: {utterance}")
     user_message = "\n\n".join(lines)
 
-    return _build_persona_prompt("daily_checkin", instructions, persona, language, user_message)
+    reply = reply_language(utterance, language)
+    return _build_persona_prompt("daily_checkin", instructions, persona, reply, user_message)
 
 
 # --- Responses API (일정 어시스턴트) -------------------------------------------------

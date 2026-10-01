@@ -1,6 +1,7 @@
 import { apiFetch, getUserId } from "./api.js";
 import { badge, el, setStatus } from "./dom.js";
-import { IMPORTANCE_OPTIONS, describeRecurrence, formatDateTime, importanceLabel, toApiDateTime } from "./format.js";
+import { describeRecurrence, formatDateTime, importanceLabel, importanceOptions, toApiDateTime } from "./format.js";
+import { t } from "./i18n.js";
 
 // 할 일 탭: 새 할 일(POST /tasks), 목록(GET /tasks — 서버가 마감 오름차순으로 준다), 완료(PUT /tasks/{event_instance_id}/complete).
 export function initTasksPanel({ onDataChanged = async () => {} } = {}) {
@@ -15,14 +16,21 @@ export function initTasksPanel({ onDataChanged = async () => {} } = {}) {
   const listStatus = document.getElementById("tasks-status");
   const refreshButton = document.getElementById("tasks-refresh");
 
-  importanceSelect.append(
-    ...IMPORTANCE_OPTIONS.map((option) => el("option", { text: option.label, attrs: { value: option.value } })),
-  );
+  // 중요도 선택지는 화면 언어가 바뀌면 다시 그린다 (고른 값은 유지).
+  function renderImportanceOptions() {
+    const selected = importanceSelect.value;
+    importanceSelect.replaceChildren(
+      el("option", { text: t("tasks.importanceNone"), attrs: { value: "" } }),
+      ...importanceOptions().map((option) => el("option", { text: option.label, attrs: { value: option.value } })),
+    );
+    importanceSelect.value = selected;
+  }
+  renderImportanceOptions();
 
   async function create(event) {
     event.preventDefault();
     if (!getUserId()) {
-      setStatus(formStatus, "위에서 사용자 ID를 먼저 입력해 주세요.");
+      setStatus(formStatus, t("user.required"));
       return;
     }
     const body = { title: titleInput.value.trim(), end_time: toApiDateTime(dueInput.value) };
@@ -32,10 +40,10 @@ export function initTasksPanel({ onDataChanged = async () => {} } = {}) {
     try {
       const task = await apiFetch("/tasks", { method: "POST", body });
       form.reset();
-      setStatus(formStatus, `"${task.title}"을(를) 추가했어요.`);
+      setStatus(formStatus, t("tasks.added", { title: task.title }));
       await Promise.all([refresh(), onDataChanged()]);
     } catch {
-      setStatus(formStatus, "추가하지 못했어요. 위의 안내를 확인해 주세요.");
+      setStatus(formStatus, t("tasks.addFailed"));
     } finally {
       submitButton.disabled = false;
     }
@@ -53,21 +61,21 @@ export function initTasksPanel({ onDataChanged = async () => {} } = {}) {
 
   function renderTask(task) {
     const badges = [
-      task.completed ? badge("완료", "done") : null,
-      task.overdue ? badge("마감 지남", "overdue") : null,
+      task.completed ? badge(t("tasks.badge.done"), "done") : null,
+      task.overdue ? badge(t("tasks.badge.overdue"), "overdue") : null,
       task.is_recurring ? badge(describeRecurrence(task.recurrence_rule), "muted") : null,
     ];
-    const meta = [`마감 ${formatDateTime(task.due_at)}`];
-    if (task.importance !== null) meta.push(`중요도 ${importanceLabel(task.importance)}`);
+    const meta = [t("tasks.dueMeta", { when: formatDateTime(task.due_at) })];
+    if (task.importance !== null) meta.push(t("tasks.importanceMeta", { label: importanceLabel(task.importance) }));
 
     const button = el("button", {
       className: "button button-small",
-      text: task.completed ? "완료됨" : "완료",
+      text: task.completed ? t("tasks.completed") : t("tasks.complete"),
       attrs: {
         type: "button",
         disabled: task.completed || task.event_instance_id === null,
-        title: task.event_instance_id === null ? "완료 처리할 회차가 없는 할 일이에요" : undefined,
-        "aria-label": `${task.title} 완료`,
+        title: task.event_instance_id === null ? t("tasks.noInstance") : undefined,
+        "aria-label": t("tasks.completeLabel", { title: task.title }),
       },
     });
     button.addEventListener("click", () => complete(task, button));
@@ -85,17 +93,17 @@ export function initTasksPanel({ onDataChanged = async () => {} } = {}) {
   async function refresh() {
     if (!getUserId()) {
       list.replaceChildren();
-      setStatus(listStatus, "사용자 ID를 입력하면 할 일 목록이 보여요.");
+      setStatus(listStatus, t("tasks.needUser"));
       return;
     }
     refreshButton.disabled = true;
-    setStatus(listStatus, "불러오는 중…");
+    setStatus(listStatus, t("common.loading"));
     try {
       const tasks = await apiFetch("/tasks");
       list.replaceChildren(...tasks.map(renderTask));
-      setStatus(listStatus, tasks.length ? "" : "할 일이 없어요.");
+      setStatus(listStatus, tasks.length ? "" : t("tasks.empty"));
     } catch {
-      setStatus(listStatus, "목록을 불러오지 못했어요.");
+      setStatus(listStatus, t("tasks.loadFailed"));
     } finally {
       refreshButton.disabled = false;
     }
@@ -106,6 +114,7 @@ export function initTasksPanel({ onDataChanged = async () => {} } = {}) {
 
   return {
     refresh,
+    relabel: renderImportanceOptions,
     reset() {
       list.replaceChildren();
       setStatus(listStatus, "");

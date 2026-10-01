@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,17 +8,25 @@
     <script type="module" src="app.js"></script>
   </head>
   <body>
+    <!-- 화면 문구는 data-i18n(텍스트), data-i18n-placeholder, data-i18n-aria-label 키로 i18n.js 사전에서 채운다.
+         태그 안의 영어는 스크립트가 돌기 전 잠깐 보이는 기본값이다. -->
     <header class="site-header">
       <div class="container header-row">
         <h1 class="brand">Schreduler</h1>
-        <div class="user-id">
-          <label for="user-id">사용자 ID</label>
-          <input id="user-id" type="text" inputmode="numeric" autocomplete="off" placeholder="예: 1" aria-describedby="user-id-help user-id-status" />
-          <span id="user-id-status" class="hint" role="status"></span>
+        <div class="header-controls">
+          <div class="user-id">
+            <label for="user-id" data-i18n="user.label">User ID</label>
+            <input id="user-id" type="text" inputmode="numeric" autocomplete="off" placeholder="e.g. 1" data-i18n-placeholder="user.placeholder" aria-describedby="user-id-help user-id-status" />
+            <span id="user-id-status" class="hint" role="status"></span>
+          </div>
+          <div class="lang-switch" role="radiogroup" aria-label="Language" data-i18n-aria-label="lang.switch">
+            <button type="button" role="radio" data-lang="en" aria-checked="true" lang="en">Eng</button>
+            <button type="button" role="radio" data-lang="ko" aria-checked="false" lang="ko">Kor</button>
+          </div>
         </div>
       </div>
-      <p id="user-id-help" class="container hint">
-        입력한 ID는 모든 요청의 <code>X-User-Id</code> 헤더로 쓰이고, 이 브라우저에 저장돼요.
+      <p id="user-id-help" class="container hint" data-i18n="user.help">
+        The ID is sent as the X-User-Id header on every request and remembered in this browser.
       </p>
     </header>
 
@@ -28,23 +36,23 @@
           <p id="error-message" class="error-message"></p>
           <p id="error-status" class="error-status"></p>
         </div>
-        <button id="error-close" type="button" class="button button-ghost" aria-label="에러 메시지 닫기">닫기</button>
+        <button id="error-close" type="button" class="button button-ghost" aria-label="Close the error message" data-i18n-aria-label="error.closeLabel" data-i18n="error.close">Close</button>
       </div>
 
-      <nav class="tabs" role="tablist" aria-label="기능">
-        <button type="button" role="tab" id="tab-calendar" aria-controls="panel-calendar" data-tab="calendar">캘린더</button>
-        <button type="button" role="tab" id="tab-events" aria-controls="panel-events" data-tab="events">이벤트</button>
-        <button type="button" role="tab" id="tab-tasks" aria-controls="panel-tasks" data-tab="tasks">할 일(Task)</button>
-        <button type="button" role="tab" id="tab-points" aria-controls="panel-points" data-tab="points">포인트</button>
-        <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat" data-tab="chat">페르소나 대화</button>
+      <nav class="tabs" role="tablist" aria-label="Sections" data-i18n-aria-label="tabs.label">
+        <button type="button" role="tab" id="tab-calendar" aria-controls="panel-calendar" data-tab="calendar" data-i18n="tab.calendar">Calendar</button>
+        <button type="button" role="tab" id="tab-events" aria-controls="panel-events" data-tab="events" data-i18n="tab.events">Events</button>
+        <button type="button" role="tab" id="tab-tasks" aria-controls="panel-tasks" data-tab="tasks" data-i18n="tab.tasks">Tasks</button>
+        <button type="button" role="tab" id="tab-points" aria-controls="panel-points" data-tab="points" data-i18n="tab.points">Points</button>
+        <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat" data-tab="chat" data-i18n="tab.chat">Persona chat</button>
       </nav>
 
       <section id="panel-calendar" class="panel" role="tabpanel" aria-labelledby="tab-calendar">
         <div class="cal-toolbar">
           <div class="cal-nav">
-            <button id="cal-prev" type="button" class="button button-secondary button-small">◀ 이전 주</button>
-            <button id="cal-today" type="button" class="button button-secondary button-small">오늘</button>
-            <button id="cal-next" type="button" class="button button-secondary button-small">다음 주 ▶</button>
+            <button id="cal-prev" type="button" class="button button-secondary button-small">◀ Prev week</button>
+            <button id="cal-today" type="button" class="button button-secondary button-small" data-i18n="cal.today">Today</button>
+            <button id="cal-next" type="button" class="button button-secondary button-small">Next week ▶</button>
           </div>
           <h2 id="cal-range" class="cal-range" aria-live="polite"></h2>
         </div>
@@ -53,13 +61,13 @@
         <div id="calendar-scroll" class="cal-scroll">
           <div id="calendar-grid" class="cal-grid"></div>
         </div>
-        <div class="cal-legend" aria-label="색 범례">
-          <span class="cal-legend-item"><i class="cal-swatch imp-none"></i>중요도 없음</span>
+        <div class="cal-legend" aria-label="Color legend" data-i18n-aria-label="cal.legend">
+          <span class="cal-legend-item"><i class="cal-swatch imp-none"></i><span data-i18n="cal.legend.none">No importance</span></span>
           <span class="cal-legend-item"><i class="cal-swatch imp-1"></i><i class="cal-swatch imp-2"></i><i class="cal-swatch imp-3"></i><i class="cal-swatch imp-4"></i><i class="cal-swatch imp-5"></i>1→5</span>
           <span class="cal-legend-item"><i class="cal-swatch imp-max"></i>MAX</span>
-          <span class="cal-legend-item"><i class="cal-swatch imp-3 is-done"></i>완료</span>
-          <span class="cal-legend-item"><i class="cal-swatch imp-3 is-missed"></i>놓침</span>
-          <span class="cal-legend-item"><i class="cal-swatch is-overdue"></i>마감 지남</span>
+          <span class="cal-legend-item"><i class="cal-swatch imp-3 is-done"></i><span data-i18n="cal.legend.done">Done</span></span>
+          <span class="cal-legend-item"><i class="cal-swatch imp-3 is-missed"></i><span data-i18n="cal.legend.missed">Missed</span></span>
+          <span class="cal-legend-item"><i class="cal-swatch is-overdue"></i><span data-i18n="cal.legend.overdue">Overdue</span></span>
         </div>
         <div id="cal-popover" class="cal-popover" role="dialog" aria-labelledby="cal-popover-title" hidden></div>
       </section>
@@ -67,27 +75,28 @@
       <section id="panel-events" class="panel" role="tabpanel" aria-labelledby="tab-events" hidden>
         <div class="events-layout">
           <div class="events-main">
-            <h2>자연어로 일정 관리</h2>
+            <h2 data-i18n="events.heading">Manage events in plain language</h2>
 
             <div id="assistant-chat">
-              <p class="hint">
-                하고 싶은 일을 편하게 말하면 어시스턴트가 초안을 만들어요. 확인 카드를 보고 [만들기]를 누르거나 “좋아”라고 하면
-                저장되고, 채팅으로 고칠 수도 있어요.<br />
-                예: “ECE360 Lab 격주 화요일 9-12시” / “10월 2일 11:00-1:00 스터디” / “물리 퀴즈 없애줘”
+              <p class="hint" data-i18n="events.hint">
+                Just say what you want and the assistant drafts it. Review the card and press [Create] or say “ok” to save — you can also edit it by chatting.
+              </p>
+              <p class="hint" data-i18n="events.examples">
+                e.g. “ECE360 Lab every other Tuesday 9-12” / “Study session Oct 2 11:00-1:00” / “Delete the physics quiz”
               </p>
               <ol id="assistant-log" class="chat-log assistant-log" aria-live="polite" hidden></ol>
               <form id="assistant-form" class="inline-form">
-                <label for="assistant-input" class="visually-hidden">어시스턴트에게 할 말</label>
-                <input id="assistant-input" type="text" autocomplete="off" maxlength="500" placeholder="예: 10월 2일 11:00-1:00 스터디" />
-                <button id="assistant-send" type="submit" class="button">전송</button>
-                <button id="assistant-reset" type="button" class="button button-secondary">새 대화</button>
+                <label for="assistant-input" class="visually-hidden" data-i18n="events.inputLabel">Message to the assistant</label>
+                <input id="assistant-input" type="text" autocomplete="off" maxlength="500" placeholder="e.g. Study session Oct 2 11:00-1:00" data-i18n-placeholder="events.inputPlaceholder" />
+                <button id="assistant-send" type="submit" class="button" data-i18n="common.send">Send</button>
+                <button id="assistant-reset" type="button" class="button button-secondary" data-i18n="common.newChat">New chat</button>
               </form>
               <p id="assistant-status" class="hint" role="status" hidden></p>
             </div>
 
             <div class="section-header">
-              <h2>이벤트 목록</h2>
-              <button id="events-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+              <h2 data-i18n="events.listHeading">All events</h2>
+              <button id="events-refresh" type="button" class="button button-secondary button-small" data-i18n="common.refresh">Refresh</button>
             </div>
             <p id="events-status" class="hint" role="status" hidden></p>
             <ul id="event-list" class="list"></ul>
@@ -95,26 +104,26 @@
 
           <aside class="events-aside" aria-labelledby="ranges-title">
             <div class="section-header section-header-first">
-              <h2 id="ranges-title">반복 기간</h2>
-              <button id="ranges-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+              <h2 id="ranges-title" data-i18n="ranges.heading">Repeat periods</h2>
+              <button id="ranges-refresh" type="button" class="button button-secondary button-small" data-i18n="common.refresh">Refresh</button>
             </div>
-            <p class="hint">반복 일정이 언제까지 반복되는지 정하는 기간이에요. 대화로도 만들고 바꿀 수 있어요.</p>
+            <p class="hint" data-i18n="ranges.hint">A period sets how long repeating events repeat. You can also create and change them by chatting.</p>
             <p id="ranges-status" class="hint" role="status" hidden></p>
             <ul id="range-list" class="list action-list"></ul>
 
             <div class="section-header">
-              <h2 id="locations-title">장소</h2>
-              <button id="locations-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+              <h2 id="locations-title" data-i18n="locations.heading">Locations</h2>
+              <button id="locations-refresh" type="button" class="button button-secondary button-small" data-i18n="common.refresh">Refresh</button>
             </div>
-            <p class="hint">일정에 장소를 넣으면 이동 시간만큼 앞에 이동 일정이 생겨요. 대화로도 넣고 뺄 수 있어요.</p>
+            <p class="hint" data-i18n="locations.hint">Events with a location get a travel-time block in front of them. You can add or remove locations by chatting.</p>
             <p id="locations-status" class="hint" role="status" hidden></p>
             <ul id="location-list" class="list action-list"></ul>
 
             <div class="section-header">
-              <h2 id="actions-title">최근 변경</h2>
-              <button id="actions-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+              <h2 id="actions-title" data-i18n="actions.heading">Recent changes</h2>
+              <button id="actions-refresh" type="button" class="button button-secondary button-small" data-i18n="common.refresh">Refresh</button>
             </div>
-            <p class="hint">자연어로 한 변경, 목록의 삭제, 반복 기간 변경은 여기서 되돌릴 수 있어요.</p>
+            <p class="hint" data-i18n="actions.hint">Changes made by the assistant, list deletes and period changes can be undone here.</p>
             <p id="actions-status" class="hint" role="status" hidden></p>
             <ul id="action-list" class="list action-list"></ul>
           </aside>
@@ -122,29 +131,27 @@
       </section>
 
       <section id="panel-tasks" class="panel" role="tabpanel" aria-labelledby="tab-tasks" hidden>
-        <h2>새 할 일</h2>
+        <h2 data-i18n="tasks.newHeading">New task</h2>
         <form id="task-form" class="task-form">
           <label>
-            <span>제목</span>
-            <input id="task-title" type="text" required maxlength="200" autocomplete="off" placeholder="예: 과제 제출" />
+            <span data-i18n="tasks.title">Title</span>
+            <input id="task-title" type="text" required maxlength="200" autocomplete="off" placeholder="e.g. Submit assignment" data-i18n-placeholder="tasks.titlePlaceholder" />
           </label>
           <label>
-            <span>마감일시</span>
+            <span data-i18n="tasks.due">Due</span>
             <input id="task-due" type="datetime-local" required />
           </label>
           <label>
-            <span>중요도</span>
-            <select id="task-importance">
-              <option value="">선택 안 함</option>
-            </select>
+            <span data-i18n="tasks.importance">Importance</span>
+            <select id="task-importance"></select>
           </label>
-          <button id="task-submit" type="submit" class="button">추가</button>
+          <button id="task-submit" type="submit" class="button" data-i18n="tasks.add">Add</button>
         </form>
         <p id="task-form-status" class="hint" role="status" hidden></p>
 
         <div class="section-header">
-          <h2>할 일 목록</h2>
-          <button id="tasks-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+          <h2 data-i18n="tasks.listHeading">Tasks</h2>
+          <button id="tasks-refresh" type="button" class="button button-secondary button-small" data-i18n="common.refresh">Refresh</button>
         </div>
         <p id="tasks-status" class="hint" role="status" hidden></p>
         <ul id="task-list" class="list"></ul>
@@ -152,42 +159,41 @@
 
       <section id="panel-points" class="panel" role="tabpanel" aria-labelledby="tab-points" hidden>
         <div class="section-header section-header-first">
-          <h2>포인트</h2>
-          <button id="points-refresh" type="button" class="button button-secondary button-small">새로고침</button>
+          <h2 data-i18n="points.heading">Points</h2>
+          <button id="points-refresh" type="button" class="button button-secondary button-small" data-i18n="common.refresh">Refresh</button>
         </div>
         <p id="points-status" class="hint" role="status" hidden></p>
         <div id="points-cards" class="stat-grid"></div>
-        <p class="hint">
-          완료한 일정의 중요도만큼 점수를 받아요(MAX는 10점). 하루 일정을 전부 완료한 날이 이어지면
-          3일 ×1.1, 7일 ×1.25, 14일 ×1.5 보너스가 붙어요.
+        <p class="hint" data-i18n="points.hint">
+          Completed events earn their importance in points (MAX is 10). Finishing every event several days in a row adds a bonus: 3 days ×1.1, 7 days ×1.25, 14 days ×1.5.
         </p>
       </section>
 
       <section id="panel-chat" class="panel" role="tabpanel" aria-labelledby="tab-chat" hidden>
-        <h2>페르소나 선택</h2>
+        <h2 data-i18n="persona.heading">Choose a persona</h2>
         <p id="personas-status" class="hint" role="status" hidden></p>
         <ul id="persona-list" class="persona-grid"></ul>
 
         <div class="section-header">
-          <h2 id="checkin-title">저녁 체크인</h2>
-          <button id="checkin-new" type="button" class="button button-secondary button-small">새 대화</button>
+          <h2 id="checkin-title">Evening check-in</h2>
+          <button id="checkin-new" type="button" class="button button-secondary button-small" data-i18n="common.newChat">New chat</button>
         </div>
-        <p class="hint">오늘 하루를 페르소나와 이야기해요. 놓친 일정이 있으면 그 이야기부터 물어봐요.</p>
+        <p class="hint" data-i18n="checkin.hint">Talk about your day with your persona. If you missed something, that comes up first.</p>
         <p id="checkin-summary" class="summary" hidden></p>
         <ol id="checkin-log" class="chat-log" aria-live="polite" hidden></ol>
         <form id="checkin-form" class="inline-form">
-          <label for="checkin-input" class="visually-hidden">메시지</label>
+          <label for="checkin-input" class="visually-hidden" data-i18n="checkin.inputLabel">Message</label>
           <input id="checkin-input" type="text" autocomplete="off" maxlength="500" />
-          <button id="checkin-send" type="submit" class="button">보내기</button>
+          <button id="checkin-send" type="submit" class="button" data-i18n="common.send">Send</button>
         </form>
         <p id="checkin-status" class="hint" role="status" hidden></p>
       </section>
     </main>
 
     <footer class="container site-footer">
-      <button id="health-check" type="button" class="button">서버 연결 확인</button>
+      <button id="health-check" type="button" class="button" data-i18n="health.check">Check server</button>
       <span id="health-status" class="hint" role="status"></span>
-      <a class="hint" href="/docs">API 문서</a>
+      <a class="hint" href="/docs" data-i18n="health.docs">API docs</a>
     </footer>
   </body>
 </html>

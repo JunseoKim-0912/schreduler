@@ -64,12 +64,12 @@ async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
 async def _handle_integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
     # 서비스의 사전 검사를 빠져나간 제약 위반(동시 요청, FK 등). 원문에는 SQL이 섞여 있어 응답에는 싣지 않는다.
     logger.warning("%s %s -> 409 (DB 제약 위반): %s", request.method, request.url.path, exc.orig)
-    return _error_response(status.HTTP_409_CONFLICT, "요청이 기존 데이터와 충돌합니다 (DB 제약 위반)")
+    return _error_response(status.HTTP_409_CONFLICT, "The request conflicts with existing data (database constraint)")
 
 
 async def _handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("%s %s -> 500 처리되지 않은 예외", request.method, request.url.path)
-    return _error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다")
+    return _error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
 
 def register_exception_handlers(app: FastAPI) -> None:

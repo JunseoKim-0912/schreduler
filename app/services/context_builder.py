@@ -5,35 +5,37 @@ from datetime import date as dt_date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.i18n import non_compliance_category_label
+from app.i18n import non_compliance_category_label, render_message
 from app.models.enums import EventInstanceStatus
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 
 
-def _describe_missed_reason(instance: EventInstance) -> str | None:
+def _describe_missed_reason(instance: EventInstance, language: str) -> str | None:
     if not instance.compliance_reports:
         return None
     report = instance.compliance_reports[-1]  # 가장 최근에 기록된 사유
-    label = non_compliance_category_label(report.reason_category, "ko")  # LLM 프롬프트용 요약이라 한국어
+    label = non_compliance_category_label(report.reason_category, language)
     if report.reason_text:
         return f"{label} ({report.reason_text})"
     return label
 
 
-def _describe_missed_instance(instance: EventInstance) -> str:
+def _describe_missed_instance(instance: EventInstance, language: str) -> str:
     event = instance.event
     start = instance.effective_start
     if start is None:
-        time_range = f"{instance.effective_end.strftime('%H:%M')} 마감"
+        time_range = render_message("checkin.summary.due", language, time=instance.effective_end.strftime("%H:%M"))
     else:
         time_range = f"{start.strftime('%H:%M')}~{instance.effective_end.strftime('%H:%M')}"
-    reason = _describe_missed_reason(instance)
-    detail = f"사유: {reason}" if reason else "사유 미기록"
+    reason = _describe_missed_reason(instance, language)
+    detail = render_message("checkin.summary.reason", language, reason=reason) if reason else render_message(
+        "checkin.summary.no_reason", language
+    )
     return f"{event.title} ({time_range}) - {detail}"
 
 
-def build_daily_checkin_summary(db: Session, user_id: int, target_date: dt_date) -> str:
+def build_daily_checkin_summary(db: Session, user_id: int, target_date: dt_date, language: str = "ko") -> str:
     """FR-8 "컨텍스트 동적 로딩": 하루치 EventInstance를 통째로 LLM에 넘기지 않는다.
 
     완료(done)된 이벤트는 개수만 요약하고, 미완료(missed)된 이벤트만 제목·시간·
@@ -59,10 +61,10 @@ def build_daily_checkin_summary(db: Session, user_id: int, target_date: dt_date)
     done_count = sum(1 for instance in instances if instance.status == EventInstanceStatus.DONE)
     missed = [instance for instance in instances if instance.status == EventInstanceStatus.MISSED]
 
-    lines = [f"오늘 계획한 {total}개 중 {done_count}개 완료."]
+    lines = [render_message("checkin.summary.total", language, total=total, done=done_count)]
 
     if missed:
-        lines.append("놓친 일정:")
-        lines.extend(f"- {_describe_missed_instance(instance)}" for instance in missed)
+        lines.append(render_message("checkin.summary.missed", language))
+        lines.extend(f"- {_describe_missed_instance(instance, language)}" for instance in missed)
 
     return "\n".join(lines)
