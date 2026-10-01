@@ -18,6 +18,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.core.config import settings
+from app.services import llm_usage
 from app.services.llm_client import (
     FunctionTool,
     ResponsesInputItem,
@@ -86,6 +88,8 @@ class FakeResponsesClient:
         tools: list[FunctionTool],
         input_items: list[ResponsesInputItem],
     ) -> ResponsesResult:
+        # Like post_responses: refuse over budget, and log every answered call.
+        llm_usage.ensure_budget()
         request = FakeRequest(task, list(instruction_blocks), list(tools), list(input_items))
         self.requests.append(request)
         answered = request.tool_outputs()
@@ -116,6 +120,13 @@ class FakeResponsesClient:
                 {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": step.text}]}
             )
         self._pending_call_ids = [tool_call.call_id for tool_call in tool_calls]
+        llm_usage.record_llm_call(
+            settings.assistant_model,
+            self.usage.input_tokens,
+            self.usage.cached_tokens,
+            self.usage.output_tokens,
+            self.usage.reasoning_tokens,
+        )
         return ResponsesResult(
             response_id=f"resp_fake_{step_index}",
             status="completed",

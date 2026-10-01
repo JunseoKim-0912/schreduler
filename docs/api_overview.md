@@ -27,7 +27,7 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 
 | 방식 | 해당 엔드포인트 |
 |---|---|
-| **`X-User-Id: <user id>` 헤더** | `/users/me/*`, `/tasks*`, `/event-instances*`, `/points/summary`, `/compliance-reports/categories`, `/actions*`, `/assistant/*` |
+| **`X-User-Id: <user id>` 헤더** | `/users/me/*`, `/tasks*`, `/event-instances*`, `/points/summary`, `/compliance-reports/categories`, `/actions*`, `/assistant/*`, `/usage/today` |
 | 요청 본문/쿼리의 `user_id` | 그 밖의 전부 (`/events`, `/date-ranges`, `/locations`, `/sleep-logs`, `/daily-actual-logs` 등) |
 
 헤더가 없으면 `401`, 없는 사용자면 `404`. 정식 인증이 들어오면 헤더 방식이 토큰으로 바뀔 예정이므로,
@@ -62,10 +62,24 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 | `401` | `X-User-Id` 헤더 없음 | 로그인(사용자 선택) 화면으로 |
 | `404` | 대상 없음, 또는 참조한 `user_id`/`date_range_id` 등이 없음 | 목록 새로고침 |
 | `409` | 충돌 — 이미 존재하거나 다른 데이터가 쓰는 중이라 삭제 불가, 되돌리기 순서 위반 등 | `detail`을 그대로 안내 |
+| `429` | 오늘 AI(LLM) 사용 한도 도달 — LLM을 부르는 요청만 (아래) | `detail`을 그대로 안내하고 입력창을 막는다. `resets_at`이 지나면 다시 연다 |
 | `410` | 어시스턴트 제안 만료 (`POST /assistant/confirm`·`/cancel`, 제안 후 30분) | 요청을 다시 말하도록 안내 |
 | `422` | 입력 규칙 위반 (위 두 형식) | 배열이면 `loc`의 마지막 값으로 해당 입력 필드에 표시 |
 | `500` | 서버 설정 문제(예: LLM 키 미설정) 또는 예상 못 한 오류 | 일반 오류 안내 + 재시도 |
 | `502` | LLM API 호출 실패 | "잠시 후 다시 시도" 안내 |
+
+`429`에는 `detail` 외에 필드가 더 있다:
+
+```jsonc
+{"detail": "오늘 AI 사용 한도에 도달했어요. 자정(토론토 시간)에 다시 열려요.",
+ "reason": "user_limit",            // user_limit(이 사용자 한도) | total_limit(앱 전체 한도)
+ "spent_usd": 1.0021, "limit_usd": 1.0,
+ "resets_at": "2026-10-02T00:00:00-04:00"}   // 다음 APP_TIMEZONE 자정
+```
+
+하루 LLM 비용 한도는 사용자별(`LLM_DAILY_BUDGET_PER_USER_USD`, 기본 $1)과 앱 전체(`LLM_DAILY_BUDGET_TOTAL_USD`, 기본 $5) 두 가지이고,
+LLM을 부르기 직전마다 확인한다. LLM이 필요 없는 기능(일정·할 일·완료·카드 버튼 확정/취소·되돌리기·버튼만 누르는 미준수 사유·알림)은
+한도와 상관없이 동작한다. 어시스턴트 한 턴 중간에 한도에 닿으면 `429` 대신 지금까지의 초안(있으면)과 안내 문구가 `200`으로 온다.
 
 ### 1.5 다국어 (ko/en)
 
@@ -136,6 +150,7 @@ POST /assistant/chat {"session_id": 1, "message": "좋아"}          → execute
 - 한 제안의 여러 초안(예: 새 기간 + 그 기간의 일정)은 **한 트랜잭션**으로 확정된다. `executed[].action_id`마다 `POST /actions/{id}/undo`로 되돌린다.
 - 제안은 30분 뒤 만료(`410`). 이미 확정·취소·대체된 제안은 `409`, 다른 사용자·세션의 토큰은 `404`.
 - 한 턴은 LLM 호출 최대 6회·20초. 넘으면 지금까지 만든 초안을 보여주거나 짧게 되묻는다.
+- 오늘 AI 사용 한도에 이미 닿았으면 `429`. 입력창 옆에 `GET /usage/today`로 "오늘 AI 사용량 $0.12 / $1.00"을 보여주면 좋다.
 - 반복 기간도 같은 입력창에서 만들고·바꾸고·지운다 ("Lecture End Date를 12월 10일까지로 바꿔줘"). 기간을 바꾸면 그 기간을 쓰는
   반복 일정의 회차를 다시 맞춘다: 늘어난 날짜는 회차(와 알림)를 추가하고, 범위 밖의 대기 회차는 `cancelled`(완료·놓침은 그대로).
   쓰는 일정이 있는 기간을 지우는 카드에는 `range_in_use` 경고와 `mode`(기본 `range_only`, 추정)가 붙는다.
@@ -218,7 +233,7 @@ GET /points/summary
 
 ## 4. 엔드포인트 목록
 
-🔑 = `X-User-Id` 헤더 필요, 🤖 = LLM 호출(느릴 수 있음, `500`/`502` 가능)
+🔑 = `X-User-Id` 헤더 필요, 🤖 = LLM 호출(느릴 수 있음, `429`/`500`/`502` 가능)
 
 ### events — 일정
 
@@ -357,6 +372,14 @@ GET /points/summary
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
 | `GET /points/summary` | 오늘/이번 주/누적 포인트 (3.6) | | `PointsSummaryRead` |
+
+### usage — 오늘 AI 사용량 🔑
+
+| 메서드 · 경로 | 설명 | 요청 | 응답 |
+|---|---|---|---|
+| `GET /usage/today` | 오늘(APP_TIMEZONE 자정 기준) 이 사용자의 LLM 비용과 한도 | | `{spent_usd, limit_usd, total_blocked, resets_at, timezone}` |
+
+`spent_usd >= limit_usd`이거나 `total_blocked`면 LLM을 부르는 요청은 `429`다. 80% 이상이면 경고 색으로 보여주는 것을 권장한다.
 
 ### actions — 변경 기록 · 되돌리기 🔑
 

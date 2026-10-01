@@ -5,6 +5,7 @@ import pytest
 
 from app.core.config import settings
 from app.services.llm_client import TokenUsage, collect_chat_usage, post_chat_completion
+from tests.llm_scope import llm_scope  # noqa: F401
 
 
 @pytest.fixture(autouse=True)

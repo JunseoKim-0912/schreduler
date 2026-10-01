@@ -19,6 +19,7 @@ from app.models.enums import (
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
+from app.models.llm_usage_log import LlmUsageLog
 from app.models.location import Location
 from app.models.persona import Persona
 from app.models.persona_conversation import PersonaConversation
@@ -47,6 +48,7 @@ __all__ = [
     "EventType",
     "ImportantDateRange",
     "Importance",
+    "LlmUsageLog",
     "Location",
     "NonComplianceCategory",
     "Persona",

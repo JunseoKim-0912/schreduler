@@ -29,6 +29,7 @@ from app.services.llm_client import (
     build_daily_checkin_payload,
     post_chat_completion,
 )
+from app.services.llm_usage import LlmBudgetExceeded, usage_scope
 
 logger = logging.getLogger("compare_prompt_cache")
 
@@ -150,11 +151,14 @@ def main(argv: list[str]) -> int:
     payload_factory = build_payload_factory(args.task, persona, args.language)
 
     try:
-        results: dict[Mode, list[TokenUsage]] = {
-            "uncached": run_mode("uncached", payload_factory, args.repeat),
-            "cached": run_mode("cached", payload_factory, args.repeat),
-        }
-    except LLMClientError as exc:
+        # 사용자 없는 개발용 호출도 llm_usage_logs에 남기고 전체 한도에 포함한다.
+        with SessionLocal() as db, usage_scope(db, None, "script"):
+            results: dict[Mode, list[TokenUsage]] = {
+                "uncached": run_mode("uncached", payload_factory, args.repeat),
+                "cached": run_mode("cached", payload_factory, args.repeat),
+            }
+            db.commit()
+    except (LLMClientError, LlmBudgetExceeded) as exc:
         logger.error("LLM 호출 실패: %s", exc)
         return 1
 

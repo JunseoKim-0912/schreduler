@@ -24,6 +24,7 @@ English: [README.md](README.md)
 | 페르소나 (FR-9) | 대화 캐릭터 선택, 대화 기록 저장, 프롬프트 캐싱을 고려한 프롬프트 배치 |
 | 포인트 (FR-10) | 중요도 가중치 × 완료, 연속 100% 완료 streak 보너스 (3일 ×1.1 / 7일 ×1.25 / 14일 ×1.5) |
 | 다국어 (FR-11) | 웹 화면 [Eng \| Kor] 전환(처음엔 영어). 알림·카드·라벨은 화면 언어로, 대화 답변은 사용자가 마지막에 쓴 말의 언어로 |
+| 하루 AI 사용 한도 | LLM 호출마다 토큰·비용을 기록하고, 사용자별·전체 하루 한도(`APP_TIMEZONE` 자정 초기화)에 닿으면 LLM 호출만 429로 막는다. LLM이 필요 없는 기능은 그대로 동작하고, 웹 화면 입력창 아래에 "오늘 AI 사용량 $0.12 / $1.00"을 보여준다 |
 | 할 일 목록 | 마감형 일정을 할 일처럼 다루는 `/tasks` API (overdue 표시, 완료 처리) |
 
 ## 기술 스택
@@ -85,6 +86,9 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build  
 | `LLM_MODEL` | `gpt-5.6-luna` | 페르소나 대화·체크인·미준수 피드백에 쓰는 모델 |
 | `ASSISTANT_MODEL` | `gpt-5.6-luna` | 일정 어시스턴트(Responses API)에 쓸 모델 |
 | `ASSISTANT_REASONING_EFFORT` | `medium` | 일정 어시스턴트의 `reasoning.effort` |
+| `LLM_DAILY_BUDGET_PER_USER_USD` | `1.00` | 사용자 한 명의 하루 LLM 비용 한도(USD). `APP_TIMEZONE` 자정에 초기화 |
+| `LLM_DAILY_BUDGET_TOTAL_USD` | `5.00` | 모든 사용자와 스크립트를 합친 하루 한도 |
+| `LLM_DAILY_BUDGET_ADMIN_USD` | (없음) | `is_admin` 사용자의 한도. 없으면 관리자도 사용자 한도를 쓴다 |
 | `APP_TIMEZONE` | `America/Toronto` | 날짜·시각 해석 기준 시간대 (IANA 이름) |
 | `FIREBASE_CREDENTIALS_PATH` | (없음) | FCM 서비스 계정 JSON 경로. 없으면 푸시는 로그만 남기고 건너뛴다 |
 | `TELEGRAM_BOT_TOKEN` | (없음) | 에스컬레이션용 텔레그램 봇 토큰. 없으면 로그만 남긴다 |
@@ -130,6 +134,7 @@ docs/                    # 기획서, API 안내, Postman 컬렉션
 | `python -m app.scripts.seed_personas` | JSON 파일의 페르소나를 DB에 upsert |
 | `python -m app.scripts.export_postman` | OpenAPI 스펙으로 Postman 컬렉션 재생성 (API 변경 후 실행) |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | 프롬프트 캐싱 전후 입력 토큰 비교 (실제 LLM API 호출, 비용 발생) |
+| `python -m app.scripts.usage_report --days 7` | 날짜별·사용자별·기능별 LLM 비용 표 (`llm_usage_logs` 기준) |
 | `python -m app.scripts.eval_assistant --effort medium` | 일정 어시스턴트 평가 세트 실행 (실제 LLM API 호출, 비용 발생). 결과는 `tests/assistant_eval/results/` |
 
 ## 현재 상태와 제약

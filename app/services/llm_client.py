@@ -17,6 +17,7 @@ from app.core.exceptions import AppError
 from app.i18n import Language, non_compliance_category_label, reply_language, to_language
 from app.models.enums import NonComplianceCategory
 from app.schemas.persona import PersonaRead
+from app.services import llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,17 @@ def _log_usage(payload: dict[str, object], usage: TokenUsage | None) -> None:
     )
 
 
+def _record_chat_usage(payload: dict[str, object], usage: TokenUsage | None) -> None:
+    # Recorded before the content is checked: a malformed answer was still billed.
+    llm_usage.record_llm_call(
+        str(payload.get("model")),
+        usage.prompt_tokens if usage else 0,
+        usage.cached_tokens if usage else 0,
+        usage.completion_tokens if usage else 0,
+        usage.reasoning_tokens if usage else 0,
+    )
+
+
 def _call_chat_completion(payload: dict[str, object], http_client: httpx.Client | None) -> str:
     """OpenAI Chat Completions를 호출해 message.content 문자열을 그대로 반환한다.
 
@@ -223,6 +235,7 @@ def post_chat_completion(
     """Chat Completions 호출 결과(content + 토큰 사용량)를 반환하고, 사용량을 로그로 남긴다."""
     if not settings.llm_api_key:
         raise LLMConfigError("LLM_API_KEY가 설정되지 않았습니다 (.env 확인)")
+    llm_usage.ensure_budget()
 
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
 
@@ -242,11 +255,15 @@ def post_chat_completion(
 
     try:
         body = response.json()
+    except json.JSONDecodeError as exc:
+        raise LLMResponseParsingError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}") from exc
+    usage = _parse_usage(body) if isinstance(body, dict) else None
+    _record_chat_usage(payload, usage)
+    try:
         content = body["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, json.JSONDecodeError) as exc:
+    except (KeyError, IndexError, TypeError) as exc:
         raise LLMResponseParsingError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}") from exc
 
-    usage = _parse_usage(body)
     _log_usage(payload, usage)
     sink = _chat_usage_sink.get()
     if sink is not None:
@@ -577,6 +594,7 @@ def post_responses(
     """/v1/responses 한 번 호출. 도구 호출·텍스트·토큰 사용량·지연 시간을 돌려주고 사용량을 로그로 남긴다."""
     if not settings.llm_api_key:
         raise LLMConfigError("LLM_API_KEY가 설정되지 않았습니다 (.env 확인)")
+    llm_usage.ensure_budget()
 
     headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
     owns_client = http_client is None
@@ -602,6 +620,11 @@ def post_responses(
     if not isinstance(body, dict):
         raise LLMResponseParsingError(f"LLM 응답 형식이 예상과 다릅니다: {response.text!r}")
 
+    # Recorded before the output is parsed: a malformed answer was still billed.
+    usage = _parse_responses_usage(body) or ResponsesUsage()
+    llm_usage.record_llm_call(
+        str(payload.get("model")), usage.input_tokens, usage.cached_tokens, usage.output_tokens, usage.reasoning_tokens
+    )
     result = _parse_responses_body(body, latency_ms)
     _log_responses_usage(payload, result)
     if result.status != "completed":

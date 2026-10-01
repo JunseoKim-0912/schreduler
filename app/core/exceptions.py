@@ -7,6 +7,7 @@ register_exception_handlers가 한 곳에서 변환한다.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -19,6 +20,10 @@ class AppError(Exception):
     status_code: int = status.HTTP_400_BAD_REQUEST
     # 클라이언트 잘못(4xx)은 INFO, 외부 연동·설정 문제는 하위 클래스에서 WARNING/ERROR로 올린다.
     log_level: int = logging.INFO
+
+    def response_fields(self) -> dict[str, Any]:
+        """Extra JSON fields next to "detail" (e.g. why and until when a request is refused)."""
+        return {}
 
 
 class NotFoundError(AppError):
@@ -44,8 +49,8 @@ class InvalidInputError(AppError, ValueError):
     status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
-def _error_response(status_code: int, detail: str) -> JSONResponse:
-    return JSONResponse(status_code=status_code, content={"detail": detail})
+def _error_response(status_code: int, detail: str, extra: dict[str, Any] | None = None) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"detail": detail, **(extra or {})})
 
 
 async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
@@ -58,7 +63,7 @@ async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         type(exc).__name__,
         exc,
     )
-    return _error_response(exc.status_code, str(exc))
+    return _error_response(exc.status_code, str(exc), exc.response_fields())
 
 
 async def _handle_integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:

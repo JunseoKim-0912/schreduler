@@ -17,6 +17,7 @@ from app.models.user import User
 from app.schemas.daily_checkin import DailyCheckinMessageResponse
 from app.schemas.persona import PersonaRead
 from app.services.context_builder import build_daily_checkin_summary
+from app.services import llm_usage
 from app.services.llm_client import generate_daily_checkin_reply
 from app.services import input_filter
 from app.services.persona_conversation_service import current_conversation, record_turn, resolve_conversation
@@ -94,10 +95,11 @@ def handle_daily_checkin_message(
         )
     else:
         history = [(m["role"], m["content"]) for m in (conversation.messages if conversation else [])][-10:]
-        reply = generate_daily_checkin_reply(
-            summary, utterance, persona=persona, language=user.preferred_language, history=history, http_client=http_client
-        )
-        conversation = record_turn(db, user, DAILY_CHECKIN_CONTEXT_TYPE, utterance, reply, conversation, day=day)
+        with llm_usage.usage_scope(db, user.id, "checkin"):
+            reply = generate_daily_checkin_reply(
+                summary, utterance, persona=persona, language=user.preferred_language, history=history, http_client=http_client
+            )
+            conversation = record_turn(db, user, DAILY_CHECKIN_CONTEXT_TYPE, utterance, reply, conversation, day=day)
     return DailyCheckinMessageResponse(
         reply=reply,
         summary=summary,

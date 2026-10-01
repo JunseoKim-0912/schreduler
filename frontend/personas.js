@@ -1,6 +1,7 @@
 import { apiFetch, getUserId } from "./api.js";
 import { badge, el, setStatus } from "./dom.js";
 import { getLang, t } from "./i18n.js";
+import { createUsageMeter, refreshUsage } from "./usage.js";
 
 // 페르소나 대화 탭
 // - 목록: GET /personas, 현재 선택: GET /users/me/persona, 선택: PUT /users/me/persona (X-User-Id 헤더)
@@ -25,6 +26,8 @@ export function initPersonasPanel() {
   let selectedName = null;
   let conversationId = null;
   let loadedFor = null; // 지금 대화창에 불러온 페르소나 (다시 불러오지 않게)
+  let sending = false;
+  const usage = createUsageMeter({ node: document.getElementById("checkin-usage"), input, button: sendButton, isBusy: () => sending });
 
   // 앱 UI가 한국어라 페르소나 이름·설명도 ko를 우선 보여준다 (없으면 en).
   const localized = (value) => value?.[getLang()] || value?.en || value?.ko || "";
@@ -114,7 +117,7 @@ export function initPersonasPanel() {
   async function send(event) {
     event.preventDefault();
     const utterance = input.value.trim();
-    if (!utterance) return;
+    if (!utterance || sending || usage.blocked) return;
     const userId = getUserId();
     if (!userId) {
       setStatus(chatStatus, t("user.required"));
@@ -123,12 +126,13 @@ export function initPersonasPanel() {
 
     addBubble("user", utterance);
     input.value = "";
+    sending = true;
     sendButton.disabled = true;
     setStatus(chatStatus, t("checkin.waiting"));
     try {
       const body = { user_id: Number(userId), utterance };
       if (conversationId) body.conversation_id = conversationId;
-      const result = await apiFetch("/daily-actual-logs/checkin", { method: "POST", body });
+      const result = await apiFetch("/daily-actual-logs/checkin", { method: "POST", body, showError: (error) => error.status !== 429 });
       conversationId = result.conversation_id;
       summaryBox.textContent = result.summary;
       summaryBox.hidden = false;
@@ -140,16 +144,21 @@ export function initPersonasPanel() {
       if (error.status === 404 && conversationId) {
         conversationId = null;
         setStatus(chatStatus, t("checkin.sessionGone"));
+      } else if (error.status === 429) {
+        setStatus(chatStatus, error.message);
       } else {
         setStatus(chatStatus, t("checkin.sendFailed"));
       }
     } finally {
-      sendButton.disabled = false;
+      sending = false;
+      usage.apply();
       input.focus();
+      refreshUsage();
     }
   }
 
   async function refresh() {
+    refreshUsage();
     if (!getUserId()) {
       personaList.replaceChildren();
       setStatus(personaStatus, t("persona.needUser"));

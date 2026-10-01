@@ -2,6 +2,7 @@ import { apiFetch, getUserId } from "./api.js";
 import { badge, el, setStatus } from "./dom.js";
 import { assistantConfirmLabel, describeAssistantItem } from "./format.js";
 import { t } from "./i18n.js";
+import { createUsageMeter, refreshUsage } from "./usage.js";
 
 // 이벤트 탭의 새 어시스턴트 (docs/assistant_design.md §1, §5, §11).
 // 대화 기록과 대기 중인 제안은 서버(assistant_sessions)에 있다. 탭에 들어오면 GET /assistant/sessions/current로 이어 그린다.
@@ -18,6 +19,7 @@ export function initAssistantChat({ undo, dataChanged }) {
   let loadedFor = null; // 서버에서 대화를 불러온 사용자 ID. 같은 사용자·같은 세션이면 다시 그리지 않는다(되돌리기 버튼 유지).
   let activeCard = null; // { token, close(text), supersede(), setBusy(busy) }
   let sending = false;
+  const usage = createUsageMeter({ node: document.getElementById("assistant-usage"), input, button: sendButton, isBusy: () => sending });
 
   // --- 말풍선 -------------------------------------------------------------------
 
@@ -167,7 +169,7 @@ export function initAssistantChat({ undo, dataChanged }) {
   }
 
   async function send(message) {
-    if (sending || !message) return;
+    if (sending || !message || usage.blocked) return;
     if (!getUserId()) {
       setStatus(status, t("user.required"));
       return;
@@ -197,9 +199,10 @@ export function initAssistantChat({ undo, dataChanged }) {
       }
     } finally {
       sending = false;
-      sendButton.disabled = false;
+      usage.apply();
       activeCard?.setBusy(false);
       input.focus();
+      refreshUsage();
     }
   }
 
@@ -216,6 +219,7 @@ export function initAssistantChat({ undo, dataChanged }) {
   async function sync() {
     const userId = getUserId();
     if (sending) return;
+    refreshUsage();
     if (!userId) {
       reset();
       setStatus(status, t("assistant.needUser"));

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -33,6 +33,8 @@ class User(Base):
     preferred_language: Mapped[str] = mapped_column(String(2), default="ko")
     telegram_chat_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     telegram_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Only changes which daily LLM budget applies (LLM_DAILY_BUDGET_ADMIN_USD); there is no admin API yet.
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     important_date_ranges: Mapped[list["ImportantDateRange"]] = relationship(back_populates="user")
     events: Mapped[list["Event"]] = relationship(back_populates="user")

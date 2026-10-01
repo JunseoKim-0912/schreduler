@@ -18,6 +18,12 @@ class Settings:
     assistant_reasoning_effort: str = os.getenv("ASSISTANT_REASONING_EFFORT") or "medium"
     # 날짜·시각 해석의 기준 시간대 (IANA 이름). 사용자별 시간대가 생기기 전까지 서버 전체에 하나.
     app_timezone: str = os.getenv("APP_TIMEZONE", "America/Toronto")
+    # Daily LLM spend caps in USD, reset at APP_TIMEZONE midnight. The admin cap applies to users.is_admin only when set.
+    llm_daily_budget_per_user_usd: float = float(os.getenv("LLM_DAILY_BUDGET_PER_USER_USD") or "1.00")
+    llm_daily_budget_total_usd: float = float(os.getenv("LLM_DAILY_BUDGET_TOTAL_USD") or "5.00")
+    llm_daily_budget_admin_usd: float | None = (
+        float(os.environ["LLM_DAILY_BUDGET_ADMIN_USD"]) if os.getenv("LLM_DAILY_BUDGET_ADMIN_USD") else None
+    )
     # Firebase 서비스 계정 JSON 파일 경로. 미설정이면 FCM 발송은 스킵되고 로그만 남는다.
     firebase_credentials_path: str | None = os.getenv("FIREBASE_CREDENTIALS_PATH")
     # 텔레그램 봇 토큰 (BotFather 발급). 미설정이면 텔레그램 발송은 스킵되고 로그만 남는다.

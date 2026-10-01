@@ -81,7 +81,7 @@ class AssistantTurnLog(Base):
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     model: Mapped[str] = mapped_column(String(100))
     reasoning_effort: Mapped[str] = mapped_column(String(16))
-    # 정상 종료가 아니면 이유 (llm_call_limit / time_limit / llm_error)
+    # 정상 종료가 아니면 이유 (llm_call_limit / time_limit / llm_error / budget_limit)
     stop_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
 

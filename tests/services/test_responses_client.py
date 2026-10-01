@@ -23,6 +23,7 @@ from app.services.llm_client import (
     with_tool_outputs,
 )
 from tests.fake_responses import FakeResponsesClient, call, calls, say
+from tests.llm_scope import llm_scope  # noqa: F401
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,7 +42,7 @@ SEARCH_TOOL = FunctionTool(
 @pytest.fixture(autouse=True)
 def api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "llm_api_key", "test-key")
-    monkeypatch.setattr(settings, "assistant_model", "assistant-model")
+    monkeypatch.setattr(settings, "assistant_model", "gpt-5.4-mini")
     monkeypatch.setattr(settings, "assistant_reasoning_effort", "low")
 
 
@@ -53,7 +54,7 @@ def _tool_call_body() -> dict:
     return {
         "id": "resp_1",
         "status": "completed",
-        "model": "assistant-model-2026",
+        "model": "gpt-5.4-mini-2026-03-17",
         "reasoning": {"effort": "low"},
         "output": [
             {"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "gAAA"},
@@ -79,7 +80,7 @@ def _text_body(text: str) -> dict:
     return {
         "id": "resp_2",
         "status": "completed",
-        "model": "assistant-model-2026",
+        "model": "gpt-5.4-mini-2026-03-17",
         "output": [
             {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text, "annotations": []}]}
         ],
@@ -109,7 +110,7 @@ def test_request_puts_fixed_prefix_first_and_sets_reasoning_without_temperature(
     assert str(request.url) == RESPONSES_URL
     assert request.headers["authorization"] == "Bearer test-key"
     body = json.loads(request.content)
-    assert body["model"] == "assistant-model"
+    assert body["model"] == "gpt-5.4-mini"
     assert body["instructions"] == "[role] You are a scheduler.\n\n[ranges] Lecture Period"
     assert body["tools"] == [
         {
@@ -147,10 +148,10 @@ def test_client_overrides_model_and_effort() -> None:
         bodies.append(json.loads(request.content))
         return httpx.Response(200, json=_text_body("ok"))
 
-    client = ResponsesClient(httpx.Client(transport=httpx.MockTransport(handler)), model="cheap", reasoning_effort="medium")
+    client = ResponsesClient(httpx.Client(transport=httpx.MockTransport(handler)), model="gpt-5.4-nano", reasoning_effort="medium")
     _create(client)
 
-    assert bodies[0]["model"] == "cheap"
+    assert bodies[0]["model"] == "gpt-5.4-nano"
     assert bodies[0]["reasoning"] == {"effort": "medium"}
 
 
@@ -165,7 +166,7 @@ def test_parses_tool_calls_usage_and_latency() -> None:
     assert (result.usage.input_tokens, result.usage.cached_tokens) == (1200, 1024)
     assert (result.usage.output_tokens, result.usage.reasoning_tokens) == (90, 64)
     assert result.latency_ms >= 0
-    assert result.model == "assistant-model-2026"
+    assert result.model == "gpt-5.4-mini-2026-03-17"
 
 
 def test_parses_final_text() -> None:

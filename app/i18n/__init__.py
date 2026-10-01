@@ -165,6 +165,10 @@ MessageKey = Literal[
     "assistant.limit_no_drafts",
     "assistant.empty_reply",
     "assistant.cancelled",
+    "assistant.budget_with_drafts",
+    "assistant.budget_no_drafts",
+    "llm_budget.user_limit",
+    "llm_budget.total_limit",
 ]
 
 
@@ -177,3 +181,16 @@ def load_message_templates(language: Language) -> dict[str, str]:
 
 def render_message(key: MessageKey, language: str | None, **params: object) -> str:
     return load_message_templates(to_language(language))[key].format(**params)
+
+
+@cache
+def _timezone_names() -> dict[str, dict[str, str]]:
+    return json.loads((_I18N_DIR / "timezones.json").read_text(encoding="utf-8"))
+
+
+def timezone_city(zone: str, language: str | None) -> str:
+    """"America/Toronto" -> "토론토" / "Toronto". Zones not listed in timezones.json fall back to the city part."""
+    names = _timezone_names().get(zone)
+    if names:
+        return names[to_language(language)]
+    return zone.rsplit("/", 1)[-1].replace("_", " ")

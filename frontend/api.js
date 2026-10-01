@@ -8,7 +8,7 @@ export const API_BASE = "";
 
 const USER_ID_KEY = "schreduler.userId";
 
-// LLM을 호출해 422(응답 형식 오류) / 500(키 미설정) / 502(호출 실패)가 올 수 있는 엔드포인트
+// LLM을 호출해 422(응답 형식 오류) / 429(오늘 사용 한도) / 500(키 미설정) / 502(호출 실패)가 올 수 있는 엔드포인트
 export const LLM_ENDPOINTS = [
   { method: "POST", path: "/assistant/chat" },
   { method: "POST", path: "/daily-actual-logs/checkin" },
@@ -82,13 +82,15 @@ export function describeError({ status, detail, method = "GET", path = "" }) {
   if (status === 401) return t("api.needUser");
   if (status === 422 && Array.isArray(detail)) return `${t("api.checkInput")}\n${formatValidationErrors(detail)}`;
 
+  const serverMessage = typeof detail === "string" && detail ? detail : "";
   if (llm) {
+    // 429: today's AI usage limit. The server's message says which limit and when it reopens.
+    if (status === 429) return serverMessage || t("api.llm429");
     if (status === 422) return t("api.llm422");
     if (status === 500) return t("api.llm500");
     if (status === 502) return t("api.llm502");
   }
 
-  const serverMessage = typeof detail === "string" && detail ? detail : "";
   if (status === 404) return serverMessage ? t("api.notFoundDetail", { detail: serverMessage }) : t("api.notFound");
   if (status === 409) return serverMessage ? t("api.conflictDetail", { detail: serverMessage }) : t("api.conflict");
   if (status === 422) return serverMessage ? t("api.checkInputDetail", { detail: serverMessage }) : t("api.checkInput");

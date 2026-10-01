@@ -22,6 +22,7 @@ This repository is the **backend (Python / FastAPI)** plus a small dependency-fr
 | **Travel time** | Give an event a location and a travel block is added in front of it automatically. |
 | **Points & streaks** | Completed events earn their importance in points; finishing every event several days in a row multiplies them (3 days ×1.1, 7 days ×1.25, 14 days ×1.5). |
 | **Persona check-ins** | Pick a character and have an evening check-in about the day. Missed events come up first; if you log why you missed something, the persona replies in its own voice. |
+| **Daily AI budget** | Every LLM call is logged with its tokens and cost. A per-user and an app-wide daily cap (reset at midnight in `APP_TIMEZONE`) stop LLM calls with HTTP 429; everything that doesn't need the LLM keeps working. The web UI shows "Today's AI usage $0.12 / $1.00" under the chat inputs. |
 | **Korean / English** | The web UI starts in English with an **Eng \| Kor** switch. Notifications, cards and labels follow the screen language; chat replies follow the language of your last message. |
 
 ## Tech stack
@@ -72,6 +73,9 @@ Settings come from environment variables or a `.env` file. [`.env.example`](.env
 | `LLM_MODEL` | `gpt-5.6-luna` | Model for persona chat, check-ins and missed-event feedback |
 | `ASSISTANT_MODEL` | `gpt-5.6-luna` | Model for the scheduling assistant (Responses API) |
 | `ASSISTANT_REASONING_EFFORT` | `medium` | `reasoning.effort` for the assistant; validated per model at startup |
+| `LLM_DAILY_BUDGET_PER_USER_USD` | `1.00` | Daily LLM spend cap per user (USD), reset at `APP_TIMEZONE` midnight |
+| `LLM_DAILY_BUDGET_TOTAL_USD` | `5.00` | Daily LLM spend cap for all users and scripts together |
+| `LLM_DAILY_BUDGET_ADMIN_USD` | *(none)* | Cap for users with `is_admin`; without it, admins get the per-user cap |
 | `APP_TIMEZONE` | `America/Toronto` | IANA time zone used for "today", weekdays and reminders |
 | `FIREBASE_CREDENTIALS_PATH` | *(none)* | Path to an FCM service-account JSON. Without it, push notifications are only logged |
 | `TELEGRAM_BOT_TOKEN` | *(none)* | Bot token for escalation messages. Without it, they are only logged |
@@ -105,6 +109,7 @@ Other scripts:
 |---|---|
 | `python -m app.scripts.export_postman` | Regenerate the Postman collection from the OpenAPI spec (run after API changes) |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | Compare input tokens with and without prompt caching (real API calls) |
+| `python -m app.scripts.usage_report --days 7` | LLM cost table by day, user and feature (from `llm_usage_logs`) |
 
 ## Project structure
 
@@ -119,6 +124,8 @@ app/
 │   ├── assistant/       # tool-using scheduling assistant: agent loop, tools, drafts, prompt, execution
 │   ├── draft_rules.py   # shared validation and normalization for drafts (RRULEs, previews, time strings)
 │   ├── llm_client.py    # Responses and Chat Completions clients, prompt caching, usage logging
+│   ├── llm_usage.py     # per-call usage log and the daily budget check
+│   ├── llm_pricing.py   # per-model token prices (shared with the evaluation script)
 │   └── …                # events, ranges, undo history, notifications, points, check-ins
 ├── child_events/        # travel-time and prep sub-events
 ├── core/                # settings, DB, scheduler, auth, errors, clock, OpenAPI metadata

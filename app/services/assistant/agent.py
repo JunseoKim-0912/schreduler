@@ -21,12 +21,13 @@ from sqlalchemy.orm import Session
 from app.core.clock import local_now
 from app.core.config import settings
 from app.core.exceptions import ConflictError, ExpiredError, NotFoundError
-from app.i18n import render_message, reply_language
+from app.i18n import render_message, reply_language, timezone_city
 from app.models.assistant import AssistantMessage, AssistantSession, AssistantTurnLog, PendingProposal
 from app.models.user import User
 from app.services.assistant import prompt
 from app.services.assistant.context import TurnContext
 from app.services.assistant.execution import execute_proposal
+from app.services import llm_usage
 from app.services.assistant.tools import TOOLS, run_tool
 from app.services.llm_client import (
     LLMClientError,
@@ -150,6 +151,11 @@ def _executed_text(ctx: TurnContext) -> str:
 
 
 def _fallback_reply(ctx: TurnContext, stop_reason: str | None) -> str:
+    if stop_reason == "budget_limit":
+        if ctx.drafts:
+            return render_message("assistant.budget_with_drafts", ctx.language)
+        notice = render_message("assistant.budget_no_drafts", ctx.language, city=timezone_city(settings.app_timezone, ctx.language))
+        return f"{_executed_text(ctx)} {notice}" if ctx.executed else notice
     if stop_reason is not None:
         if ctx.drafts:
             return render_message("assistant.limit_with_drafts", ctx.language)
@@ -194,6 +200,22 @@ def chat(
     now: datetime | None = None,
     timer: Callable[[], float] = time.monotonic,
 ) -> ChatResult:
+    # Checked before the user's message is saved so a refused turn leaves nothing behind.
+    llm_usage.check_budget(db, user)
+    with llm_usage.usage_scope(db, user.id, "assistant"):
+        return _run_turn(db, user, message, session_id, client=client, now=now, timer=timer)
+
+
+def _run_turn(
+    db: Session,
+    user: User,
+    message: str,
+    session_id: int | None,
+    *,
+    client: ResponsesCaller | None,
+    now: datetime | None,
+    timer: Callable[[], float],
+) -> ChatResult:
     now = now or local_now()
     session = get_session(db, user, session_id) if session_id is not None else create_session(db, user, now)
     ctx = TurnContext(db=db, user=user, session=session, now=now)
@@ -233,6 +255,11 @@ def chat(
             break
         try:
             result = client.create(task="assistant", instruction_blocks=instructions, tools=TOOLS, input_items=items)
+        except llm_usage.LlmBudgetExceeded:
+            if usage.calls == 0:
+                raise
+            stop_reason = "budget_limit"
+            break
         except LLMClientError:
             if usage.calls == 0:
                 _log_turn(ctx, usage, last, timer() - started, "llm_error")

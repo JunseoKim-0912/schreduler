@@ -9,7 +9,7 @@ APP_DESCRIPTION = """
 
 ### 인증
 정식 인증은 아직 없다. `/users/me/*`, `/tasks`, `/event-instances`, `/actions`, `/points/summary`,
-`/compliance-reports/categories`, `/assistant/*`는 **`X-User-Id` 헤더**의 사용자를 현재 사용자로 본다.
+`/compliance-reports/categories`, `/assistant/*`, `/usage/today`는 **`X-User-Id` 헤더**의 사용자를 현재 사용자로 본다.
 그 밖의 엔드포인트는 요청 본문/쿼리의 `user_id`를 쓴다.
 
 ### 다국어 (FR-11)
@@ -19,6 +19,7 @@ APP_DESCRIPTION = """
 ### LLM을 호출하는 엔드포인트
 `POST /assistant/chat`, `POST /daily-actual-logs/checkin`, 그리고 `other` 또는 자유 텍스트가 있는
 `POST /compliance-reports`. LLM 오류는 500(키 미설정) / 502(호출 실패) / 422(응답 형식 오류)로 돌려준다.
+오늘 사용 한도(사용자별·전체, `APP_TIMEZONE` 자정에 초기화)에 닿으면 LLM을 부르기 전에 429로 거절한다 (`GET /usage/today`).
 """
 
 TAGS_METADATA: list[dict[str, Any]] = [
@@ -49,6 +50,10 @@ TAGS_METADATA: list[dict[str, Any]] = [
         "name": "actions",
         "description": "변경 기록과 되돌리기 (FR-2 v3.6). 자연어로 실행한 생성·삭제·수정과 목록의 삭제 버튼이 기록된다.",
     },
+    {
+        "name": "usage",
+        "description": "오늘 AI(LLM) 사용량과 하루 한도. 한도에 닿으면 LLM을 부르는 요청만 429로 거절되고, 나머지 기능은 그대로 동작한다.",
+    },
     {"name": "health", "description": "서버 상태 확인."},
 ]
 
@@ -60,6 +65,10 @@ CURRENT_USER: dict[int | str, dict[str, Any]] = {
 }
 EXPIRED: dict[int | str, dict[str, Any]] = {410: {"description": "확인 토큰이 만료됨 (발급 후 10분)"}}
 LLM_ERRORS: dict[int | str, dict[str, Any]] = {
+    429: {
+        "description": "오늘 LLM 사용 한도에 도달함. 본문: `detail`, `reason`(`user_limit` / `total_limit`), "
+        "`spent_usd`, `limit_usd`, `resets_at`(다시 열리는 시각)"
+    },
     500: {"description": "LLM_API_KEY가 설정되지 않음"},
     502: {"description": "LLM API 호출 실패"},
 }

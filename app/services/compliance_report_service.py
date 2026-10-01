@@ -21,6 +21,7 @@ from app.schemas.compliance_report import (
 from app.schemas.persona import PersonaRead
 from app.i18n import non_compliance_category_label
 from app.models.user import User
+from app.services import llm_usage
 from app.services.llm_client import generate_compliance_feedback
 
 
@@ -51,26 +52,27 @@ def create_compliance_report(
 
     llm_triggered = _should_trigger_llm(data)
 
-    feedback: str | None = None
-    if llm_triggered:
-        user = event_instance.event.user
-        persona = PersonaRead.model_validate(user.selected_persona) if user.selected_persona else None
-        feedback = generate_compliance_feedback(
-            data.reason_category,
-            data.reason_text,
-            persona=persona,
-            language=user.preferred_language,
-            http_client=http_client,
-        )
+    user = event_instance.event.user
+    with llm_usage.usage_scope(db, user.id, "compliance"):
+        feedback: str | None = None
+        if llm_triggered:
+            persona = PersonaRead.model_validate(user.selected_persona) if user.selected_persona else None
+            feedback = generate_compliance_feedback(
+                data.reason_category,
+                data.reason_text,
+                persona=persona,
+                language=user.preferred_language,
+                http_client=http_client,
+            )
 
-    report = ComplianceReport(
-        event_instance_id=data.event_instance_id,
-        reason_category=data.reason_category,
-        reason_text=data.reason_text,
-        llm_triggered=llm_triggered,
-    )
-    db.add(report)
-    db.commit()
+        report = ComplianceReport(
+            event_instance_id=data.event_instance_id,
+            reason_category=data.reason_category,
+            reason_text=data.reason_text,
+            llm_triggered=llm_triggered,
+        )
+        db.add(report)
+        db.commit()
     db.refresh(report)
 
     return report, feedback

@@ -1246,3 +1246,27 @@ select:focus-visible {
 .actions {
   flex-wrap: wrap;
 }
+
+/* --- 오늘 AI 사용량 (어시스턴트·페르소나 입력창 아래) --- */
+.usage-meter {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.usage-meter[data-level="warn"] {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fff8c5;
+  color: #6a5000;
+}
+
+.usage-meter[data-level="blocked"] {
+  padding: 8px 10px;
+  border: 1px solid #d4a72c;
+  border-radius: var(--radius);
+  background: #fff8c5;
+  color: #6a5000;
+  font-size: 13px;
+}

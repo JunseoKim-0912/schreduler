@@ -56,5 +56,9 @@
   "checkin.summary.due": "due {time}",
   "checkin.summary.reason": "reason: {reason}",
   "checkin.summary.no_reason": "no reason given",
-  "child.travel_title": "Travel: {title}"
+  "child.travel_title": "Travel: {title}",
+  "assistant.budget_with_drafts": "You've reached today's AI usage limit, so here is the draft so far. Please check it.",
+  "assistant.budget_no_drafts": "You've reached today's AI usage limit, so I had to stop here. It reopens at midnight ({city} time).",
+  "llm_budget.user_limit": "You've reached today's AI usage limit. It reopens at midnight ({city} time).",
+  "llm_budget.total_limit": "The app has reached today's overall AI usage limit. It reopens at midnight ({city} time)."
 }

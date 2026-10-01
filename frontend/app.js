@@ -5,6 +5,7 @@ import { initPersonasPanel } from "./personas.js";
 import { initPointsPanel } from "./points.js";
 import { initTasksPanel } from "./tasks.js";
 import { getLang, onLangChange, setLang, t } from "./i18n.js";
+import { clearUsage, relabelUsage } from "./usage.js";
 
 // --- 화면 언어 (Eng | Kor) ------------------------------------------------------
 // 처음 방문하면 영어. 고른 언어는 localStorage에 남고, 백엔드 User.preferred_language도 같이 바꿔서 알림·경고·
@@ -50,6 +51,7 @@ onLangChange(async () => {
   // 화면에 그려 둔 목록·카드도 새 언어로 다시 그린다 (지금 탭만 다시 불러오고, 나머지는 열 때 불러온다).
   hideError();
   panels.tasks.relabel();
+  relabelUsage();
   for (const panel of Object.values(panels)) panel.reset();
   panels[activeTab]?.refresh();
 });
@@ -96,6 +98,7 @@ function saveUserId() {
     // 모든 탭의 이전 사용자 상태는 지우고, 다시 불러오는 건 지금 보이는 탭만 한다
     // (숨은 탭의 요청 에러가 배너에 뜨지 않게). 다른 탭은 열 때 activateTab이 불러온다.
     hideError();
+    clearUsage();
     for (const panel of Object.values(panels)) panel.reset();
     syncBackendLanguage().then(() => panels[activeTab]?.refresh());
   }

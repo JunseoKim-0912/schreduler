@@ -53,7 +53,7 @@ def test_run_case_passes_a_correct_script(data: dict) -> None:
 
 def test_run_case_reports_why_it_failed(data: dict) -> None:
     wrong = {**STUDY, "end_time": "01:00"}
-    result = ev.run_case(_case(data, "study_11_to_1"), data["seed"], _fake(call("propose_create_event", **wrong), say("초안")), "x")
+    result = ev.run_case(_case(data, "study_11_to_1"), data["seed"], _fake(call("propose_create_event", **wrong), say("초안")), "gpt-5.6-luna")
 
     assert not result.passed
     assert any("end=01:00≠13:00" in reason for reason in result.reasons)
@@ -65,7 +65,7 @@ def test_approval_case_checks_confirm_and_db(data: dict) -> None:
         FakeResponsesClient([call("propose_create_event", **STUDY), say("이렇게 만들까요?")]),
         FakeResponsesClient([say("네")]),  # confirm_pending을 부르지 않음
     ])
-    result = ev.run_case(case, data["seed"], lambda: next(fakes), "x")
+    result = ev.run_case(case, data["seed"], lambda: next(fakes), "gpt-5.6-luna")
 
     assert not result.passed
     assert any("confirm_pending" in reason for reason in result.reasons)
@@ -102,7 +102,7 @@ def _delete_all_followup(data: dict, second_turn: list, monkeypatch: pytest.Monk
         ]),
         FakeResponsesClient(second_turn),
     ])
-    return ev.run_case(_case(data, "delete_all_followup"), data["seed"], lambda: next(fakes), "x")
+    return ev.run_case(_case(data, "delete_all_followup"), data["seed"], lambda: next(fakes), "gpt-5.6-luna")
 
 
 def test_any_of_accepts_approval_of_an_earlier_full_delete(data: dict, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,7 +125,7 @@ def test_switch_to_deadline_accepts_no_new_proposal_when_already_a_deadline(data
         FakeResponsesClient([say("이미 3시 마감으로 되어 있어요. 이대로 만들까요?")]),
     ])
 
-    result = ev.run_case(_case(data, "draft_switch_to_deadline"), data["seed"], lambda: next(fakes), "x")
+    result = ev.run_case(_case(data, "draft_switch_to_deadline"), data["seed"], lambda: next(fakes), "gpt-5.6-luna")
 
     assert result.passed, result.reasons
 
@@ -151,8 +151,8 @@ def test_changing_an_existing_deadline_must_update_not_create(data: dict, monkey
         FakeResponsesClient([call("confirm_pending", token="tok"), say("만들었어요")]),
     ])
 
-    good = ev.run_case(case, data["seed"], lambda: next(updating), "x")
-    bad = ev.run_case(case, data["seed"], lambda: next(duplicating), "x")
+    good = ev.run_case(case, data["seed"], lambda: next(updating), "gpt-5.6-luna")
+    bad = ev.run_case(case, data["seed"], lambda: next(duplicating), "gpt-5.6-luna")
 
     assert good.passed, good.reasons
     assert not bad.passed

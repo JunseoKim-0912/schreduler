@@ -48,21 +48,13 @@ from app.schemas.event import EventCreate
 from app.services import event_service
 from app.services.assistant import agent
 from app.services.llm_client import LLMClientError, ResponsesClient, ResponsesResult, resolve_reasoning_effort
+from app.services.llm_pricing import PRICES_CHECKED, call_cost, price_for
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES_PATH = ROOT / "tests" / "assistant_eval" / "cases.yaml"
 RESULTS_DIR = ROOT / "tests" / "assistant_eval" / "results"
 MANDATORY_TAGS = ("격주", "오전오후", "마감", "확인안전")
 PASS_THRESHOLD = 0.90
-
-# USD / 1M tokens. 출처: 각 모델 문서의 Text tokens 가격표 (standard), 2026-09-27 확인.
-PRICES_CHECKED = "2026-09-27"
-PRICES: dict[str, dict[str, Any]] = {
-    "gpt-5.6-luna": {"input": 0.20, "cached": 0.02, "output": 1.20, "source": "https://developers.openai.com/api/docs/models/gpt-5.6-luna"},
-    "gpt-5.4-nano": {"input": 0.20, "cached": 0.02, "output": 1.25, "source": "https://developers.openai.com/api/docs/models/gpt-5.4-nano"},
-    "gpt-5.4-mini": {"input": 0.75, "cached": 0.075, "output": 4.50, "source": "https://developers.openai.com/api/docs/models/gpt-5.4-mini"},
-    "gpt-5-nano": {"input": 0.05, "cached": 0.005, "output": 0.40, "source": "https://developers.openai.com/api/docs/models/gpt-5-nano"},
-}
 
 WATCHED_TABLES = (Event, EventInstance, ImportantDateRange, Location)
 
@@ -397,11 +389,7 @@ class RecordingClient:
 
 
 def turn_cost(model: str, record: TurnRecord) -> float:
-    price = PRICES.get(model)
-    if price is None:
-        return 0.0
-    uncached = max(record.input_tokens - record.cached_tokens, 0)
-    return (uncached * price["input"] + record.cached_tokens * price["cached"] + record.output_tokens * price["output"]) / 1_000_000
+    return call_cost(model, record.input_tokens, record.cached_tokens, record.output_tokens)
 
 
 def run_case(case: dict[str, Any], default_seed: dict[str, Any], make_client: Callable[[], Any], model: str) -> CaseResult:
@@ -499,6 +487,7 @@ def run(model: str, effort: str, only: set[str] | None, workers: int) -> dict[st
     data = load_cases()
     cases = [c for c in data["cases"] if not only or c["id"] in only]
     sent_effort = resolve_reasoning_effort(model, effort)
+    price = price_for(model)
 
     def make_client() -> ResponsesClient:
         return ResponsesClient(model=model, reasoning_effort=effort)
@@ -512,7 +501,7 @@ def run(model: str, effort: str, only: set[str] | None, workers: int) -> dict[st
         "effort_sent": sent_effort,
         "run_at": local_wall_now().isoformat(timespec="seconds"),
         "wall_seconds": round(time_module.perf_counter() - started, 1),
-        "prices": {**PRICES.get(model, {}), "checked": PRICES_CHECKED},
+        "prices": {**asdict(price), "checked": PRICES_CHECKED},
         "summary": summarize(results),
         "results": [{**asdict(r)} for r in results],
     }

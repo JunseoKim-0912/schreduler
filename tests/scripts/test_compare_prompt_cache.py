@@ -7,6 +7,7 @@ import pytest
 from app.core.config import settings
 from app.scripts.compare_prompt_cache import build_payload_factory, bust_prompt_cache, run_mode, summarize
 from app.services.llm_client import LLMRequestError, LLMResponseParsingError, TokenUsage, post_chat_completion
+from tests.llm_scope import llm_scope  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
