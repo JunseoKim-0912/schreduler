@@ -203,6 +203,7 @@ def chat(
         list(db.execute(select(AssistantMessage).where(AssistantMessage.session_id == session.id).order_by(AssistantMessage.id)).scalars())
     )
     pending = active_proposal(db, session, now)
+    ctx.pending = pending
     session.updated_at = ctx.wall_now
     _add_message(db, session, "user", {"text": message}, ctx.wall_now)
     db.commit()

@@ -195,6 +195,11 @@ def card_problems(card: dict[str, Any], expected: dict[str, Any]) -> list[str]:
             check(date_range.get("start_date") == want, f"date_range.start={date_range.get('start_date')}≠{want}")
         elif key == "date_range_end":
             check(date_range.get("end_date") == want, f"date_range.end={date_range.get('end_date')}≠{want}")
+        elif key == "date_range_new":
+            check(date_range.get("is_new") == want, f"date_range.is_new={date_range.get('is_new')}≠{want}")
+        elif key == "inferred_includes":
+            inferred = card.get("inferred_fields") or []
+            check(set(want) <= set(inferred), f"inferred_fields={inferred} lack {want}")
         elif key == "location":
             check((location.get("name") or "").casefold() == want.casefold(), f"location={location.get('name')!r}≠{want!r}")
         elif key == "location_new":
@@ -261,7 +266,12 @@ def turn_problems(
     problems: list[str] = []
     cards = (record.proposal or {}).get("items", [])
     for key, want in expect.items():
-        if key == "proposal":
+        if key == "any_of":
+            # 여러 기대 중 하나만 맞으면 통과. 모두 틀리면 가장 가까운 것(문제가 가장 적은 것)의 이유를 보인다.
+            reasons = [turn_problems(db, option, record, previous, before, after) for option in want]
+            if all(reasons):
+                problems.extend(f"any_of: {reason}" for reason in min(reasons, key=len))
+        elif key == "proposal":
             if want is None:
                 if record.proposal is not None:
                     problems.append(f"expected no proposal, got {[c.get('kind') for c in cards]}")
@@ -271,6 +281,9 @@ def turn_problems(
                 continue
             if "count" in want and len(cards) != want["count"]:
                 problems.append(f"proposal count={len(cards)}≠{want['count']}")
+            unwanted = [card.get("kind") for card in cards if card.get("kind") in want.get("kinds_exclude", [])]
+            if unwanted:
+                problems.append(f"proposal has unwanted kinds {unwanted}")
             remaining = list(cards)
             for expected_card in want.get("items", []):
                 reasons = [card_problems(card, expected_card) for card in remaining]
@@ -303,6 +316,12 @@ def turn_problems(
             status = db.execute(select(PendingProposal.status).where(PendingProposal.token == token)).scalar_one_or_none() if token else None
             if status != want:
                 problems.append(f"previous proposal status={status}≠{want}")
+        elif key == "previous_items":
+            # 직전 턴 제안에 이 조건의 카드가 있어야 함 (이미 맞게 제안돼 있어 이번 턴에 바꿀 게 없는 경우를 확인)
+            prev_cards = ((previous.proposal if previous else None) or {}).get("items", [])
+            for expected_card in want:
+                if not any(not card_problems(card, expected_card) for card in prev_cards):
+                    problems.append(f"previous proposal has no card matching {expected_card}")
         elif key == "same_as_previous":
             prev_cards = ((previous.proposal if previous else None) or {}).get("items", [])
             if not prev_cards or not cards:

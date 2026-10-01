@@ -25,6 +25,7 @@ from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
 from app.services.action_history_service import AfterCommit, Snapshot, finish_change, record_action
+from app.services.common import name_key
 from app.services.event_service import remove_event
 from app.services.recurrence import generate_event_instances
 
@@ -36,12 +37,8 @@ def format_day(day: date) -> str:
     return f"{day.month}/{day.day}"
 
 
-def _norm(text: str) -> str:
-    return re.sub(r"\s+", "", text).casefold()
-
-
 def same_name(a: str, b: str) -> bool:
-    return _norm(a) == _norm(b)
+    return name_key(a) == name_key(b)
 
 
 # --- 조회 --------------------------------------------------------------------------
@@ -56,13 +53,13 @@ def user_ranges(db: Session, user_id: int) -> list[ImportantDateRange]:
 
 
 def find_by_name(db: Session, user_id: int, name: str) -> ImportantDateRange | None:
-    """이름으로 찾는다(대소문자·공백 무시). 정확히 같은 이름이 없으면 부분 일치가 하나뿐일 때만 그것."""
+    """이름으로 찾는다(괄호 안 설명·대소문자·공백 무시). 정확히 같은 이름이 없으면 부분 일치가 하나뿐일 때만 그것."""
     ranges = user_ranges(db, user_id)
-    key = _norm(name)
-    exact = [r for r in ranges if _norm(r.name) == key]
+    key = name_key(name)
+    exact = [r for r in ranges if name_key(r.name) == key]
     if exact:
         return exact[0]
-    partial = [r for r in ranges if key and key in _norm(r.name)]
+    partial = [r for r in ranges if key and key in name_key(r.name)]
     return partial[0] if len(partial) == 1 else None
 
 

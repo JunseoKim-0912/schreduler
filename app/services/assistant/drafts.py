@@ -6,6 +6,7 @@ errors는 LLM이 고쳐서 다시 부르라는 뜻이라 영어 코드·설명�
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -68,6 +69,14 @@ def _accept(
     replaces: str | None,
 ) -> ToolResult:
     """성공한 초안을 이번 턴 목록에 넣는다. 같은 턴의 초안을 고쳐 다시 부르면(draft_id) 그 자리를 바꾼다."""
+    if _same_as_pending(ctx, kind, card):
+        problems.error(
+            "no_change",
+            "This draft is identical to the pending proposal the user already saw, so nothing would change. Re-read the "
+            "user's request and apply the value they asked for (in 'A에서 B로' B is the new value). If they approved the "
+            "pending proposal, call confirm_pending instead.",
+        )
+        return _failed(problems, inferred)
     draft_id = replaces if replaces in ctx.drafts else ctx.next_draft_id()
     card = {"draft_id": draft_id, "kind": kind, **card, "warnings": problems.warnings, "inferred_fields": inferred}
     ctx.drafts[draft_id] = Draft(draft_id, kind, card, payload)
@@ -81,6 +90,22 @@ def _accept(
         "inferred_fields": inferred,
         "note": "Draft stored, not saved. The user must confirm it; do not say it was created.",
     }
+
+
+_CARD_META = ("draft_id", "kind", "warnings", "inferred_fields")
+
+
+def _comparable(card: dict[str, Any]) -> str:
+    return json.dumps({k: v for k, v in card.items() if k not in _CARD_META}, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _same_as_pending(ctx: TurnContext, kind: str, card: dict[str, Any]) -> bool:
+    """이전 턴의 제안(초안 하나)과 값이 완전히 같은 초안. 여러 초안이 묶인 제안은 일부를 그대로 다시 내는 게 정상이라 보지 않는다."""
+    pending = ctx.pending
+    if pending is None or len(pending.proposals) != 1:
+        return False
+    [item] = pending.proposals
+    return item["kind"] == kind and _comparable(item["card"]) == _comparable(card)
 
 
 def _add_inferred(inferred: list[str], name: str) -> None:
@@ -396,6 +421,28 @@ def _scope_of(targets: list[Target]) -> str:
     return "instance" if targets and all(t.instance is not None for t in targets) else "series"
 
 
+def _changes_target(
+    target: Target,
+    desc: CommandDescription,
+    location: dict[str, Any] | None,
+    before: tuple[datetime | None, datetime],
+    after: tuple[datetime | None, datetime],
+) -> bool:
+    """이 대상에서 요청한 값 중 하나라도 지금 값과 다른지."""
+    event = target.event
+    if after != before:
+        return True
+    if desc.new_title and desc.new_title != event.title:
+        return True
+    if desc.new_importance is not None and (event.importance is None or int(event.importance) != desc.new_importance):
+        return True
+    if desc.location_action == "remove":
+        return event.location_id is not None
+    if desc.location_action == "set" and location is not None:
+        return location["id"] is None or location["id"] != event.location_id
+    return False
+
+
 def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     problems = _Problems(ctx)
     inferred = [str(f) for f in args.get("inferred_fields") or []]
@@ -451,6 +498,7 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
         return _failed(problems, inferred)
 
     cards = []
+    changed = False
     for target in targets:
         event, instance = target.event, target.instance
         if instance is not None:
@@ -460,12 +508,23 @@ def propose_update_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
             before = (event.start_time, event.end_time)
             day = event.anchor_time.date()
         after = new_times(desc, day, *before)
+        changed = changed or _changes_target(target, desc, location, before, after)
         if after != before:
             spec = rules.DraftSpec(
                 event_type="deadline" if after[0] is None else "scheduled", start=after[0], end=after[1]
             )
             _check_times(problems, spec, ctx.now, allow_past=new_date is not None)
         cards.append(_target_card(target, ctx.language, after))
+    if not problems.errors and not changed:
+        current = "; ".join(
+            f"{c['title']} {c['time_display']}" + (f" @ {c['location']}" if c.get("location") else "") for c in cards
+        )
+        problems.error(
+            "no_change",
+            f"Every requested value already equals the current value ({current}), so nothing would change. Re-read the "
+            "user's request: in 'A에서 B로' A is the current value and B the new one. If the user really asked for the "
+            "current value, tell them it is already so instead of proposing.",
+        )
     if problems.errors:
         return _failed(problems, inferred)
     if len(targets) > 1:

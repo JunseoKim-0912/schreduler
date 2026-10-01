@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
-from app.models.assistant import AssistantSession
+from app.models.assistant import AssistantSession, PendingProposal
 from app.models.user import User
 
 DraftKind = Literal["create_event", "update_event", "delete_event", "create_range", "update_range", "delete_range"]
@@ -33,6 +33,7 @@ class TurnContext:
     user: User
     session: AssistantSession
     now: datetime  # 앱 시간대 aware
+    pending: PendingProposal | None = None  # 이전 턴에 보여준 대기 중인 제안
     drafts: dict[str, Draft] = field(default_factory=dict)
     executed: list[dict[str, Any]] = field(default_factory=list)
     _draft_seq: int = 0

@@ -29,6 +29,7 @@ from app.schemas.event import EventCreate
 from app.schemas.event_command import CommandTarget, NewDateRangeDraft, NewLocationDraft
 from app.services import date_range_command_service as ranges
 from app.services.action_history_service import AfterCommit, Snapshot, finish_change, record_action
+from app.services.common import name_key
 from app.services.event_instance_service import cancel_instance, child_instances_on_same_date, set_instance_times
 from app.services.event_service import apply_event_update, build_event, remove_event, set_event_location
 
@@ -85,9 +86,6 @@ class Target:
 
 # --- 대상 찾기 --------------------------------------------------------------------------
 
-
-def _norm(text: str) -> str:
-    return re.sub(r"\s+", "", text).casefold()
 
 
 def _loose(text: str) -> str:
@@ -359,9 +357,9 @@ def _change_location(
 
 
 def find_location(db: Session, user_id: int, name: str) -> Location | None:
-    """이름으로 장소를 찾는다(대소문자·공백 무시)."""
-    key = _norm(name)
-    return next((loc for loc in db.execute(select(Location).where(Location.user_id == user_id)).scalars() if _norm(loc.name) == key), None)
+    """이름으로 장소를 찾는다(괄호 안 설명·대소문자·공백 무시 — "Bahen Centre (이동 10분)"도 "Bahen Centre")."""
+    key = name_key(name)
+    return next((loc for loc in db.execute(select(Location).where(Location.user_id == user_id)).scalars() if name_key(loc.name) == key), None)
 
 
 def delete_event_from_ui(db: Session, event: Event) -> ActionHistory:

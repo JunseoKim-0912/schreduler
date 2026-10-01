@@ -89,3 +89,42 @@ def test_list_question_is_checked_against_the_reply(data: dict) -> None:
 
     assert listed.passed, listed.reasons
     assert not vague.passed and "reply lacks" in vague.reasons[0]
+
+
+def _delete_all_followup(data: dict, second_turn: list, monkeypatch: pytest.MonkeyPatch) -> ev.CaseResult:
+    monkeypatch.setattr(ev.agent.secrets, "token_urlsafe", lambda n: "tok")
+    quiz = [{"event_id": 2, "instance_id": None}]  # seed의 두 번째 일정
+    fakes = iter([
+        FakeResponsesClient([
+            call("search_events", query="물리 퀴즈", date_from=None, date_to=None, weekday=None),
+            call("propose_delete_event", target_ids=quiz, scope="series", inferred_fields=[], draft_id=None),
+            say("물리 퀴즈 반복 전체를 삭제할까요?"),
+        ]),
+        FakeResponsesClient(second_turn),
+    ])
+    return ev.run_case(_case(data, "delete_all_followup"), data["seed"], lambda: next(fakes), "x")
+
+
+def test_any_of_accepts_approval_of_an_earlier_full_delete(data: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    result = _delete_all_followup(data, [call("confirm_pending", token="tok"), say("삭제했어요")], monkeypatch)
+
+    assert result.passed, result.reasons
+
+
+def test_any_of_fails_when_no_option_matches(data: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    result = _delete_all_followup(data, [say("어떤 걸 지울까요?")], monkeypatch)
+
+    assert not result.passed
+    assert all(reason.startswith("turn 2: any_of:") for reason in result.reasons)
+
+
+def test_switch_to_deadline_accepts_no_new_proposal_when_already_a_deadline(data: dict) -> None:
+    deadline = {**STUDY, "title": "ECE360 랩 리포트", "event_type": "deadline", "date": "2026-10-05", "start_time": None, "end_time": "15:00"}
+    fakes = iter([
+        FakeResponsesClient([call("propose_create_event", **deadline), say("마감으로 만들까요?")]),
+        FakeResponsesClient([say("이미 3시 마감으로 되어 있어요. 이대로 만들까요?")]),
+    ])
+
+    result = ev.run_case(_case(data, "draft_switch_to_deadline"), data["seed"], lambda: next(fakes), "x")
+
+    assert result.passed, result.reasons
