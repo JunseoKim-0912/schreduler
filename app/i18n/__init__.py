@@ -108,6 +108,7 @@ MessageKey = Literal[
     "assistant.warning.start_weekday_mismatch",
     "assistant.warning.multiple_targets",
     "assistant.warning.range_in_use",
+    "assistant.warning.similar_exists",
     "assistant.proposal_ready",
     "assistant.limit_with_drafts",
     "assistant.limit_no_drafts",

@@ -16,7 +16,7 @@ from app.models import Base, Event, EventInstance, Location, User
 from app.models.enums import EventInstanceStatus
 from app.services import notification
 from app.services.points import recalculate_points_since
-from tests.assistant_flow import create, find, only_action, run, update
+from tests.assistant_flow import create, find, only_action, propose, run, update
 
 TODAY = date(2026, 9, 26)
 
@@ -288,3 +288,77 @@ def test_one_off_created_by_the_assistant_gets_one_instance_and_notification_job
         [instance] = session.execute(select(EventInstance).where(EventInstance.event_id == event.id)).scalars().all()
         assert (event.is_recurring, instance.date) == (False, date(2026, 10, 1))
     assert _jobs(instance.id) == {"start": datetime(2026, 10, 1, 20), "end": datetime(2026, 10, 1, 21)}
+
+
+# --- 할 일(마감)의 시간을 어시스턴트로 바꾸기 ---------------------------------------------------------
+
+
+def _task(client: TestClient, user_id: int, title: str, due: str, **extra) -> dict:
+    response = client.post("/tasks", json={"title": title, "end_time": due, **extra}, headers=_headers(user_id))
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_changing_a_one_off_deadline_moves_its_single_instance_and_jobs(client, engine, user_id, monkeypatch):
+    task = _task(client, user_id, "MAT389 과제", "2026-10-02T23:30:00")
+    [before] = _instances(engine, task["event_id"])
+
+    confirmed = run(client, monkeypatch, user_id, find(query="MAT389 과제"), update([(task["event_id"], None)], end_time="23:59"))
+
+    [instance] = _instances(engine, task["event_id"])
+    assert instance.id == before.id, "회차를 새로 만들지 않고 그대로 옮긴다"
+    with Session(engine) as session:
+        assert session.get(Event, task["event_id"]).end_time == datetime(2026, 10, 2, 23, 59)
+        assert len(session.execute(select(Event).where(Event.title == "MAT389 과제")).scalars().all()) == 1
+    assert _jobs(instance.id) == {"deadline_reminder": datetime(2026, 10, 1, 23, 59), "end": datetime(2026, 10, 2, 23, 59)}
+
+    response = client.post(f"/actions/{only_action(confirmed)}/undo", headers=_headers(user_id))
+
+    assert response.status_code == 200
+    [restored] = _instances(engine, task["event_id"])
+    assert restored.id == before.id and restored.end_time_override is None
+    with Session(engine) as session:
+        assert session.get(Event, task["event_id"]).end_time == datetime(2026, 10, 2, 23, 30)
+    assert _jobs(restored.id) == {"deadline_reminder": datetime(2026, 10, 1, 23, 30), "end": datetime(2026, 10, 2, 23, 30)}
+
+
+def test_changing_one_occurrence_of_a_repeating_deadline_uses_an_override(client, engine, user_id, monkeypatch):
+    range_id = client.post(
+        "/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-25"}
+    ).json()["id"]
+    task = _task(client, user_id, "주간 퀴즈", "2026-10-02T23:59:00", recurrence_rule="FREQ=WEEKLY;BYDAY=FR", date_range_id=range_id)
+    before = {i.date: i.id for i in _instances(engine, task["event_id"])}
+    target = before[date(2026, 10, 9)]
+
+    run(client, monkeypatch, user_id, find(query="주간 퀴즈", date_from="2026-10-09", date_to="2026-10-09"),
+        update([(task["event_id"], target)], scope="instance", end_time="20:00"))
+
+    after = {i.date: i for i in _instances(engine, task["event_id"])}
+    assert {d: i.id for d, i in after.items()} == before, "회차 수와 id가 그대로"
+    assert after[date(2026, 10, 9)].end_time_override == datetime(2026, 10, 9, 20, 0)
+    assert all(i.end_time_override is None for d, i in after.items() if d != date(2026, 10, 9))
+    assert _jobs(target)["end"] == datetime(2026, 10, 9, 20, 0)
+
+
+def test_creating_a_task_with_the_same_title_nearby_is_warned(client, engine, user_id, monkeypatch):
+    _task(client, user_id, "Project 배포", "2026-10-01T11:30:00")
+
+    chat = propose(client, monkeypatch, user_id, create(title="project  배포", event_type="deadline", date="2026-10-01", end_time="23:30"))
+
+    [card] = chat["proposal"]["items"]
+    assert card["warnings"] == [
+        {"code": "similar_exists", "message": "비슷한 일정이 이미 있어요: Project 배포 (10/1 11:30). 수정하려던 거라면 알려주세요"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("title", "day"),
+    [("Project 배포", "2026-10-09"), ("ECE360 퀴즈", "2026-10-01")],  # 8일 뒤 / 과목 코드만 같은 다른 일정
+)
+def test_no_similar_warning_far_away_or_for_a_different_title(client, engine, user_id, monkeypatch, title, day):
+    _task(client, user_id, "Project 배포", "2026-10-01T11:30:00")
+    _create(client, user_id, "ECE360 Lab", "2026-10-01T14:00:00", "2026-10-01T17:00:00")
+
+    chat = propose(client, monkeypatch, user_id, create(title=title, event_type="deadline", date=day, end_time="23:30"))
+
+    assert [w["code"] for w in chat["proposal"]["items"][0]["warnings"]] == []

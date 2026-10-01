@@ -128,3 +128,33 @@ def test_switch_to_deadline_accepts_no_new_proposal_when_already_a_deadline(data
     result = ev.run_case(_case(data, "draft_switch_to_deadline"), data["seed"], lambda: next(fakes), "x")
 
     assert result.passed, result.reasons
+
+
+def test_changing_an_existing_deadline_must_update_not_create(data: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ev.agent.secrets, "token_urlsafe", lambda n: "tok")
+    case = _case(data, "change_existing_deadline_time")
+    target = [{"event_id": 1, "instance_id": None}]  # 이 케이스의 seed는 MAT389 과제 하나
+    changes = {"title": None, "date": None, "start_time": None, "end_time": "23:59", "importance": None, "location": None}
+    updating = iter([
+        FakeResponsesClient([
+            call("search_events", query="MAT389 과제", date_from=None, date_to=None, weekday=None),
+            call("propose_update_event", target_ids=target, scope="series", changes=changes, inferred_fields=[], draft_id=None),
+            say("이렇게 바꿀까요?"),
+        ]),
+        FakeResponsesClient([call("confirm_pending", token="tok"), say("바꿨어요")]),
+    ])
+    duplicating = iter([
+        FakeResponsesClient([
+            call("propose_create_event", **{**STUDY, "title": "MAT389 과제", "event_type": "deadline", "start_time": None, "end_time": "23:59"}),
+            say("이렇게 만들까요?"),
+        ]),
+        FakeResponsesClient([call("confirm_pending", token="tok"), say("만들었어요")]),
+    ])
+
+    good = ev.run_case(case, data["seed"], lambda: next(updating), "x")
+    bad = ev.run_case(case, data["seed"], lambda: next(duplicating), "x")
+
+    assert good.passed, good.reasons
+    assert not bad.passed
+    assert any("unwanted kinds ['create_event']" in r for r in bad.reasons)
+    assert any("DB events matching" in r for r in bad.reasons), "확정 후 같은 제목 할 일이 둘이 되면 실패"

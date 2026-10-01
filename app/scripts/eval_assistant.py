@@ -43,6 +43,7 @@ from app.models import (
     PendingProposal,
     User,
 )
+from app.models.enums import EventType
 from app.schemas.event import EventCreate
 from app.services import event_service
 from app.services.assistant import agent
@@ -92,6 +93,21 @@ def seed_database(db: Session, seed: dict[str, Any], language: str) -> User:
         db.add(Location(user_id=user.id, name=spec["name"], default_travel_minutes=spec["travel_minutes"]))
     db.commit()
     for spec in seed.get("events", []):
+        if not spec.get("days"):
+            # 단발 일정·할 일: start(없으면 마감)~end
+            deadline = spec.get("type") == "deadline"
+            event_service.create_event(
+                db,
+                EventCreate(
+                    user_id=user.id,
+                    title=spec["title"],
+                    event_type=EventType.DEADLINE if deadline else EventType.SCHEDULED,
+                    start_time=None if deadline else _local(spec["start"]),
+                    end_time=_local(spec["end"]),
+                    importance=spec.get("importance"),
+                ),
+            )
+            continue
         if spec.get("range") not in ranges:
             continue
         event_service.create_event(

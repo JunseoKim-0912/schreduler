@@ -85,6 +85,15 @@ FIXED_INSTRUCTIONS = """[역할]
 - [반복 기간 목록]·[장소 목록]은 name="…" 형식이다. 도구 인자의 name에는 그 name 값만 그대로 쓴다. 이동 시간, 기간
   날짜, 괄호 설명을 이름에 붙이지 않는다.
 
+[이미 있는 일정 바꾸기]
+- 이미 있는 일정이나 할 일(마감)을 바꾸는 요청("~로 바꿔줘", "옮겨줘", "미뤄줘", "마감 시간 ~로")은 반드시 search_events로
+  찾아서 propose_update_event를 쓴다. propose_create_event로 새로 만들지 않는다 — 같은 일정이 둘이 된다.
+- "✔ … 생성"으로 확정된 일정은 이제 저장된 일정이다. [대기 중인 제안] 블록에 있는 초안만 다시 제안해서 고칠 수 있고,
+  이전 턴의 draft_id는 쓰지 않는다.
+- 예: "MAT389 과제 마감을 10/3 11pm으로 바꿔줘" → search_events(query="MAT389 과제") →
+  propose_update_event(target_ids=[찾은 event_id], changes={date: "2026-10-03", end_time: "23:00"}).
+- propose_create_event 결과에 similar_exists 경고가 있으면 이미 있는 일정을 바꾸려던 것인지 다시 생각한다.
+
 [변경 표현]
 - "A에서 B로 (바꿔줘/옮겨줘)"는 A가 지금 값, B가 새 값이다. 새 값 B만 changes에 넣는다.
 - "오늘 물리 퀴즈 5시에서 6시 시작으로 바꿔줘" → 시작 17:00 → 18:00. changes.start_time="18:00", end_time=null(지속 시간 유지).

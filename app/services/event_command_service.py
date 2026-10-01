@@ -130,6 +130,22 @@ def match_events(db: Session, user_id: int, title: str) -> list[Event]:
     return by_word + similar
 
 
+def same_title_events(db: Session, user_id: int, title: str) -> list[Event]:
+    """새로 만들려는 일정과 사실상 같은 제목의 일정: 대소문자·공백·기호를 무시해 같거나, 한쪽이 다른 쪽을 포함하거나(짧은 쪽이
+    4자 이상), 아주 비슷한 제목. match_events와 달리 과목 코드만 같은 일정('ECE360 Lab' vs 'ECE360 Quiz')은 넣지 않는다."""
+    key = _loose(title)
+    if not key:
+        return []
+    found = []
+    for event in db.execute(select(Event).where(Event.user_id == user_id, Event.parent_event_id.is_(None)).order_by(Event.id)).scalars():
+        other = _loose(event.title)
+        shorter = min(len(key), len(other))
+        contains = shorter >= 4 and (key in other or other in key)
+        if key == other or contains or difflib.SequenceMatcher(None, key, other).ratio() >= 0.85:
+            found.append(event)
+    return found
+
+
 def similar_events(db: Session, user_id: int, title: str, limit: int = 3, cutoff: float = 0.6) -> list[Event]:
     """하나도 맞지 않을 때 보여줄 비슷한 제목 (오타: 'ECE360 Lecture' → 'ESC360 Lecture')."""
     events = db.execute(

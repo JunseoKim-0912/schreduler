@@ -255,3 +255,16 @@ event_parse_service에 엉켜 있는 규칙을 **순수 함수 모듈**(예: `ap
   - `draft_remove_recurrence`(2회차): 기준 시각 9/27이 일요일이라 "이번 주 수요일"은 날짜 규칙(월~일)상 9/23이 맞다.
     → 기준 시각을 월요일(9/28)로 바꿈.
 
+### 11.12 할 일 시간 수정이 중복 생성된 버그 (2026-10-01)
+
+- **원인 (LLM):** 세션 4에서 "Project 배포 마감 시간 오후 11시 30분으로 바꿔줄래?"에 모델이 `search_events`·`propose_update_event`가
+  아니라 `propose_create_event`(이미 확정된 이전 턴의 draft_id d1)를 불렀고 "수정했어요"라고 답했다. [만들기]로 제안 21이 확정돼
+  event 49(23:30)가 event 48(11:30) 옆에 새로 생겼다 (action 50·51). 수정 실행 경로 자체는 문제없다 — 단발 마감은 회차를
+  그대로 옮기고 알림을 다시 맞추며, 반복 마감의 한 회차는 override로 바뀐다 (`test_single_instances.py`로 확인).
+- **수정:** 프롬프트에 "[이미 있는 일정 바꾸기]" — 저장된 일정·할 일을 바꾸는 요청은 반드시 search_events → propose_update_event,
+  확정된 초안의 draft_id는 쓰지 않음, 예시 "MAT389 과제 마감을 10/3 11pm으로 바꿔줘".
+- **안전망:** `propose_create_event`가 제목이 사실상 같은 일정·할 일(`same_title_events`: 대소문자·공백·기호 무시 일치, 4자 이상
+  포함, 유사도 0.85 이상 — 과목 코드만 같은 건 제외)을 앞뒤 7일 안에서 찾으면 경고 `similar_exists`("비슷한 일정이 이미
+  있어요: Project 배포 (10/1 11:30). 수정하려던 거라면 알려주세요")를 카드에 붙인다.
+- **평가 세트:** `change_existing_deadline_time` 추가 (seed에 단발 마감 지원). 실제 평가는 이번에 돌리지 않았다.
+

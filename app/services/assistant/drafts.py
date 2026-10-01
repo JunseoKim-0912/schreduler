@@ -22,7 +22,7 @@ from app.schemas.event import EventCreate
 from app.services import date_range_command_service as ranges
 from app.services import draft_rules as rules
 from app.services.assistant.context import Draft, DraftKind, TurnContext
-from app.services.event_command_service import CommandDescription, Target, find_location, new_times
+from app.services.event_command_service import CommandDescription, Target, find_location, new_times, same_title_events
 
 DEFAULT_DURATION_MINUTES = 60
 DEFAULT_DEADLINE = "23:59"
@@ -214,6 +214,30 @@ def _check_times(problems: _Problems, spec: rules.DraftSpec, now: datetime, *, a
 
 # --- 생성 ----------------------------------------------------------------------------
 
+SIMILAR_WINDOW = timedelta(days=7)
+
+
+def _warn_similar_existing(ctx: TurnContext, problems: _Problems, title: str, day: date) -> None:
+    """제목이 같은(느슨하게) 일정·할 일이 앞뒤 7일 안에 이미 있으면 경고한다. "마감 시간 바꿔줘"를 새로 만들기로 처리해
+    할 일이 둘이 되는 것을 사용자가 카드에서 알아챌 수 있게 하는 안전망이다."""
+    nearest: tuple[int, Event, datetime] | None = None
+    for event in same_title_events(ctx.db, ctx.user.id, title):
+        times = [
+            i.effective_start or i.effective_end
+            for i in event.instances
+            if i.status != EventInstanceStatus.CANCELLED and abs(i.date - day) <= SIMILAR_WINDOW
+        ]
+        if not event.instances and abs(event.anchor_time.date() - day) <= SIMILAR_WINDOW:
+            times.append(event.start_time or event.end_time)
+        for when in times:
+            distance = abs((when.date() - day).days)
+            if nearest is None or distance < nearest[0]:
+                nearest = (distance, event, when)
+    if nearest is not None:
+        _, event, when = nearest
+        problems.warn("similar_exists", title=event.title, when=f"{when.month}/{when.day} {when:%H:%M}")
+
+
 
 def propose_create_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     problems = _Problems(ctx)
@@ -306,6 +330,7 @@ def propose_create_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     rule = _check_times(problems, spec, ctx.now) or rule
     if problems.errors:
         return _failed(problems, inferred)
+    _warn_similar_existing(ctx, problems, title, shown_day)
 
     payload = {
         "event": {

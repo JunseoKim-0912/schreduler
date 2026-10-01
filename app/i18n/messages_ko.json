@@ -42,6 +42,7 @@
   "assistant.warning.start_weekday_mismatch": "반복 시작일이 반복 요일과 달라요",
   "assistant.warning.multiple_targets": "일정 {count}개가 한꺼번에 바뀌어요",
   "assistant.warning.range_in_use": "이 기간을 쓰는 일정이 {count}개 있어요",
+  "assistant.warning.similar_exists": "비슷한 일정이 이미 있어요: {title} ({when}). 수정하려던 거라면 알려주세요",
   "assistant.proposal_ready": "이렇게 할까요? 확인해 주세요.",
   "assistant.limit_with_drafts": "시간이 오래 걸려 지금까지 만든 초안을 보여드려요. 확인해 주세요.",
   "assistant.limit_no_drafts": "요청을 끝까지 처리하지 못했어요. 조금 더 구체적으로 말해 줄래요?",

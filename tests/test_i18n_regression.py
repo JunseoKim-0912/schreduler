@@ -225,6 +225,9 @@ def _assistant_texts(client: TestClient, world: dict[str, int], monkeypatch: pyt
     )
     [card] = chat["proposal"]["items"]
     done = confirm(client, world["user"], chat)
+    # 되돌려서 다음 언어 차례에 같은 상태로 시작한다 (남겨 두면 "비슷한 일정이 이미 있어요" 경고가 붙는다)
+    for action in done["executed"]:
+        client.post(f"/actions/{action['action_id']}/undo", headers={"X-User-Id": str(world["user"])})
     fake = agent.ResponsesClient()  # propose()가 바꿔 둔 가짜 클라이언트
     sent = json.dumps(fake.requests[0].input_items, ensure_ascii=False)
     return [w["message"] for w in card["warnings"]] + [done["reply"]], sent

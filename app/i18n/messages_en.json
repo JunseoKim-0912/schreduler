@@ -42,6 +42,7 @@
   "assistant.warning.start_weekday_mismatch": "The start date is not on a repeat day",
   "assistant.warning.multiple_targets": "{count} events change at once",
   "assistant.warning.range_in_use": "{count} events use this period",
+  "assistant.warning.similar_exists": "A similar event already exists: {title} ({when}). Let me know if you meant to change it",
   "assistant.proposal_ready": "Shall I go ahead? Please check.",
   "assistant.limit_with_drafts": "This took a while, so here is the draft so far. Please check it.",
   "assistant.limit_no_drafts": "I couldn't finish that request. Could you say it a bit more specifically?",
