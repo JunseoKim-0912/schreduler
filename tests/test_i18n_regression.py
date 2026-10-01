@@ -19,6 +19,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.clock import utc_now_naive
 from app.core.config import settings
 from app.core.db import get_db
 from app.i18n import load_notification_templates
@@ -197,7 +198,7 @@ def _notifications(engine, world: dict[str, int], pushes: list, telegrams: list)
         for scope, ref_event_id in ((EngagementScope.EVENT, world["scheduled_event"]), (EngagementScope.GLOBAL, None)):
             state = get_or_create_engagement_state(session, world["user"], scope, ref_event_id)
             state.escalation_stage = state.escalation_stage.NORMAL
-            state.last_response_at = datetime.utcnow() - timedelta(weeks=1)
+            state.last_response_at = utc_now_naive() - timedelta(weeks=1)
             session.commit()
             evaluate_escalation(session, state)
 

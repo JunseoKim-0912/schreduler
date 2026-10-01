@@ -20,6 +20,7 @@ from sqlalchemy import DateTime, Enum, inspect, select
 from sqlalchemy import Date as SADate
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today, local_wall_now
 from app.core.exceptions import ConflictError, NotFoundError
 from app.i18n import render_message
 from app.models.action_history import ActionHistory
@@ -138,7 +139,7 @@ def record_action(
 
 def recalculate_points_for_dates(db: Session, user_id: int, dates: list[date]) -> None:
     """지난 날짜의 회차가 바뀌었으면 그날부터 어제까지 포인트 원장을 다시 계산한다 (늦은 완료와 같은 로직)."""
-    past = [day for day in dates if day < date.today()]
+    past = [day for day in dates if day < local_today()]
     if past:
         recalculate_points_since(db, user_id, min(past))
 
@@ -292,7 +293,7 @@ def undo_action(db: Session, user: User, action_id: int) -> ActionHistory:
         touched_dates += _restore(db, action.snapshot_before)
         _delete_unused_created_locations(db, action)
 
-    action.undone_at = datetime.now()
+    action.undone_at = local_wall_now()
     db.commit()
     db.refresh(action)
     affected = action.affected_ids or {}

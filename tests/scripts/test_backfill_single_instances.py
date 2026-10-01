@@ -93,7 +93,7 @@ def test_running_twice_does_not_duplicate(engine, ids):
 
 def test_main_lists_targets_without_changing_the_db_unless_apply(engine, ids, monkeypatch, capsys):
     monkeypatch.setattr(script, "SessionLocal", sessionmaker(bind=engine))
-    monkeypatch.setattr(script, "date", type("FrozenDate", (date,), {"today": classmethod(lambda cls: TODAY)}))
+    monkeypatch.setattr(script, "local_today", lambda: TODAY)
 
     script.main([])
     out = capsys.readouterr().out

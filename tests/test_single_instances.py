@@ -23,7 +23,7 @@ TODAY = date(2026, 9, 26)
 
 @pytest.fixture(autouse=True)
 def frozen_today():
-    with freeze_time("2026-09-26 09:00:00"):
+    with freeze_time("2026-09-26 13:00:00"):  # 토론토 09:00
         yield
 
 

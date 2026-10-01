@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.clock import utc_now_naive
 from app.core.config import settings
 from app.core.db import get_db
 from app.main import app
@@ -275,7 +276,7 @@ def test_stats_counts_recent_categories_and_zero_fills_the_rest(
     client: TestClient, engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fail_if_llm_called(monkeypatch)
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
@@ -312,7 +313,7 @@ def test_stats_respects_custom_days_window(
     client: TestClient, engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fail_if_llm_called(monkeypatch)
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
@@ -331,7 +332,7 @@ def test_stats_filters_by_user_id(
     client: TestClient, engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fail_if_llm_called(monkeypatch)
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
     with Session(engine) as session:
         user1 = User(name="June", preferred_language="ko")

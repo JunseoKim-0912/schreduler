@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today, local_wall_now
 from app.core.exceptions import NotFoundError
 from app.models.persona_conversation import PersonaConversation
 from app.models.user import User
@@ -82,11 +83,11 @@ def record_turn(
             persona_id=user.selected_persona_id,
             context_type=context_type,
             messages=[],
-            conversation_date=day or date.today(),
+            conversation_date=day or local_today(),
         )
         db.add(conversation)
 
-    now = datetime.now()
+    now = local_wall_now()
     new_messages = [
         ConversationMessage(role="user", content=user_message, created_at=now),
         ConversationMessage(

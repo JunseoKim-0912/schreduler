@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.clock import local_wall_now
 from app.models.base import Base
 from app.models.enums import ActionSource, ActionType
 
@@ -29,7 +30,7 @@ class ActionHistory(Base):
     summary_text: Mapped[str] = mapped_column(String(500))
     snapshot_before: Mapped[dict[str, Any]] = mapped_column(JSON)
     affected_ids: Mapped[dict[str, Any]] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=local_wall_now)
     undone_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped["User"] = relationship()

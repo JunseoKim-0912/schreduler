@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import JSON, Date, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.clock import local_wall_now
 from app.models.base import Base
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ class PersonaConversation(Base):
     messages: Mapped[list[Any]] = mapped_column(JSON)
     # (사용자, 페르소나, 상황, 날짜)로 "오늘 대화"를 찾는다. 날짜가 바뀌면 새 대화가 된다 (체크인 요약이 그날 기준).
     conversation_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=datetime.now)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=local_wall_now)
 
     user: Mapped["User"] = relationship(back_populates="persona_conversations")
     persona: Mapped["Persona"] = relationship(back_populates="conversations")

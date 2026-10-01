@@ -30,6 +30,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.core.clock import local_wall_now
 from app.core.config import settings
 from app.models import (
     AssistantMessage,
@@ -474,7 +475,7 @@ def run(model: str, effort: str, only: set[str] | None, workers: int) -> dict[st
         "model": model,
         "effort_requested": effort,
         "effort_sent": sent_effort,
-        "run_at": datetime.now().isoformat(timespec="seconds"),
+        "run_at": local_wall_now().isoformat(timespec="seconds"),
         "wall_seconds": round(time_module.perf_counter() - started, 1),
         "prices": {**PRICES.get(model, {}), "checked": PRICES_CHECKED},
         "summary": summarize(results),
@@ -553,7 +554,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     print_report(report)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = local_wall_now().strftime("%Y%m%d-%H%M%S")
     path = RESULTS_DIR / f"{report['model']}_{report['effort_sent']}_{stamp}.json"
     path.write_text(json.dumps(report, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     print(f"\n저장: {path.relative_to(ROOT)}")

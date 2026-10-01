@@ -8,6 +8,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today
 from app.core.db import SessionLocal
 from app.core.exceptions import NotFoundError
 from app.core.scheduler import scheduler
@@ -75,7 +76,7 @@ def handle_daily_checkin_message(
     if user is None:
         raise NotFoundError(f"user_id {user_id} does not exist")
 
-    day = target_date or dt_date.today()
+    day = target_date or local_today()
     conversation = resolve_conversation(db, user, DAILY_CHECKIN_CONTEXT_TYPE, conversation_id)
     if conversation is None and user.selected_persona_id is not None:
         # 탭을 옮겼다 오거나 새로고침해도 그 페르소나의 오늘 대화에 이어서 쓴다.

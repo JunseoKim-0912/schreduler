@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import get_current_user
+from app.core.clock import local_today
 from app.core.db import get_db
 from app.core.exceptions import NotFoundError
 from app.core.openapi import CONFLICT, CURRENT_USER, NOT_FOUND
@@ -48,7 +48,7 @@ def get_current_conversation(
     탭을 옮겼다 오거나 페르소나를 바꿨다 돌아와도 이 대화를 불러와 이어 간다. 날짜가 바뀌면 새 대화다.
     """
     _persona_or_404(db, persona_id)
-    return persona_conversation_service.current_conversation(db, user.id, persona_id, _CONTEXTS[context], date.today())
+    return persona_conversation_service.current_conversation(db, user.id, persona_id, _CONTEXTS[context], local_today())
 
 
 @router.post(
@@ -66,7 +66,7 @@ def start_conversation(
 ) -> PersonaConversation:
     """[새 대화]: 오늘의 새 대화를 시작한다. 이전 대화는 지우지 않고 `/users/me/persona-conversations`에 남는다."""
     _persona_or_404(db, persona_id)
-    return persona_conversation_service.start_conversation(db, user, persona_id, _CONTEXTS[context], date.today())
+    return persona_conversation_service.start_conversation(db, user, persona_id, _CONTEXTS[context], local_today())
 
 
 @router.post("", response_model=PersonaRead, status_code=status.HTTP_201_CREATED, summary="페르소나 생성", responses=CONFLICT)

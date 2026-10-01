@@ -13,6 +13,7 @@ from datetime import timedelta
 from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session, contains_eager
 
+from app.core.clock import local_today
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
 from app.models.enums import EventInstanceStatus, Importance
@@ -147,7 +148,7 @@ def recalculate_points_since(
     달라지므로 어제까지 전부 다시 계산한다. 오늘 이후는 get_points_summary가 실시간으로 계산하고
     자정 잡이 확정하므로 여기서는 쓰지 않는다.
     """
-    today = today or dt_date.today()
+    today = today or local_today()
     # 일정이 없는 날은 점수가 항상 0이고 배율도 붙지 않으므로, 일정 회차가 있거나 이미 원장 행이 있는 날만
     # 다시 계산한다. 몇 년 전 할 일을 완료해도 그 사이의 빈 날짜를 전부 쓰지 않는다.
     # 취소된 회차도 포함한다 — 취소 전에 기록된 그날 점수를 다시 계산해야 하기 때문이다.
@@ -172,7 +173,7 @@ def run_daily_points_job(target_date: dt_date | None = None) -> None:
 
     한 사용자에서 실패해도 나머지 사용자는 계속 처리한다.
     """
-    target_date = target_date or dt_date.today() - timedelta(days=1)
+    target_date = target_date or local_today() - timedelta(days=1)
     with SessionLocal() as db:
         user_ids = db.execute(select(User.id)).scalars().all()
         for user_id in user_ids:
@@ -232,7 +233,7 @@ def get_points_summary(db: Session, user_id: int, today: dt_date | None = None) 
     어제까지는 PointsLedger 합계를 쓰고 오늘은 실시간 값을 더한다. 오늘 날짜의 ledger 행이
     있더라도(수동 실행 등) 합계에서 제외해 이중 집계를 막는다.
     """
-    today = today or dt_date.today()
+    today = today or local_today()
     week_start = today - timedelta(days=today.weekday())
     today_result = calculate_daily_points(db, user_id, today)
 

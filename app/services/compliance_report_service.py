@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.clock import utc_now_naive
 from app.core.exceptions import ConflictError, NotFoundError
 from app.models.compliance_report import ComplianceReport
 from app.models.enums import EventInstanceStatus, NonComplianceCategory
@@ -87,7 +88,7 @@ def get_compliance_report_stats(
     -> event 조인). 한 건도 없는 카테고리도 count=0으로 항상 포함해서, 클라이언트가
     "이 카테고리는 응답에 아예 없음"을 따로 처리할 필요가 없게 한다.
     """
-    until = datetime.utcnow()
+    until = utc_now_naive()
     since = until - timedelta(days=days)
 
     stmt = select(ComplianceReport.reason_category, func.count(ComplianceReport.id)).where(

@@ -19,6 +19,7 @@ from datetime import date
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today
 from app.core.db import SessionLocal
 from app.models.event import Event
 from app.models.event_instance import EventInstance
@@ -51,7 +52,7 @@ def _describe(event: Event) -> str:
 
 def main(argv: list[str]) -> int:
     apply = "--apply" in argv
-    today = date.today()
+    today = local_today()
     with SessionLocal() as db:
         upcoming, past = find_candidates(db, today)
         print(f"기준 날짜: {today} (이 날짜 이후 일정만 채움)")

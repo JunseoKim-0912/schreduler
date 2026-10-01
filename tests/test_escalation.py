@@ -5,6 +5,7 @@ from freezegun import freeze_time
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.clock import utc_now_naive
 from app.models import Base, EngagementScope, EngagementState, EscalationStage, User
 from app.services import engagement_service
 from app.services.engagement_service import (
@@ -53,7 +54,7 @@ def test_escalation_progresses_through_stages_as_time_passes(
     session: Session, no_real_telegram_calls: list
 ) -> None:
     """freezegun으로 실제 시간을 흐르게 하면서 now=를 넘기지 않는 실제 운영
-    경로(evaluate_escalation이 내부에서 datetime.utcnow()를 쓰는 경로)를 검증한다.
+    경로(evaluate_escalation이 내부에서 utc_now_naive()를 쓰는 경로)를 검증한다.
     """
     with freeze_time("2026-01-01 09:00:00") as frozen_time:
         user = _make_user(session)

@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.clock import local_wall_now
 from app.core.exceptions import NotFoundError
 from app.models.enums import EventInstanceStatus, EventType
 from app.models.event import Event
@@ -57,7 +58,7 @@ def to_task_read(event: Event, instance: EventInstance | None, now: datetime) ->
 
 
 def list_tasks(db: Session, user_id: int, now: datetime | None = None) -> list[TaskRead]:
-    now = now or datetime.now()
+    now = now or local_wall_now()
     events = db.execute(
         select(Event)
         .where(Event.user_id == user_id, Event.event_type == EventType.DEADLINE)
@@ -88,7 +89,7 @@ def create_task(db: Session, user: User, data: TaskCreate, now: datetime | None 
         ),
     )
     # 단발성 task의 회차(마감일 하나)는 create_event가 다른 단발 일정과 같은 방식으로 만든다.
-    return to_task_read(event, current_instance(event), now or datetime.now())
+    return to_task_read(event, current_instance(event), now or local_wall_now())
 
 
 def complete_task(db: Session, user: User, event_instance_id: int, now: datetime | None = None) -> TaskRead:
@@ -101,4 +102,4 @@ def complete_task(db: Session, user: User, event_instance_id: int, now: datetime
         raise TaskNotFoundError(f"task instance {event_instance_id} not found")
 
     instance = complete_event_instance(db, instance)
-    return to_task_read(instance.event, instance, now or datetime.now())
+    return to_task_read(instance.event, instance, now or local_wall_now())

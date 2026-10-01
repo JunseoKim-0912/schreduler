@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Enum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.clock import utc_now_naive
 from app.models.base import Base
 from app.models.enums import EngagementScope, EscalationStage
 
@@ -31,7 +32,7 @@ class EngagementState(Base):
         Enum(EscalationStage, native_enum=False, name="escalation_stage"),
         default=EscalationStage.NORMAL,
     )
-    stage_updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    stage_updated_at: Mapped[datetime] = mapped_column(default=utc_now_naive)
 
     user: Mapped["User"] = relationship(back_populates="engagement_states")
     ref_event: Mapped["Event | None"] = relationship()

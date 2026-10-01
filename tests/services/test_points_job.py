@@ -80,7 +80,7 @@ def test_register_daily_points_job_is_idempotent() -> None:
     assert len([job for job in scheduler.get_jobs() if job.id == DAILY_POINTS_JOB_ID]) == 1
 
 
-@freeze_time("2026-09-25 00:00:05")
+@freeze_time("2026-09-25 04:00:05")  # 토론토 00:00:05
 def test_job_records_previous_day_for_every_user(engine) -> None:
     yesterday = date(2026, 9, 24)
     with Session(engine) as session:
@@ -98,7 +98,7 @@ def test_job_records_previous_day_for_every_user(engine) -> None:
     assert len(entries) == 3  # 전날 일정이 없는 사용자도 0점으로 기록된다
 
 
-@freeze_time("2026-09-25 00:00:05")
+@freeze_time("2026-09-25 04:00:05")  # 토론토 00:00:05
 def test_job_rerun_updates_instead_of_duplicating(engine) -> None:
     with Session(engine) as session:
         _user_with_done_event(session, "June", date(2026, 9, 24), Importance.MUST)

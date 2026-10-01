@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.clock import local_today, local_wall_now
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
@@ -172,7 +173,7 @@ def sync_instance_notifications(instance: EventInstance, now: datetime | None = 
     remove_instance_notifications(instance.id)
     if instance.status != EventInstanceStatus.PENDING:
         return
-    now = now or datetime.now()
+    now = now or local_wall_now()
     for kind, run_date in _notification_times(instance):
         if run_date > now:
             _add_notification_job(instance.id, kind, run_date)
@@ -203,7 +204,7 @@ def sync_notifications(
 def register_upcoming_notifications(today: date | None = None) -> int:
     """서버 시작 시 대기 중인 회차들의 알림 job을 다시 등록하고, 등록한 회차 수를 돌려준다.
     어제 날짜부터 본다 — 전날 시작해 자정을 넘기는 일정의 종료 알림이 남아 있을 수 있다."""
-    since = (today or date.today()) - timedelta(days=1)
+    since = (today or local_today()) - timedelta(days=1)
     try:
         with SessionLocal() as db:
             instances = db.execute(

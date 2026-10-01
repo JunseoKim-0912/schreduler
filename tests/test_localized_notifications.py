@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.core.clock import utc_now_naive
 from app.models import Base, EngagementScope, Event, EventInstance, EventInstanceStatus, User
 from app.services import daily_checkin as daily_checkin_module
 from app.services import engagement_service
@@ -134,7 +135,7 @@ def _escalate(session: Session, language: str, scope: EngagementScope, weeks: in
         session.flush()
         ref_event_id = event.id
     state = get_or_create_engagement_state(session, user.id, scope, ref_event_id)
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=weeks)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=weeks)
     session.commit()
     evaluate_escalation(session, state)
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
@@ -23,6 +23,16 @@ def local_now() -> datetime:
 
 def local_today() -> date:
     return local_now().date()
+
+
+def local_wall_now() -> datetime:
+    """Naive wall-clock time in the app timezone — the format every stored event, instance and action time uses."""
+    return local_now().replace(tzinfo=None)
+
+
+def utc_now_naive() -> datetime:
+    """Naive UTC — the stored format of compliance_reports.created_at and engagement_states times."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def week_label(day: date, today: date) -> str:

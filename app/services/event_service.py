@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.child_events.service import create_child_event, get_travel_child_event, list_child_events
+from app.core.clock import local_today
 from app.core.exceptions import InvalidInputError
 from app.models.enums import EventInstanceStatus, EventType
 from app.models.event import Event
@@ -94,7 +95,7 @@ def set_event_location(db: Session, event: Event, location: Location | None, tod
       취소돼 있던 것(장소를 뺐다가 다시 넣은 경우)은 되살린다.
     - 삭제: 연결을 끊고 앞으로 남은 이동 child 회차만 취소한다. 지난 기록은 그대로 둔다.
     """
-    today = today or date.today()
+    today = today or local_today()
     result = LocationChange()
     event.location = location
     child = get_travel_child_event(db, event.id)

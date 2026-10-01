@@ -20,7 +20,7 @@ from app.models import (
     User,
 )
 
-NOW = "2026-09-24 12:00:00"
+NOW = "2026-09-24 16:00:00"  # UTC로 고정 → 토론토(앱 시간대) 12:00
 
 
 @pytest.fixture

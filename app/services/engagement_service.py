@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import utc_now_naive
 from app.core.db import SessionLocal
 from app.core.scheduler import scheduler
 from app.i18n import render_notification
@@ -55,7 +56,7 @@ def get_or_create_engagement_state(
     if state is not None:
         return state
 
-    now = datetime.utcnow()
+    now = utc_now_naive()
     state = EngagementState(
         user_id=user_id,
         scope=scope,
@@ -72,7 +73,7 @@ def get_or_create_engagement_state(
 
 def record_response(db: Session, state: EngagementState) -> None:
     """사용자가 응답했을 때 즉시 NORMAL로 리셋한다 (FR-4-1: "응답 시 즉시 리셋")."""
-    now = datetime.utcnow()
+    now = utc_now_naive()
     state.last_response_at = now
     state.escalation_stage = EscalationStage.NORMAL
     state.stage_updated_at = now
@@ -90,7 +91,7 @@ def evaluate_escalation(
     메시지를 보낸 뒤로는 응답해서 리셋되기 전까지 더 이상 아무것도 하지 않는다
     (완전 중단).
     """
-    now = now or datetime.utcnow()
+    now = now or utc_now_naive()
     if state.last_response_at is None:
         return state.escalation_stage
 
@@ -131,7 +132,7 @@ def run_escalation_check() -> None:
     """등록된 모든 EngagementState를 한 번씩 평가한다. 스케줄러가 주기적으로 호출한다."""
     with SessionLocal() as db:
         states = db.execute(select(EngagementState)).scalars().all()
-        now = datetime.utcnow()
+        now = utc_now_naive()
         for state in states:
             evaluate_escalation(db, state, now=now)
 

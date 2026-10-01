@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.clock import utc_now_naive
 from app.models.base import Base
 from app.models.enums import NonComplianceCategory
 
@@ -27,6 +28,6 @@ class ComplianceReport(Base):
     )
     reason_text: Mapped[str | None] = mapped_column(String(150), nullable=True)
     llm_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now_naive)
 
     event_instance: Mapped["EventInstance"] = relationship(back_populates="compliance_reports")

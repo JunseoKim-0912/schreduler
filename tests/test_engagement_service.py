@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
+from app.core.clock import utc_now_naive
 from app.models import Base, Event, EngagementScope, EngagementState, EscalationStage, User
 from app.services import engagement_service
 from app.services.engagement_service import (
@@ -89,14 +90,14 @@ def test_record_response_resets_to_normal(session: Session) -> None:
     user = _make_user(session)
     state = get_or_create_engagement_state(session, user.id, EngagementScope.GLOBAL)
     state.escalation_stage = EscalationStage.WEEK_2_MUTED
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=2)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=2)
     session.commit()
 
     record_response(session, state)
 
     assert state.escalation_stage == EscalationStage.NORMAL
     assert state.last_response_at is not None
-    assert datetime.utcnow() - state.last_response_at < timedelta(seconds=5)
+    assert utc_now_naive() - state.last_response_at < timedelta(seconds=5)
 
 
 @pytest.mark.parametrize(
@@ -117,7 +118,7 @@ def test_evaluate_escalation_picks_correct_stage(
 ) -> None:
     user = _make_user(session)
     state = get_or_create_engagement_state(session, user.id, EngagementScope.GLOBAL)
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=elapsed_weeks)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=elapsed_weeks)
     session.commit()
 
     result = evaluate_escalation(session, state)
@@ -132,17 +133,17 @@ def test_evaluate_escalation_sends_telegram_message_only_on_week1_and_week3(
     user = _make_user(session)
     state = get_or_create_engagement_state(session, user.id, EngagementScope.GLOBAL)
 
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=1)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=1)
     session.commit()
     evaluate_escalation(session, state)
     assert len(no_real_telegram_calls) == 1  # week 1 메시지
 
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=2)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=2)
     session.commit()
     evaluate_escalation(session, state)
     assert len(no_real_telegram_calls) == 1  # week 2는 mute라 추가 발송 없음
 
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=3)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=3)
     session.commit()
     evaluate_escalation(session, state)
     assert len(no_real_telegram_calls) == 2  # week 3 최종 메시지
@@ -153,7 +154,7 @@ def test_evaluate_escalation_does_not_resend_for_same_stage(
 ) -> None:
     user = _make_user(session)
     state = get_or_create_engagement_state(session, user.id, EngagementScope.GLOBAL)
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=1)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=1)
     session.commit()
 
     evaluate_escalation(session, state)
@@ -168,7 +169,7 @@ def test_evaluate_escalation_stays_silent_forever_after_week3_until_reset(
 ) -> None:
     user = _make_user(session)
     state = get_or_create_engagement_state(session, user.id, EngagementScope.GLOBAL)
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=5)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=5)
     session.commit()
 
     evaluate_escalation(session, state)
@@ -176,7 +177,7 @@ def test_evaluate_escalation_stays_silent_forever_after_week3_until_reset(
     assert state.escalation_stage == EscalationStage.WEEK_3_FINAL
 
     # 훨씬 더 지나도 (이미 완전 중단 상태) 다시 보내지 않는다.
-    later = datetime.utcnow() + timedelta(weeks=10)
+    later = utc_now_naive() + timedelta(weeks=10)
     evaluate_escalation(session, state, now=later)
     assert len(no_real_telegram_calls) == 1
     assert state.escalation_stage == EscalationStage.WEEK_3_FINAL
@@ -185,7 +186,7 @@ def test_evaluate_escalation_stays_silent_forever_after_week3_until_reset(
     record_response(session, state)
     assert state.escalation_stage == EscalationStage.NORMAL
 
-    state.last_response_at = datetime.utcnow() - timedelta(weeks=1)
+    state.last_response_at = utc_now_naive() - timedelta(weeks=1)
     session.commit()
     evaluate_escalation(session, state)
     assert len(no_real_telegram_calls) == 2
