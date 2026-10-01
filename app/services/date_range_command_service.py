@@ -1,4 +1,4 @@
-"""반복 기간(ImportantDateRange)의 생성·수정·삭제 — 자연어 요청과 화면 버튼이 같이 쓰는 경로.
+"""반복 기간(ImportantDateRange)의 생성·수정·삭제 — 어시스턴트와 화면 버튼이 같이 쓰는 경로.
 
 모든 변경은 변경 전 스냅샷과 함께 ActionHistory에 한 건으로 기록되어 되돌릴 수 있다. 기간이 바뀌면 그 기간을
 쓰는 반복 일정의 회차를 다시 맞춘다: 늘어난 날짜의 회차를 만들고, 범위 밖으로 나간 대기(pending) 회차는
@@ -84,15 +84,6 @@ def usage_counts(db: Session, user_id: int) -> dict[int, int]:
     return {range_id: count for range_id, count in rows}
 
 
-def current_range(db: Session, user_id: int, today: date) -> ImportantDateRange | None:
-    """반복 종료를 물을 때 제안할 기간: 오늘이 들어 있는 기간, 없으면 가장 늦게 끝나는 기간."""
-    ranges = user_ranges(db, user_id)
-    containing = [r for r in ranges if r.start_date <= today <= r.end_date]
-    if containing:
-        return max(containing, key=lambda r: r.end_date)
-    return max(ranges, key=lambda r: r.end_date) if ranges else None
-
-
 # --- 날짜·이름 --------------------------------------------------------------------
 
 
@@ -118,15 +109,6 @@ def resolve_range_dates(start: str | None, end: str, today: date, default_start:
     if end_day < start_day:
         raise InvalidInputError("end_date must not be before start_date")
     return start_day, end_day
-
-
-def auto_range_name(db: Session, user_id: int, start: date, end: date, language: str) -> str:
-    """이름을 말하지 않은 새 기간의 이름. 시작일이 들어 있는 기존 기간이 있으면 '2026-2학기 (~12/8)'처럼."""
-    base = next(
-        (r.name for r in user_ranges(db, user_id) if r.start_date <= start <= r.end_date),
-        render_message("range.default_name", language),
-    )
-    return f"{base} (~{format_day(end)})"
 
 
 # --- 회차 맞추기 ------------------------------------------------------------------
@@ -333,18 +315,3 @@ def delete_range(
     )
     _finish(db, user, action, event_ids, instance_ids, dates, defer)
     return action
-
-
-def list_message(db: Session, user: User) -> str:
-    lang = user.preferred_language
-    ranges = user_ranges(db, user.id)
-    if not ranges:
-        return render_message("range.list_empty", lang)
-    counts = usage_counts(db, user.id)
-    items = "\n".join(
-        render_message(
-            "range.list_item", lang, name=r.name, start=format_day(r.start_date), end=format_day(r.end_date), count=counts.get(r.id, 0)
-        )
-        for r in ranges
-    )
-    return render_message("range.list", lang, items=items)

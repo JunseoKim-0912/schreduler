@@ -1,6 +1,6 @@
 """Pure rules for event drafts: date/time interpretation, RRULE assembly, previews, display strings and validation.
 
-The legacy slot-filling flow (event_parse_service) and the assistant tools share these functions so each rule
+The assistant tools (app/services/assistant) and the services they call share these functions so each rule
 exists exactly once. Nothing here touches the DB or the LLM.
 """
 
@@ -58,15 +58,6 @@ def resolve_event_date(value: str, today: date) -> date:
     raise DraftRuleError(f"not a valid date: {value!r}")
 
 
-def infer_end_time(start: time, end: time) -> time:
-    """Reads a 12-hour-style end that falls at or before the start as the afternoon when that makes a same-day
-    range: '11:00-1:00' is 11:00-13:00. Otherwise the end is kept (22:00-1:00 still crosses midnight)."""
-    if end > start or end.hour >= 12:
-        return end
-    afternoon = end.replace(hour=end.hour + 12)
-    return afternoon if afternoon > start else end
-
-
 def end_not_after_start(start: time, end: time) -> bool:
     return end <= start
 
@@ -79,15 +70,6 @@ def combine_times(day: date, start: time | None, end: time) -> tuple[datetime | 
     if end_at <= start_at:
         end_at += timedelta(days=1)
     return start_at, end_at
-
-
-def add_minutes(hhmm: str, minutes: int) -> str:
-    return (datetime.combine(date.today(), parse_hhmm(hhmm)) + timedelta(minutes=minutes)).strftime("%H:%M")
-
-
-def minutes_between(start: str, end: str) -> int:
-    delta = datetime.combine(date.today(), parse_hhmm(end)) - datetime.combine(date.today(), parse_hhmm(start))
-    return int(delta.total_seconds() // 60) % (24 * 60)
 
 
 def normalize_deadline_times(start_time: str | None, end_time: str | None) -> tuple[None, str | None]:

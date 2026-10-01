@@ -22,5 +22,5 @@ def test_placeholders_match_across_languages(key: str) -> None:
 
 
 def test_render_message_by_language() -> None:
-    assert render_message("command.not_found", "ko", title="물리 퀴즈") == "'물리 퀴즈'에 해당하는 일정을 찾지 못했어요."
-    assert render_message("command.not_found", "en", title="Quiz") == "I couldn't find an event matching 'Quiz'."
+    assert render_message("summary.create", "ko", title="물리 퀴즈") == "'물리 퀴즈' 일정 생성"
+    assert render_message("summary.create", "en", title="Quiz") == "Created 'Quiz'"

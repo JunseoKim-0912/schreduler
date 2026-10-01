@@ -40,135 +40,11 @@ def test_parse_hhmm() -> None:
 # --- times ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("start", "end", "expected"),
-    [
-        (time(11), time(1), time(13)),  # "11:00-1:00" is 11 AM to 1 PM by default
-        (time(12), time(1), time(13)),
-        (time(9), time(12), time(12)),
-        (time(22), time(1), time(1)),  # 1 PM would be before 10 PM, so it really crosses midnight
-        (time(23), time(0, 30), time(0, 30)),
-        (time(13), time(15), time(15)),
-    ],
-)
-def test_infer_end_time(start: time, end: time, expected: time) -> None:
-    assert rules.infer_end_time(start, end) == expected
-
-
 def test_combine_times_rolls_past_midnight_to_next_day() -> None:
     day = date(2026, 10, 1)
     assert rules.combine_times(day, time(11), time(13)) == (datetime(2026, 10, 1, 11), datetime(2026, 10, 1, 13))
     assert rules.combine_times(day, time(23), time(0, 30)) == (datetime(2026, 10, 1, 23), datetime(2026, 10, 2, 0, 30))
     assert rules.combine_times(day, None, time(23, 59)) == (None, datetime(2026, 10, 1, 23, 59))
-
-
-def test_minutes_helpers() -> None:
-    assert rules.add_minutes("23:30", 45) == "00:15"
-    assert rules.minutes_between("09:00", "10:30") == 90
-    assert rules.minutes_between("23:00", "01:00") == 120
-
-
-def test_normalize_deadline_times() -> None:
-    assert rules.normalize_deadline_times("23:30", None) == (None, "23:30")
-    assert rules.normalize_deadline_times("10:00", "23:59") == (None, "23:59")
-    assert rules.normalize_deadline_times(None, None) == (None, None)
-
-
-# --- recurrence ----------------------------------------------------------------------
-
-
-def test_build_rrule_with_interval() -> None:
-    assert rules.build_rrule("WEEKLY", ["TU"], 2) == "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"
-    assert rules.build_rrule("WEEKLY", ["MO", "WE"], 1) == "FREQ=WEEKLY;BYDAY=MO,WE"
-    assert rules.build_rrule("DAILY", None, None) == "FREQ=DAILY"
-
-
-@pytest.mark.parametrize(("frequency", "by_day"), [("HOURLY", None), ("WEEKLY", ["TUE"])])
-def test_build_rrule_rejects_unknown_values(frequency: str, by_day: list[str] | None) -> None:
-    with pytest.raises(DraftRuleError):
-        rules.build_rrule(frequency, by_day)
-
-
-def test_first_occurrence_and_preview_keep_biweekly_rhythm_from_dtstart() -> None:
-    rule = rules.build_rrule("WEEKLY", ["TU"], 2)
-    range_start, range_end = date(2026, 9, 3), date(2026, 12, 8)
-
-    # no start date given: the first Tuesday after the range start (Thu 9/3) is the first occurrence
-    first = rules.first_occurrence(rule, time(9), range_start, range_end)
-    assert first == date(2026, 9, 8)
-    assert rules.preview_dates(rule, datetime.combine(first, time(9)), range_start, range_end, range_start) == [
-        date(2026, 9, 8),
-        date(2026, 9, 22),
-        date(2026, 10, 6),
-    ]
-    dtstart = datetime(2026, 9, 22, 9)  # "9/22부터 격주"
-    assert rules.preview_dates(rule, dtstart, range_start, range_end, range_start) == [
-        date(2026, 9, 22),
-        date(2026, 10, 6),
-        date(2026, 10, 20),
-    ]
-
-
-def test_only_occurrences_from_today_are_materialized_but_the_rhythm_stays() -> None:
-    rule = rules.build_rrule("WEEKLY", ["TU"], 2)
-    dtstart = datetime(2026, 9, 22, 9)  # "9/22부터 격주", said on Sun 9/27
-    today = date(2026, 9, 27)
-
-    upcoming = rules.upcoming_occurrences(rule, dtstart, date(2026, 9, 3), date(2026, 12, 8), today)
-    assert upcoming[:3] == [date(2026, 10, 6), date(2026, 10, 20), date(2026, 11, 3)]
-    assert rules.preview_dates(rule, dtstart, date(2026, 9, 3), date(2026, 12, 8), today) == upcoming[:3]
-    assert rules.preview_dates(rule, dtstart, date(2026, 9, 3), date(2026, 12, 8), date(2026, 10, 6))[0] == date(2026, 10, 6)
-
-
-def test_past_rhythm_start_is_not_a_past_date_but_a_past_one_off_is() -> None:
-    now = datetime(2026, 9, 27, 14)
-    recurring = rules.DraftSpec(
-        start=datetime(2026, 9, 22, 9), end=datetime(2026, 9, 22, 12), frequency="WEEKLY", by_day=["TU"], interval=2,
-        recurrence_start=date(2026, 9, 22),
-    )
-    one_off = rules.DraftSpec(start=datetime(2026, 9, 22, 9), end=datetime(2026, 9, 22, 12))
-
-    assert "past_date" not in rules.validate_draft(recurring, now).warnings
-    assert "past_date" in rules.validate_draft(one_off, now).warnings
-
-
-def test_first_occurrence_falls_back_to_range_start_when_no_date_matches() -> None:
-    rule = rules.build_rrule("WEEKLY", ["SA"])
-    assert rules.first_occurrence(rule, time(9), date(2026, 9, 28), date(2026, 9, 30)) == date(2026, 9, 28)
-
-
-def test_first_matching_day_and_weekday_mismatch() -> None:
-    wednesday = date(2026, 9, 23)
-    assert rules.first_matching_day(wednesday, ["TU"], "WEEKLY") == date(2026, 9, 29)
-    assert rules.first_matching_day(wednesday, None, "DAILY") == wednesday
-    assert rules.start_weekday_mismatch(wednesday, "WEEKLY", ["TU"]) is True
-    assert rules.start_weekday_mismatch(date(2026, 9, 22), "WEEKLY", ["TU"]) is False
-    assert rules.start_weekday_mismatch(wednesday, "DAILY", None) is False
-
-
-# --- display -------------------------------------------------------------------------
-
-
-def test_format_time_range_korean() -> None:
-    assert rules.format_time_range(datetime(2026, 10, 1, 11), datetime(2026, 10, 1, 13), "ko") == "오전 11:00 – 오후 1:00 (2시간)"
-    assert (
-        rules.format_time_range(datetime(2026, 10, 1, 23), datetime(2026, 10, 2, 1, 30), "ko")
-        == "오후 11:00 – 오전 1:30 (다음 날) (2시간 30분)"
-    )
-    assert rules.format_time_range(datetime(2026, 10, 1, 12), datetime(2026, 10, 1, 12, 45), "ko") == "오후 12:00 – 오후 12:45 (45분)"
-    assert rules.format_time_range(None, datetime(2026, 9, 29, 23, 30), "ko") == "오후 11:30 마감"
-
-
-def test_format_time_range_english() -> None:
-    assert rules.format_time_range(datetime(2026, 10, 1, 0, 15), datetime(2026, 10, 1, 1, 15), "en") == "12:15 AM – 1:15 AM (1h)"
-    assert (
-        rules.format_time_range(datetime(2026, 10, 1, 23), datetime(2026, 10, 2, 1), "en")
-        == "11:00 PM – 1:00 AM (next day) (2h)"
-    )
-    assert rules.format_time_range(None, datetime(2026, 9, 29, 23, 59), "en") == "Due 11:59 PM"
-
-
-# --- validate_draft ------------------------------------------------------------------
 
 
 def _spec(start: datetime | None, end: datetime, **extra: object) -> DraftSpec:
@@ -177,7 +53,7 @@ def _spec(start: datetime | None, end: datetime, **extra: object) -> DraftSpec:
 
 def test_eleven_to_one_is_a_clean_daytime_draft() -> None:
     day = date(2026, 10, 1)
-    start, end = rules.combine_times(day, time(11), rules.infer_end_time(time(11), time(1)))
+    start, end = rules.combine_times(day, time(11), time(13))
 
     check = validate_draft(_spec(start, end), NOW)
 

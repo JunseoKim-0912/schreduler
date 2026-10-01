@@ -16,7 +16,7 @@ from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
 from app.models.user import User
 from app.schemas.event import EventCreate
-from app.schemas.event_parse import NewDateRangeDraft, NewLocationDraft
+from app.schemas.event_command import NewDateRangeDraft, NewLocationDraft
 from app.services import date_range_command_service as ranges
 from app.services.action_history_service import AfterCommit
 from app.services.event_command_service import CommandDescription, Target, create_event_from_nl, execute

@@ -314,21 +314,12 @@ GET /points/summary
 |---|---|---|---|
 | `POST /events` | 이벤트 생성 | `EventCreate` | `201 EventRead` |
 | `GET /events` | 이벤트 목록 (`?user_id=`) | | `EventRead[]` |
-| `POST /events/parse` 🤖 | 자연어로 일정 추가·삭제·수정 (3.2, 3.2.1) | `{user_id, utterance, session_id?}` | `EventParseResponse` |
-| `POST /events/commands/confirm` | 확인이 필요한 자연어 요청 실행 (3.2.1, 3.2.2) | `{user_id, token, option?}` | `CommandConfirmResponse` |
 | `GET /events/{event_id}` | 이벤트 조회 | | `EventRead` |
 | `PUT /events/{event_id}` | 이벤트 수정 (부분) | `EventUpdate` | `EventRead` |
 | `DELETE /events/{event_id}` | 이벤트 삭제 (반복 회차·하위 일정 포함). 헤더 `X-Action-Id`로 되돌리기 id | | `204` |
 
 `EventCreate`: `user_id`, `title`, `event_type`(기본 `scheduled`), `start_time`(`deadline`이면 `null`), `end_time`,
 `importance?`, `is_recurring?`, `recurrence_rule?`, `date_range_id?`, `parent_event_id?`, `child_kind?`, `location_id?`
-
-`EventParseResponse`: `session_id`, `intent`, `is_complete`, `draft?`, `draft_changes[]`, `next_question?`, `missing_slots`, `message?`, `command?`
-
-`CommandResult`(`command`): `action`, `status`, `target_kind`, `scope?`, `affected[]`, `affected_count`, `candidates[]`, `confirmation_token?`, `expires_at?`, `options[]`, `action_id?`
-
-`EventDraft`(`draft`): `EventCreate`와 같은 필드(`event_type`, `start_time?`, `location_id?` 포함) + `location_name?`(표시용),
-`new_date_range?`(`{name, start_date, end_date, auto_named}`), `new_location?`(`{name, default_travel_minutes}`)
 
 > `scheduled` → `deadline`으로 바꿀 때는 `{"event_type": "deadline", "start_time": null}`을 함께 보낸다(하나만 보내면 422).
 

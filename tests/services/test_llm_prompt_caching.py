@@ -1,11 +1,8 @@
 import pytest
 
-from datetime import date
-
 from app.models.enums import NonComplianceCategory
 from app.schemas.persona import PersonaRead
 from app.services import llm_client
-from app.services.llm_client import DateRangeOption, _build_request_payload
 
 RORDON = PersonaRead.model_validate(
     {
@@ -20,9 +17,6 @@ RORDON = PersonaRead.model_validate(
     }
 )
 
-SEMESTER = DateRangeOption(id=5, name="2026 가을학기", start_date=date(2026, 9, 1), end_date=date(2026, 12, 20))
-
-
 def _capture_payload(monkeypatch, fn, *args, **kwargs) -> dict:
     captured: dict = {}
 
@@ -33,30 +27,6 @@ def _capture_payload(monkeypatch, fn, *args, **kwargs) -> dict:
     monkeypatch.setattr(llm_client, "_call_chat_completion", fake_call)
     fn(*args, **kwargs)
     return captured
-
-
-def test_slot_fill_prefix_is_stable_across_dynamic_inputs() -> None:
-    first = _build_request_payload("매주 월요일 헬스", [SEMESTER], date(2026, 9, 17))
-    second = _build_request_payload(
-        "매일 아침 7시 기상", [SEMESTER], date(2026, 9, 18), known_slots={"title": "기상"}
-    )
-
-    assert first["messages"][0] == second["messages"][0]
-    assert first["prompt_cache_key"] == second["prompt_cache_key"]
-    assert first["prompt_cache_key"].startswith("event_slot_fill:")
-
-    user_message = second["messages"][1]["content"]
-    assert "2026-09-18" in user_message
-    assert '"title": "기상"' in user_message
-    assert user_message.endswith("사용자 발화: 매일 아침 7시 기상")
-    assert "2026-09-18" not in second["messages"][0]["content"]
-
-
-def test_slot_fill_cache_key_changes_when_date_ranges_change() -> None:
-    with_range = _build_request_payload("헬스", [SEMESTER], date(2026, 9, 17))
-    without_range = _build_request_payload("헬스", [], date(2026, 9, 17))
-
-    assert with_range["prompt_cache_key"] != without_range["prompt_cache_key"]
 
 
 def test_daily_checkin_puts_persona_in_prefix_and_summary_after(monkeypatch) -> None:

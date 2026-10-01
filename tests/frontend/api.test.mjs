@@ -100,7 +100,7 @@ describe("apiFetch 에러", () => {
     const off = onApiError((error) => seen.push(error));
 
     await assert.rejects(
-      apiFetch("/events/parse", { method: "POST", body: { user_id: 1, utterance: "스터디" } }),
+      apiFetch("/assistant/chat", { method: "POST", body: { message: "스터디" } }),
       (error) => error instanceof ApiError && error.status === 502,
     );
     off();
@@ -170,8 +170,8 @@ describe("describeError 문구", () => {
   const cases = [
     [{ status: 401 }, "사용자 ID를 먼저 입력해 주세요."],
     [{ status: 422, detail: validation, method: "POST", path: "/events" }, "입력값을 확인해 주세요.\n• title: String should have at least 1 character\n• recurrence_rule: invalid recurrence_rule 'X'"],
-    [{ status: 422, detail: validation, method: "POST", path: "/events/parse" }, "입력값을 확인해 주세요.\n• title: String should have at least 1 character\n• recurrence_rule: invalid recurrence_rule 'X'"],
-    [{ status: 422, detail: "LLM 응답이 유효한 JSON이 아닙니다", method: "POST", path: "/events/parse" }, "AI가 요청을 제대로 이해하지 못했어요. 표현을 조금 바꿔서 다시 시도해 주세요."],
+    [{ status: 422, detail: validation, method: "POST", path: "/assistant/chat" }, "입력값을 확인해 주세요.\n• title: String should have at least 1 character\n• recurrence_rule: invalid recurrence_rule 'X'"],
+    [{ status: 422, detail: "LLM 응답이 유효한 JSON이 아닙니다", method: "POST", path: "/assistant/chat" }, "AI가 요청을 제대로 이해하지 못했어요. 표현을 조금 바꿔서 다시 시도해 주세요."],
     [{ status: 500, detail: "LLM_API_KEY가 설정되지 않았습니다", method: "POST", path: "/daily-actual-logs/checkin" }, "AI 기능이 아직 서버에 설정되지 않았어요. 관리자에게 문의해 주세요."],
     [{ status: 502, detail: "x", method: "POST", path: "/compliance-reports" }, "AI 서버와 연결이 원활하지 않아요. 잠시 후 다시 시도해 주세요."],
     [{ status: 500, detail: "서버 내부 오류가 발생했습니다", method: "GET", path: "/tasks" }, "서버에서 문제가 생겼어요. 잠시 후 다시 시도해 주세요."],
@@ -188,8 +188,8 @@ describe("describeError 문구", () => {
   }
 
   test("LLM 엔드포인트는 메서드와 쿼리를 구분해서 판별한다", () => {
-    assert.equal(isLlmEndpoint("post", "/events/parse"), true);
-    assert.equal(isLlmEndpoint("POST", "/assistant/chat"), true);
+    assert.equal(isLlmEndpoint("post", "/assistant/chat"), true);
+    assert.equal(isLlmEndpoint("POST", "/events/parse"), false);
     assert.equal(isLlmEndpoint("GET", "/assistant/sessions/current"), false);
     assert.equal(isLlmEndpoint("GET", "/compliance-reports/stats?days=30"), false);
     assert.equal(isLlmEndpoint("GET", "/compliance-reports"), false);

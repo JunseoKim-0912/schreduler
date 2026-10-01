@@ -4,13 +4,9 @@ import { describe, test } from "node:test";
 
 import {
   assistantConfirmLabel,
-  candidateReply,
   describeAction,
   describeAssistantItem,
-  describeCandidate,
-  describeCommandTarget,
   describeEventTime,
-  describeDraftRepeat,
   describeRecurrence,
   describeStreakBonus,
   formatDate,
@@ -117,27 +113,7 @@ describe("포인트", () => {
   }
 });
 
-describe("자연어 일정 관리", () => {
-  test("영향받는 일정은 제목·날짜와 범위(회차/반복 전체)를 보여준다", () => {
-    const base = { event_id: 1, title: "물리 퀴즈", date: "2026-09-26", is_recurring: true };
-    assert.equal(describeCommandTarget({ ...base, event_instance_id: 7 }), "물리 퀴즈 · 2026-09-26 (토) · 이 회차만");
-    assert.equal(describeCommandTarget({ ...base, event_instance_id: null }), "물리 퀴즈 · 반복 전체");
-    assert.equal(
-      describeCommandTarget({ ...base, event_instance_id: null, is_recurring: false, title: "치과" }),
-      "치과 · 2026-09-26 (토)",
-    );
-  });
-
-  test("후보 라벨: 반복 일정은 날짜 대신 '반복 일정'", () => {
-    assert.equal(describeCandidate({ title: "물리 퀴즈", date: "2026-09-01", is_recurring: true, event_instance_id: null }), "물리 퀴즈 · 반복 일정");
-    assert.equal(describeCandidate({ title: "치과", date: "2026-09-28", is_recurring: false, event_instance_id: null }), "치과 · 2026-09-28 (월)");
-  });
-
-  test("후보 답: 단발성은 날짜까지, 반복 일정은 제목만", () => {
-    assert.equal(candidateReply({ title: "물리 과제 1", date: "2026-09-08", is_recurring: false }), "'물리 과제 1' 9월 8일");
-    assert.equal(candidateReply({ title: "물리 퀴즈", date: "2026-09-05", is_recurring: true }), "'물리 퀴즈'");
-  });
-
+describe("최근 변경", () => {
   test("변경 기록은 출처와 시각을 보여준다", () => {
     assert.equal(describeAction({ source: "ui", created_at: "2026-09-26T09:05:12.345678" }), "목록에서 삭제 · 2026-09-26 (토) 09:05");
     assert.equal(describeAction({ source: "nl", created_at: "2026-09-26T21:00:00" }), "자연어 · 2026-09-26 (토) 21:00");
@@ -152,22 +128,7 @@ describe("반복 기간", () => {
   });
 });
 
-describe("확인 카드 반복 설명", () => {
-  test("격주 화요일, 시작일과 기간 종료일", () => {
-    const draft = {
-      is_recurring: true, recurrence_rule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", event_type: "scheduled",
-      start_time: "2026-09-22T09:00:00", end_time: "2026-09-22T12:00:00",
-      date_range_name: "Lecture period", date_range_end: "2026-12-08",
-    };
-    assert.equal(describeDraftRepeat(draft), "격주 화요일 09:00–12:00, 9/22부터 Lecture period 종료(12/8)까지");
-  });
-
-  test("단발 일정", () => {
-    assert.equal(describeDraftRepeat({ is_recurring: false }), "반복 안 함 (한 번만)");
-  });
-});
-
-describe("새 어시스턴트 확인 카드", () => {
+describe("어시스턴트 확인 카드", () => {
   const biweekly = {
     draft_id: "d1", kind: "create_event", title: "ECE360 Lab", event_type: "scheduled",
     date: "2026-10-06", start_time: "2026-10-06T09:00:00", end_time: "2026-10-06T12:00:00",

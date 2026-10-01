@@ -35,7 +35,7 @@ class ActionType(enum.Enum):
 
 
 class ActionSource(enum.Enum):
-    NL = "nl"  # 자연어(/events/parse → 확인)
+    NL = "nl"  # 자연어(일정 어시스턴트 → 확인)
     UI = "ui"  # 화면의 버튼(DELETE /events/{id} 등)
 
 

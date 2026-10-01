@@ -208,14 +208,14 @@ def test_explicit_null_for_required_field_is_422_not_db_error(
         ("/locations", {"user_id": 1, "name": "", "default_travel_minutes": 5}),
         ("/date-ranges", {"user_id": 1, "name": " ", "start_date": "2026-09-01", "end_date": "2026-09-02"}),
         ("/daily-actual-logs", {"user_id": 1, "date": "2026-09-24", "summary_text": ""}),
-        ("/events/parse", {"user_id": 1, "utterance": "  "}),
+        ("/assistant/chat", {"message": "  "}),
         ("/daily-actual-logs/checkin", {"user_id": 1, "utterance": ""}),
     ],
 )
 def test_blank_strings_are_rejected_before_any_llm_call(
     client: TestClient, forbid_real_llm_calls: list, path: str, body: dict
 ) -> None:
-    assert client.post(path, json=body).status_code == 422
+    assert client.post(path, json=body, headers={"X-User-Id": "1"}).status_code == 422
     assert forbid_real_llm_calls == []
 
 

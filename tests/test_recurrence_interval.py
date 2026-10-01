@@ -1,4 +1,4 @@
-"""v3.8 반복 간격(INTERVAL)과 반복 시작일. LLM은 가짜로 바꿔 호출하지 않는다."""
+"""v3.8 반복 간격(INTERVAL)의 회차: 기간을 바꿔도 격주 리듬 유지. 초안 단계는 tests/services/assistant/test_agent.py."""
 
 from datetime import date
 
@@ -13,26 +13,12 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, Event, EventInstance, ImportantDateRange, Location, User
 from app.models.enums import EventInstanceStatus
-from app.services import event_parse_service
-from app.services.llm_client import _EVENT_SLOT_INSTRUCTIONS, DraftEditResult, EventSlotFillResult
 from app.services.recurrence import build_recurrence_rule
-from app.services.slot_fill_session import clear_all_sessions
-
-LAB = dict(title="ECE360 Lab", frequency="WEEKLY", by_day=["TU"], interval=2, recurrence_start="09-22",
-           start_time="09:00", end_time="12:00", importance=4)
-
 
 @pytest.fixture(autouse=True)
 def frozen_today():
     with freeze_time("2026-09-26 09:00:00"):
         yield
-
-
-@pytest.fixture(autouse=True)
-def reset_sessions():
-    clear_all_sessions()
-    yield
-    clear_all_sessions()
 
 
 @pytest.fixture
@@ -70,33 +56,6 @@ def ids(engine) -> dict[str, int]:
         return {"user": user.id, "period": period.id}
 
 
-@pytest.fixture
-def llm(monkeypatch: pytest.MonkeyPatch):
-    slots: list[EventSlotFillResult] = []
-    edits: list[DraftEditResult] = []
-
-    def fill_slots(db, user_id, utterance, **kwargs):
-        assert slots, f"예상하지 못한 슬롯필링 호출: {utterance!r}"
-        return slots.pop(0)
-
-    def fill_edit(db, user_id, utterance, **kwargs):
-        assert edits, f"예상하지 못한 초안 수정 호출: {utterance!r}"
-        return edits.pop(0)
-
-    monkeypatch.setattr(event_parse_service, "fill_event_slots_for_user", fill_slots)
-    monkeypatch.setattr(event_parse_service, "fill_draft_edit_for_user", fill_edit)
-    return {"slot": lambda **f: slots.append(EventSlotFillResult(**f)), "edit": lambda **f: edits.append(DraftEditResult(**f))}
-
-
-def _parse(client: TestClient, user_id: int, utterance: str, session_id: str | None = None) -> dict:
-    body = {"user_id": user_id, "utterance": utterance}
-    if session_id:
-        body["session_id"] = session_id
-    response = client.post("/events/parse", json=body)
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
 def _dates(engine, event_id: int) -> list[date]:
     with Session(engine) as session:
         return list(
@@ -109,82 +68,6 @@ def _dates(engine, event_id: int) -> list[date]:
 
 
 BIWEEKLY_FROM_922 = [date(2026, 9, 22), date(2026, 10, 6), date(2026, 10, 20), date(2026, 11, 3), date(2026, 11, 17), date(2026, 12, 1)]
-
-
-def test_biweekly_lab_from_922_is_created_without_asking(client, engine, ids, llm):
-    llm["slot"](**LAB, date_range_id=ids["period"])
-
-    body = _parse(client, ids["user"], "ECE360 Lab 매주 화요일 오전 9-12시 Lecture period 동안 9/22일부터 2주마다 중요도 4")
-
-    assert body["is_complete"] is True, "매주 화요일 + 2주마다는 격주 화요일이라 되묻지 않는다"
-    draft = body["draft"]
-    assert draft["recurrence_rule"] == "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU"
-    assert (draft["start_time"], draft["end_time"]) == ("2026-09-22T09:00:00", "2026-09-22T12:00:00")
-    assert draft["preview_dates"] == ["2026-10-06", "2026-10-20", "2026-11-03"], "미리보기는 오늘(9/26) 이후 회차"
-    assert (draft["date_range_name"], draft["date_range_end"]) == ("Lecture period", "2026-12-08")
-
-    confirmed = client.post("/events/commands/confirm", json={"user_id": ids["user"], "token": body["command"]["confirmation_token"]}).json()
-
-    [event_id] = [t["event_id"] for t in confirmed["command"]["affected"]]
-    assert _dates(engine, event_id) == BIWEEKLY_FROM_922[1:], "9/22 기준 격주 리듬, 회차는 오늘(9/26) 이후만"
-
-
-def test_prompt_explains_intervals_and_not_asking():
-    for phrase in ("'2주마다', '격주', '한 주 걸러'는 WEEKLY에 interval 2", "'3주마다'는 3", "'격주 화요일'", "되묻지 않는다"):
-        assert phrase in _EVENT_SLOT_INSTRUCTIONS
-
-
-@pytest.mark.parametrize(
-    ("interval", "rule", "expected"),
-    [
-        (2, "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", BIWEEKLY_FROM_922[1:4]),
-        (3, "FREQ=WEEKLY;INTERVAL=3;BYDAY=TU", [date(2026, 10, 13), date(2026, 11, 3), date(2026, 11, 24)]),
-        (1, "FREQ=WEEKLY;BYDAY=TU", [date(2026, 9, 29), date(2026, 10, 6), date(2026, 10, 13)]),
-    ],
-)
-def test_interval_goes_into_rrule_and_preview(client, engine, ids, llm, interval, rule, expected):
-    llm["slot"](**{**LAB, "interval": interval}, date_range_id=ids["period"])
-
-    draft = _parse(client, ids["user"], "ECE360 Lab")["draft"]
-
-    assert draft["recurrence_rule"] == rule
-    assert draft["preview_dates"] == [d.isoformat() for d in expected]
-
-
-def test_without_start_date_first_matching_weekday_after_period_start(client, engine, ids, llm):
-    llm["slot"](**{**LAB, "recurrence_start": None}, date_range_id=ids["period"])
-
-    draft = _parse(client, ids["user"], "격주 화요일 오전 9-12시 ECE360 Lab")["draft"]
-
-    assert draft["start_time"] == "2026-09-08T09:00:00", "기간 시작일(9/8)이 화요일이라 그날부터"
-    assert draft["preview_dates"] == ["2026-10-06", "2026-10-20", "2026-11-03"], "리듬은 9/8 기준(9/22·10/6…), 미리보기는 오늘(9/26) 이후"
-
-
-def test_start_date_on_the_wrong_weekday_is_asked_once(client, engine, ids, llm):
-    llm["slot"](**{**LAB, "recurrence_start": "09-23"}, date_range_id=ids["period"])
-
-    asked = _parse(client, ids["user"], "9/23부터 격주 화요일 ECE360 Lab")
-
-    assert asked["next_question"] == {
-        "slot": "recurrence_start",
-        "question": "9/23은(는) 수요일이에요. 화요일 반복이라면 첫 회차를 언제로 할까요?",
-    }
-    llm["slot"](**LAB, date_range_id=ids["period"])  # "9/22부터"
-
-    body = _parse(client, ids["user"], "그럼 9/22부터", asked["session_id"])
-
-    assert body["draft"]["start_time"] == "2026-09-22T09:00:00"
-
-
-def test_wrong_weekday_answer_is_not_asked_twice(client, engine, ids, llm):
-    llm["slot"](**{**LAB, "recurrence_start": "09-23"}, date_range_id=ids["period"])
-    asked = _parse(client, ids["user"], "9/23부터 격주 화요일 ECE360 Lab")
-    llm["slot"](**{**LAB, "recurrence_start": "09-23"}, date_range_id=ids["period"])
-
-    body = _parse(client, ids["user"], "그냥 9/23부터 해", asked["session_id"])
-
-    assert body["is_complete"] is True
-    assert body["draft"]["preview_dates"][0] == "2026-10-06", "9/23이 속한 주 기준 격주의 첫 화요일"
 
 
 def _post_event(client: TestClient, user_id: int, range_id: int, **extra) -> int:
@@ -259,18 +142,6 @@ def test_existing_weekly_event_keeps_its_instances(client, engine, ids):
     after = _dates(engine, event_id)
     assert after[: len(before)] == before and after[-1] == date(2026, 12, 15)
     assert all((b - a).days == 7 for a, b in zip(after[1:], after[2:])), "매주 간격 유지"
-
-
-def test_change_to_weekly_in_the_confirmation_card(client, engine, ids, llm):
-    llm["slot"](**LAB, date_range_id=ids["period"])
-    first = _parse(client, ids["user"], "ECE360 Lab 격주")
-    llm["edit"](interval=1)
-
-    body = _parse(client, ids["user"], "매주로 바꿔줘", first["session_id"])
-
-    assert body["draft"]["recurrence_rule"] == "FREQ=WEEKLY;BYDAY=TU"
-    assert body["draft"]["preview_dates"] == ["2026-09-29", "2026-10-06", "2026-10-13"]
-    assert "recurrence" in body["draft_changes"]
 
 
 def test_build_recurrence_rule():

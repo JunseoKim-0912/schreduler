@@ -17,19 +17,19 @@ APP_DESCRIPTION = """
 코드값(예: `overslept`, `deadline`)은 언어와 무관하게 그대로다.
 
 ### LLM을 호출하는 엔드포인트
-`POST /events/parse`, `POST /assistant/chat`, `POST /daily-actual-logs/checkin`, 그리고 `other` 또는 자유 텍스트가 있는
+`POST /assistant/chat`, `POST /daily-actual-logs/checkin`, 그리고 `other` 또는 자유 텍스트가 있는
 `POST /compliance-reports`. LLM 오류는 500(키 미설정) / 502(호출 실패) / 422(응답 형식 오류)로 돌려준다.
 """
 
 TAGS_METADATA: list[dict[str, Any]] = [
     {
         "name": "events",
-        "description": "일정 CRUD와 자연어 일정 관리 (FR-1, FR-2). 자연어로 추가·삭제·수정할 수 있다. "
-        "`scheduled`(시작~종료)와 `deadline`(마감만) 두 종류.",
+        "description": "일정 CRUD (FR-1). `scheduled`(시작~종료)와 `deadline`(마감만) 두 종류. "
+        "자연어로 추가·삭제·수정하는 것은 `assistant`(FR-2).",
     },
     {
         "name": "assistant",
-        "description": "일정 어시스턴트 (v4, `/events/parse`의 후속). LLM이 도구로 기존 일정을 찾고 초안을 제안하면, "
+        "description": "일정 어시스턴트 (FR-2 v4). LLM이 도구로 기존 일정을 찾고 초안을 제안하면, "
         "사용자가 확인(버튼 또는 \"좋아\")할 때만 저장된다. 모든 실행은 되돌리기 기록(`action_id`)을 남긴다.",
     },
     {

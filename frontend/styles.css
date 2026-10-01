@@ -319,14 +319,6 @@ select:focus-visible {
   min-width: 0;
 }
 
-.draft {
-  margin: 12px 0;
-  padding: 16px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: #f5f8ff;
-}
-
 .draft-fields {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -631,13 +623,6 @@ select:focus-visible {
   background: var(--error-bg);
   border: 1px solid var(--error-border);
   color: var(--error-text);
-}
-
-.quick-replies {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
 }
 
 .command-card {
@@ -1100,61 +1085,11 @@ select:focus-visible {
   white-space: nowrap;
 }
 
-/* 확인 카드에서 말로 고친 항목 */
-.draft-fields .is-changed {
-  background: #fff4c2;
-}
-
-.draft-fields dt.is-changed::after {
-  content: " · 바뀜";
-  color: #7a5b00;
-  font-size: 11px;
-  font-weight: 600;
-}
-
 #locations-status[data-state="error"] {
   color: var(--error-text);
 }
 
-/* --- 이벤트 탭: 새 어시스턴트 / 기존 방식 스위치 --- */
-
-.events-main > .section-header-first {
-  flex-wrap: wrap;
-}
-
-.mode-switch {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--background);
-  padding: 2px;
-}
-
-.mode-switch button {
-  padding: 4px 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.mode-switch button[aria-checked="true"] {
-  background: var(--surface);
-  color: var(--text);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
-}
-
-.mode-switch button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-/* --- 새 어시스턴트 대화와 확인 카드 --- */
+/* --- 이벤트 탭: 어시스턴트 대화와 확인 카드 --- */
 
 .assistant-log {
   max-height: min(560px, 70vh);

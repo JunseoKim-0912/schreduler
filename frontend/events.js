@@ -1,61 +1,27 @@
 import { apiFetch, getUserId } from "./api.js";
 import { initAssistantChat } from "./assistant.js";
 import { badge, el, setStatus } from "./dom.js";
-import {
-  candidateReply,
-  describeAction,
-  describeCandidate,
-  describeCommandTarget,
-  describeDraftRepeat,
-  describeEventTime,
-  describeRecurrence,
-  formatDate,
-  formatShortDate,
-  formatTime,
-  importanceLabel,
-  sortEvents,
-} from "./format.js";
+import { describeAction, describeEventTime, describeRecurrence, formatShortDate, importanceLabel, sortEvents } from "./format.js";
 
 const NO_ACTIONS = "아직 변경 기록이 없어요.";
-const MODE_KEY = "schreduler.eventsMode";
-const MODES = ["assistant", "legacy"];
 
-function loadMode() {
-  try {
-    const saved = globalThis.localStorage?.getItem(MODE_KEY);
-    return MODES.includes(saved) ? saved : "assistant";
-  } catch {
-    return "assistant";
-  }
+// 사용 중인 반복 기간을 지울 때 고르는 처리 (DELETE /date-ranges/{id}?mode=)
+const RANGE_DELETE_OPTIONS = {
+  range_only: "기간만 삭제 (일정은 마지막 회차까지 유지)",
+  with_events: "일정도 함께 삭제",
+};
+
+// 예전 [새 어시스턴트 | 기존 방식] 스위치가 저장하던 값. 스위치가 없어졌으므로 남은 값을 지운다.
+try {
+  globalThis.localStorage?.removeItem("schreduler.eventsMode");
+} catch {
+  // 저장소를 못 쓰면 지울 것도 없다.
 }
 
-function saveMode(mode) {
-  try {
-    globalThis.localStorage?.setItem(MODE_KEY, mode);
-  } catch {
-    // 저장소를 못 쓰면 이번 화면에서만 기억한다.
-  }
-}
-
-// 이벤트 탭: 자연어 일정 관리. [새 어시스턴트](assistant.js, POST /assistant/chat)와 [기존 방식](POST /events/parse
-// 슬롯필링)을 스위치로 고른다. 아래는 기존 방식과 탭 공통 목록이다.
-// 기존 방식: 자연어 일정 관리(POST /events/parse — 추가·삭제·수정), 확인이 필요한 요청 실행(POST /events/commands/confirm),
-// 되돌리기(GET /actions, POST /actions/{id}/undo), 이벤트 목록(GET /events).
-// 대화 상태는 서버가 session_id로 보관하므로, 클라이언트는 session_id와 새 발화만 보낸다.
+// 이벤트 탭: 자연어 일정 관리는 어시스턴트(assistant.js, POST /assistant/chat)가 맡고, 여기서는 되돌리기
+// (GET /actions, POST /actions/{id}/undo), 반복 기간·장소 목록, 이벤트 목록(GET /events)을 다룬다.
 // onDataChanged: 실행·되돌리기로 데이터가 바뀌었을 때 다른 탭(할 일, 포인트)을 다시 불러오게 app.js가 넘겨준다.
 export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
-  const chatLog = document.getElementById("chat-log");
-  const form = document.getElementById("parse-form");
-  const input = document.getElementById("parse-input");
-  const sendButton = document.getElementById("parse-send");
-  const resetButton = document.getElementById("parse-reset");
-  const chatStatus = document.getElementById("chat-status");
-
-  const confirmBox = document.getElementById("draft-confirm");
-  const draftFields = document.getElementById("draft-fields");
-  const createButton = document.getElementById("draft-create");
-  const cancelButton = document.getElementById("draft-cancel");
-
   const list = document.getElementById("event-list");
   const listStatus = document.getElementById("events-status");
   const refreshButton = document.getElementById("events-refresh");
@@ -73,338 +39,9 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   const actionsRefreshButton = document.getElementById("actions-refresh");
 
   const panel = document.getElementById("panel-events");
-  const modeButtons = [...document.querySelectorAll(".mode-switch [data-mode]")];
-  const assistantBox = document.getElementById("assistant-chat");
-  const legacyBox = document.getElementById("legacy-chat");
 
-  let mode = loadMode();
-  let sessionId = null;
-  let draft = null;
-  let draftToken = null;
-  let sending = false;
-
-  // 409(되돌리기 순서, 확인 대기 중 대상 변경)와 410(확인 토큰 만료)은 배너 대신 화면 안에서 직접 안내한다.
+  // 409(되돌리기 순서, 사용 중인 장소)와 422(입력값)는 배너 대신 화면 안에서 직접 안내한다.
   const bannerUnless = (...statuses) => (error) => !statuses.includes(error.status);
-
-  // --- 대화창 ---------------------------------------------------------------
-
-  function appendToLog(node) {
-    chatLog.append(node);
-    chatLog.hidden = false;
-    chatLog.scrollTop = chatLog.scrollHeight;
-    return node;
-  }
-
-  function addMessage(role, text) {
-    return appendToLog(el("li", { className: `bubble bubble-${role}`, text }));
-  }
-
-  function undoButton(actionId) {
-    const button = el("button", {
-      className: "button button-secondary button-small",
-      text: "되돌리기",
-      attrs: { type: "button", "data-action-id": actionId },
-    });
-    button.addEventListener("click", () => undoFromChat(actionId, button));
-    return button;
-  }
-
-  // 실행 결과 말풍선. 서버 문구("✔ '물리 퀴즈' 일정 삭제")를 그대로 쓰고 옆에 되돌리기 버튼을 단다.
-  function addResult(message, actionId) {
-    const children = [el("span", { text: message })];
-    if (actionId !== null && actionId !== undefined) children.push(undoButton(actionId));
-    return appendToLog(el("li", { className: "bubble bubble-assistant bubble-result" }, children));
-  }
-
-  // 되묻기. 후보가 있으면 버튼으로 보여주고, 누르면 그 후보를 답으로 보낸다(직접 입력해도 된다).
-  function addQuestion(message, candidates = []) {
-    const bubble = addMessage("assistant", message);
-    if (!candidates.length) return;
-    const buttons = candidates.map((target) => {
-      const button = el("button", {
-        className: "button button-secondary button-small",
-        text: describeCandidate(target),
-        attrs: { type: "button" },
-      });
-      button.addEventListener("click", () => {
-        for (const other of buttons) other.disabled = true;
-        send(candidateReply(target));
-      });
-      return button;
-    });
-    bubble.append(el("div", { className: "quick-replies" }, buttons));
-    chatLog.scrollTop = chatLog.scrollHeight;
-  }
-
-  // 사용 중인 반복 기간을 지울 때 고르는 처리 (POST /events/commands/confirm의 option)
-  const RANGE_DELETE_OPTIONS = {
-    range_only: "기간만 삭제 (일정은 마지막 회차까지 유지)",
-    with_events: "일정도 함께 삭제",
-  };
-
-  // 2개 이상 영향받는 삭제·수정, 사용 중인 기간 삭제: 서버는 아직 실행하지 않았다. 버튼을 눌러야 토큰으로 실행된다.
-  function addConfirmCard(command) {
-    const verb = command.action === "delete" ? "삭제" : "수정";
-    const choices = command.options?.length ? command.options : [null];
-    const runButtons = choices.map((option, index) =>
-      el("button", {
-        className: index === 0 ? "button" : "button button-secondary",
-        text: option ? RANGE_DELETE_OPTIONS[option] : "실행",
-        attrs: { type: "button" },
-      }),
-    );
-    const cancel = el("button", { className: "button button-secondary", text: "취소", attrs: { type: "button" } });
-    const buttons = el("div", { className: "actions" }, [...runButtons, cancel]);
-    const status = el("p", { className: "hint", attrs: { role: "status" } });
-    status.hidden = true;
-    const title =
-      command.target_kind === "date_range"
-        ? `이 기간을 쓰는 반복 일정 ${command.affected_count}개`
-        : `${verb}할 일정 ${command.affected_count}개`;
-    const card = appendToLog(
-      el("li", { className: "command-card" }, [
-        el("p", { className: "command-card-title", text: title }),
-        el("ul", { className: "command-targets" }, command.affected.map((t) => el("li", { text: describeCommandTarget(t) }))),
-        buttons,
-        status,
-      ]),
-    );
-
-    function close(text) {
-      buttons.remove();
-      card.classList.add("is-closed");
-      setStatus(status, text);
-    }
-
-    const setDisabled = (disabled) => {
-      for (const button of [...runButtons, cancel]) button.disabled = disabled;
-    };
-    runButtons.forEach((runButton, index) => runButton.addEventListener("click", () => run(choices[index])));
-
-    async function run(option) {
-      setDisabled(true);
-      setStatus(status, "실행하는 중…");
-      const body = { user_id: Number(getUserId()), token: command.confirmation_token };
-      if (option) body.option = option;
-      try {
-        const result = await apiFetch("/events/commands/confirm", {
-          method: "POST",
-          body,
-          showError: bannerUnless(404, 409, 410),
-        });
-        close("실행했어요.");
-        addResult(result.message, result.command.action_id);
-        sessionId = null;
-        await dataChanged();
-      } catch (error) {
-        if (error.status === 410 || error.status === 404) close("확인 시간이 지나 요청이 만료됐어요. 다시 말해 주세요.");
-        else if (error.status === 409) close(error.detail);
-        else {
-          setStatus(status, "실행하지 못했어요. 위의 안내를 확인해 주세요.");
-          setDisabled(false);
-        }
-      }
-    }
-    cancel.addEventListener("click", () => {
-      close("취소했어요. 아무것도 바뀌지 않았어요.");
-      sessionId = null;
-      input.focus();
-    });
-    runButtons[0].focus();
-  }
-
-  async function handleCommand(message, command) {
-    switch (command.status) {
-      case "executed":
-        addResult(message, command.action_id);
-        sessionId = null;
-        await dataChanged();
-        return;
-      case "needs_confirmation":
-        if (command.target_kind === "date_range") addMessage("assistant", message);
-        addConfirmCard(command);
-        return;
-      case "needs_clarification":
-        addQuestion(message, command.candidates);
-        input.placeholder = "답을 입력하거나 위의 후보를 눌러 주세요";
-        return;
-      default: // not_found
-        addMessage("assistant", message ?? "해당 일정을 찾지 못했어요.");
-        sessionId = null;
-    }
-  }
-
-  function resetInput() {
-    input.disabled = false;
-    sendButton.disabled = false;
-    input.placeholder = "예: 오늘 물리 퀴즈 6시로 옮겨줘";
-  }
-
-  // 대화 상태만 끝낸다(말풍선은 남긴다). 다음 입력은 새 요청으로 시작된다.
-  function endConversation() {
-    sessionId = null;
-    hideDraft();
-    resetInput();
-  }
-
-  function resetConversation() {
-    endConversation();
-    chatLog.replaceChildren();
-    chatLog.hidden = true;
-    setStatus(chatStatus, "");
-  }
-
-
-  function describeDraftRecurrence(value) {
-    const text = describeDraftRepeat(value);
-    return value.new_date_range ? `${text} (기간 새로 만듦)` : text;
-  }
-
-  function describeDraftLocation(value) {
-    if (value.new_location) return `${value.new_location.name} (새로 등록, 이동 ${value.new_location.default_travel_minutes}분)`;
-    return value.location_name ?? "없음";
-  }
-
-  // 확인 카드: 고칠 수 있는 항목을 전부 보여주고, 방금 말로 고친 항목(changes)은 강조한다.
-  async function showDraft(newDraft, changes = []) {
-    draft = newDraft;
-    const deadline = draft.event_type === "deadline";
-    const day = draft.start_time ?? draft.end_time;
-    const rows = [
-      ["title", "제목", draft.title],
-      ["event_type", "종류", deadline ? "마감 일정" : "일반 일정"],
-      ["date", draft.is_recurring ? "시작일" : "날짜", formatDate(day)],
-      ["time", "시간", deadline ? `${formatTime(draft.end_time)} 마감` : `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`],
-      ["importance", "중요도", importanceLabel(draft.importance)],
-      ["recurrence", "반복", describeDraftRecurrence(draft)],
-      ...(draft.is_recurring && draft.preview_dates?.length
-        ? [["recurrence", "처음 회차", draft.preview_dates.map(formatShortDate).join(", ")]]
-        : []),
-      ["location", "장소", describeDraftLocation(draft)],
-    ];
-    draftFields.replaceChildren(
-      ...rows.flatMap(([key, label, value]) => {
-        const className = changes.includes(key) ? "is-changed" : undefined;
-        return [el("dt", { className, text: label }), el("dd", { className, text: value })];
-      }),
-    );
-    confirmBox.hidden = false;
-    // 카드가 떠 있어도 입력창은 쓸 수 있다 — 여기서 한 말은 이 초안을 고치는 말로 처리된다.
-    input.placeholder = "고칠 내용을 말해 주세요 (예: 7시로 바꿔줘, 중요도 3)";
-    input.focus();
-  }
-
-  function hideDraft() {
-    draft = null;
-    draftToken = null;
-    confirmBox.hidden = true;
-  }
-
-  async function handleParseResult(result) {
-    sessionId = result.session_id;
-    const command = result.command;
-    if (result.is_complete && result.draft) {
-      draftToken = command?.confirmation_token ?? null;
-      addMessage("assistant", result.message ?? "이 내용으로 만들까요?");
-      await showDraft(result.draft, result.draft_changes ?? []);
-      return;
-    }
-    // 카드에서 "좋아"/"취소"라고 말한 경우: 버튼을 누른 것과 같다.
-    if (command?.action === "create" && command.status === "executed") {
-      addResult(result.message, command.action_id);
-      endConversation();
-      await dataChanged();
-      return;
-    }
-    if (command?.status === "cancelled") {
-      endConversation();
-      addMessage("assistant", result.message);
-      return;
-    }
-    // 초안을 고치다가 더 물어볼 게 생기면(반복 기간, 이동 시간 등) 지금 카드는 맞지 않으므로 내린다.
-    if (draft && !result.is_complete && result.next_question) hideDraft();
-    if (command && (command.action !== "create" || command.target_kind === "date_range")) {
-      await handleCommand(result.message, command);
-      return;
-    }
-    if (result.intent === "unknown" || result.intent === "list" || (!result.next_question && result.message)) {
-      addMessage("assistant", result.message ?? "일정 추가·삭제·수정만 도와드릴 수 있어요.");
-      return;
-    }
-    addMessage("assistant", result.next_question?.question ?? result.message ?? "조금 더 자세히 알려 주세요.");
-    input.placeholder = "답을 입력하세요";
-  }
-
-  async function send(utterance) {
-    if (sending || !utterance) return;
-    const userId = getUserId();
-    if (!userId) {
-      setStatus(chatStatus, "위에서 사용자 ID를 먼저 입력해 주세요.");
-      return;
-    }
-
-    sending = true;
-    addMessage("user", utterance);
-    sendButton.disabled = true;
-    setStatus(chatStatus, "AI가 생각하는 중…");
-    try {
-      const body = { user_id: Number(userId), utterance };
-      if (sessionId) body.session_id = sessionId;
-      const result = await apiFetch("/events/parse", { method: "POST", body });
-      setStatus(chatStatus, "");
-      await handleParseResult(result);
-    } catch (error) {
-      // 서버 재시작 등으로 세션이 사라졌으면 새 대화로 다시 시작하게 한다.
-      if (error.status === 404 && sessionId) {
-        resetConversation();
-        setStatus(chatStatus, "대화가 만료되어 새로 시작했어요. 다시 입력해 주세요.");
-      } else {
-        setStatus(chatStatus, "전송하지 못했어요. 위의 안내를 확인해 주세요.");
-      }
-    } finally {
-      sending = false;
-      sendButton.disabled = false;
-      input.focus();
-    }
-  }
-
-  function submit(event) {
-    event.preventDefault();
-    const utterance = input.value.trim();
-    input.value = "";
-    send(utterance);
-  }
-
-  async function createFromDraft() {
-    createButton.disabled = true;
-    cancelButton.disabled = true;
-    try {
-      if (draftToken) {
-        // 서버가 초안을 만들고 되돌리기 기록을 남긴다.
-        const result = await apiFetch("/events/commands/confirm", {
-          method: "POST",
-          body: { user_id: Number(getUserId()), token: draftToken },
-          showError: bannerUnless(404, 410),
-        });
-        addResult(result.message, result.command.action_id);
-      } else {
-        const created = await apiFetch("/events", { method: "POST", body: draft });
-        addResult(`✔ '${created.title}' 일정을 만들었어요.`, null);
-      }
-      endConversation();
-      await dataChanged();
-    } catch (error) {
-      if (error.status === 410 || error.status === 404) {
-        endConversation();
-        addMessage("error", "확인 시간이 지나 요청이 만료됐어요. 다시 입력해 주세요.");
-      } else {
-        setStatus(chatStatus, "일정을 만들지 못했어요. 내용을 확인하고 다시 시도해 주세요.");
-      }
-    } finally {
-      createButton.disabled = false;
-      cancelButton.disabled = false;
-    }
-  }
 
   // --- 되돌리기 ---------------------------------------------------------------
 
@@ -417,17 +54,6 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     }
     await dataChanged();
     return action;
-  }
-
-  async function undoFromChat(actionId, button) {
-    button.disabled = true;
-    try {
-      const action = await undo(actionId);
-      addMessage("assistant", `↩ 되돌렸어요: ${action.summary_text}`);
-    } catch (error) {
-      button.disabled = false;
-      if (error.status === 409) addMessage("error", error.detail);
-    }
   }
 
   function setActionsStatus(text, state = "ok") {
@@ -748,9 +374,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
   }
 
   async function refresh() {
-    const loads = [refreshEvents(), refreshActions(), refreshRanges(), refreshLocations()];
-    if (mode === "assistant") loads.push(assistant.sync());
-    await Promise.all(loads);
+    await Promise.all([refreshEvents(), refreshActions(), refreshRanges(), refreshLocations(), assistant.sync()]);
   }
 
   // 실행·되돌리기 뒤: 이 탭의 목록과 최근 변경, 그리고 할 일·포인트 탭까지 다시 불러온다.
@@ -760,69 +384,18 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
 
   const assistant = initAssistantChat({ undo, dataChanged });
 
-  function setMode(next, { focus = false } = {}) {
-    mode = next;
-    saveMode(next);
-    for (const button of modeButtons) {
-      const selected = button.dataset.mode === next;
-      button.setAttribute("aria-checked", String(selected));
-      button.tabIndex = selected ? 0 : -1;
-      if (selected && focus) button.focus();
-    }
-    assistantBox.hidden = next !== "assistant";
-    legacyBox.hidden = next !== "legacy";
-  }
-
-  for (const button of modeButtons) {
-    button.addEventListener("click", () => {
-      if (button.dataset.mode === mode) return;
-      setMode(button.dataset.mode);
-      if (mode === "assistant") assistant.sync();
-    });
-    button.addEventListener("keydown", (event) => {
-      if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
-      event.preventDefault();
-      setMode(mode === "assistant" ? "legacy" : "assistant", { focus: true });
-      if (mode === "assistant") assistant.sync();
-    });
-  }
-  setMode(mode);
-
-  form.addEventListener("submit", submit);
-  resetButton.addEventListener("click", () => {
-    resetConversation();
-    input.focus();
-  });
-  createButton.addEventListener("click", createFromDraft);
-  cancelButton.addEventListener("click", () => {
-    endConversation();
-    addMessage("assistant", "취소했어요. 새로 입력해 주세요.");
-    input.focus();
-  });
   refreshButton.addEventListener("click", refreshEvents);
   actionsRefreshButton.addEventListener("click", refreshActions);
   rangesRefreshButton.addEventListener("click", refreshRanges);
   locationsRefreshButton.addEventListener("click", refreshLocations);
 
-  resetConversation();
   return {
     refresh,
     // 캘린더의 빈 칸을 누르면 "9월 24일 14시에 " 같은 문구를 채워 두고 바로 이어서 입력하게 한다.
-    prefill(text) {
-      if (mode === "assistant") {
-        assistant.prefill(text);
-        return;
-      }
-      if (draft) endConversation();
-      input.value = text;
-      input.focus();
-      input.setSelectionRange(text.length, text.length);
-      input.scrollIntoView({ block: "center" });
-    },
+    prefill: assistant.prefill,
     // 사용자가 바뀌면 이전 사용자의 대화 세션과 목록을 지운다.
     reset() {
       assistant.reset();
-      resetConversation();
       list.replaceChildren();
       setStatus(listStatus, "");
       actionList.replaceChildren();

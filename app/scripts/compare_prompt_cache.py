@@ -15,7 +15,6 @@ import logging
 import sys
 import uuid
 from collections.abc import Callable
-from datetime import date
 from typing import Literal
 
 import httpx
@@ -26,7 +25,6 @@ from app.schemas.persona import PersonaRead
 from app.services.llm_client import (
     LLMClientError,
     TokenUsage,
-    _build_request_payload,
     build_compliance_feedback_payload,
     build_daily_checkin_payload,
     post_chat_completion,
@@ -34,7 +32,7 @@ from app.services.llm_client import (
 
 logger = logging.getLogger("compare_prompt_cache")
 
-Task = Literal["daily_checkin", "compliance_feedback", "slot_fill"]
+Task = Literal["daily_checkin", "compliance_feedback"]
 Mode = Literal["cached", "uncached"]
 
 # OpenAI는 프리픽스가 이 길이 이상일 때만 캐시한다.
@@ -43,7 +41,6 @@ OPENAI_MIN_CACHEABLE_TOKENS = 1024
 SAMPLE_SUMMARY = "오늘 계획한 3개 중 2개 완료.\n놓친 일정:\n- 알고리즘 스터디 (21:00~22:00) - 사유: 피로/무기력"
 SAMPLE_UTTERANCE = "오늘 좀 피곤해서 스터디를 못 했어"
 SAMPLE_REASON = "버스가 20분이나 안 와서 늦었어요"
-SAMPLE_SLOT_UTTERANCE = "매주 화요일 저녁 7시에 헬스"
 
 
 def build_payload_factory(
@@ -53,11 +50,9 @@ def build_payload_factory(
         return lambda: build_daily_checkin_payload(
             SAMPLE_SUMMARY, SAMPLE_UTTERANCE, persona=persona, language=language
         )
-    if task == "compliance_feedback":
-        return lambda: build_compliance_feedback_payload(
-            NonComplianceCategory.OTHER, SAMPLE_REASON, persona=persona, language=language
-        )
-    return lambda: _build_request_payload(SAMPLE_SLOT_UTTERANCE, [], date.today())
+    return lambda: build_compliance_feedback_payload(
+        NonComplianceCategory.OTHER, SAMPLE_REASON, persona=persona, language=language
+    )
 
 
 def bust_prompt_cache(payload: dict[str, object]) -> dict[str, object]:
@@ -143,7 +138,7 @@ def load_persona(name: str) -> PersonaRead:
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--task", choices=["daily_checkin", "compliance_feedback", "slot_fill"], default="daily_checkin")
+    parser.add_argument("--task", choices=["daily_checkin", "compliance_feedback"], default="daily_checkin")
     parser.add_argument("--persona", help="DB에 있는 페르소나 name (생략 시 기본 코치)")
     parser.add_argument("--language", choices=["ko", "en"], default="ko")
     parser.add_argument("--repeat", type=int, default=5)

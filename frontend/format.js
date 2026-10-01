@@ -122,31 +122,7 @@ export function describeStreakBonus(streakDays) {
   return current ? `×${current.multiplier} 적용 중 · ${nextText}` : nextText;
 }
 
-// --- 자연어 일정 관리 (POST /events/parse의 command, GET /actions) ---
-
-const hasInstance = (target) => target.event_instance_id !== null && target.event_instance_id !== undefined;
-
-// CommandTarget: event_instance_id가 null이면 이벤트 전체(반복이면 시리즈), 아니면 그 회차 하나.
-// 반복 시리즈의 date는 반복 기간의 시작일이라 실제 요일과 다를 수 있어 보여주지 않는다.
-export function describeCommandTarget(target) {
-  if (hasInstance(target)) return [target.title, formatDate(target.date), "이 회차만"].join(" · ");
-  if (target.is_recurring) return `${target.title} · 반복 전체`;
-  return [target.title, target.date ? formatDate(target.date) : ""].filter(Boolean).join(" · ");
-}
-
-// 되묻기 후보 버튼의 라벨
-export function describeCandidate(target) {
-  if (target.is_recurring && !hasInstance(target)) return `${target.title} · 반복 일정`;
-  return [target.title, target.date ? formatDate(target.date) : ""].filter(Boolean).join(" · ");
-}
-
-// 후보 버튼을 눌렀을 때 보낼 답. 단발성은 날짜까지 말해 같은 제목끼리도 구분되게 하고,
-// 반복 일정은 날짜를 붙이면 그 회차 하나로 좁혀지므로 제목만 보낸다.
-export function candidateReply(target) {
-  const match = /^\d{4}-(\d{2})-(\d{2})/.exec(target.date ?? "");
-  if (target.is_recurring || !match) return `'${target.title}'`;
-  return `'${target.title}' ${Number(match[1])}월 ${Number(match[2])}일`;
-}
+// --- 최근 변경 (GET /actions) ---
 
 const ACTION_SOURCE_LABELS = { nl: "자연어", ui: "목록에서 삭제" };
 
@@ -154,18 +130,7 @@ export function describeAction(action) {
   return [ACTION_SOURCE_LABELS[action.source] ?? action.source, formatDateTime(action.created_at)].filter(Boolean).join(" · ");
 }
 
-// 확인 카드의 반복 설명: "격주 화요일 09:00–12:00, 9/22부터 Lecture period 종료(12/8)까지"
-export function describeDraftRepeat(draft) {
-  if (!draft.is_recurring) return "반복 안 함 (한 번만)";
-  const rule = describeRecurrence(draft.recurrence_rule).replace(/ ([월화수목금토일](?:·[월화수목금토일])*)$/, " $1요일");
-  const time =
-    draft.event_type === "deadline" ? `${formatTime(draft.end_time)} 마감` : `${formatTime(draft.start_time)}–${formatTime(draft.end_time)}`;
-  const start = formatShortDate(draft.start_time ?? draft.end_time);
-  const until = draft.date_range_name ? `${draft.date_range_name} 종료(${formatShortDate(draft.date_range_end)})까지` : "";
-  return `${rule} ${time}, ${start}부터${until ? ` ${until}` : ""}`;
-}
-
-// --- 새 어시스턴트 확인 카드 (POST /assistant/chat의 proposal.items) ---
+// --- 어시스턴트 확인 카드 (POST /assistant/chat의 proposal.items) ---
 
 // 카드 행 → 그 행에 "추정" 배지를 붙게 하는 inferred_fields 이름. "location.travel_minutes"처럼 하위 항목도 부모 행에 붙인다.
 const INFERRED_ROWS = {
