@@ -1,140 +1,143 @@
 # Schreduler
 
-계획을 "기록"하는 캘린더가 아니라, **계획을 지키게 만드는** 엄격한 스케쥴 관리 시스템의 백엔드입니다.
-자연어로 일정을 추가하고, 시작·종료 알림과 완료 체크로 실행을 관리하며, 페르소나 대화와 포인트로 꾸준함을 돕습니다.
+한국어: [README.ko.md](README.ko.md)
 
-이 저장소는 **백엔드(Python / FastAPI)** 만 다룹니다. 모바일 클라이언트(Flutter)는 별도 저장소에서 REST API로 통신합니다.
+Schreduler is a scheduling backend built around one idea: a calendar shouldn't just record your plans, it should help you keep them. You tell it what you want in plain language, a tool-using assistant drafts the change, and nothing is saved until you confirm. Start/end reminders, completion check-ins, a persona that talks through your day, and points with streaks keep you on track.
 
-- 전체 기획: [`docs/기획보고서.md`](docs/기획보고서.md)
-- 클라이언트 개발자용 API 안내: [`docs/api_overview.md`](docs/api_overview.md)
-- Postman 컬렉션: [`docs/postman/Schreduler.postman_collection.json`](docs/postman/Schreduler.postman_collection.json)
+This repository is the **backend (Python / FastAPI)** plus a small dependency-free web client served from the same server. A mobile client talks to the same REST API.
 
-## 주요 기능
+- Design document (Korean): [`docs/기획보고서.md`](docs/기획보고서.md)
+- Assistant design and evaluation notes (Korean): [`docs/assistant_design.md`](docs/assistant_design.md)
+- API overview for client developers (Korean): [`docs/api_overview.md`](docs/api_overview.md)
+- Postman collection: [`docs/postman/Schreduler.postman_collection.json`](docs/postman/Schreduler.postman_collection.json)
 
-| 기능 | 설명 |
+## Features
+
+| Feature | What it does |
 |---|---|
-| 일정 (FR-1) | 시작~종료 일정(`scheduled`)과 마감형 일정(`deadline`), RRULE 반복, 학기 같은 중요 기간 |
-| 일정 어시스턴트 (FR-2) | 자연어로 일정·반복 기간을 추가·수정·삭제. LLM이 도구로 기존 일정을 찾고 빠진 값은 추론해 초안을 제안하며, 확인(버튼 또는 "좋아")한 뒤에만 저장하고 모두 되돌릴 수 있다 |
-| 알림·에스컬레이션 (FR-4) | 시작/종료/마감 알림(FCM), 장기 무응답 시 텔레그램 에스컬레이션 |
-| 이동시간 (FR-5) | 장소가 있는 일정 앞에 이동시간 하위 일정을 자동 생성 |
-| 미준수 사유 (FR-6) | 버튼만 누르면 LLM 없이 저장, 자유 텍스트일 때만 LLM이 페르소나 말투로 피드백 |
-| 수면·하루 체크인 (FR-7, FR-8) | 아침 수면 체크인, 저녁 9시 체크인 대화 (놓친 일정 위주로 컨텍스트 구성) |
-| 페르소나 (FR-9) | 대화 캐릭터 선택, 대화 기록 저장, 프롬프트 캐싱을 고려한 프롬프트 배치 |
-| 포인트 (FR-10) | 중요도 가중치 × 완료, 연속 100% 완료 streak 보너스 (3일 ×1.1 / 7일 ×1.25 / 14일 ×1.5) |
-| 다국어 (FR-11) | 알림 문구, 카테고리 라벨, LLM 응답을 사용자 언어(ko/en)로 |
-| 할 일 목록 | 마감형 일정을 할 일처럼 다루는 `/tasks` API (overdue 표시, 완료 처리) |
+| **Natural-language assistant** | Add, change or delete events and repeat periods by just saying it ("ECE360 Lab every other Tuesday 9–12", "move today's quiz from 5 to 6"). An LLM agent looks up existing events with tools and fills in missing details with sensible guesses, marked as *guessed* on the card. |
+| **Confirmation cards & undo** | Every change arrives as a card showing what will happen, how many occurrences it touches, and warnings (crosses midnight, already past, a similar event exists, …). It's saved only when you press **Create** or reply "ok", and every saved change can be undone. Changing one occurrence of a repeating event detaches just that occurrence. |
+| **Weekly calendar** | A week view (day view on phones) with importance colors, deadlines pinned on top, completion and deletion right from the event popover. |
+| **Deadlines & tasks** | Deadline-type events double as a to-do list: due-date reminders, overdue markers, mark as done. |
+| **Travel time** | Give an event a location and a travel block is added in front of it automatically. |
+| **Points & streaks** | Completed events earn their importance in points; finishing every event several days in a row multiplies them (3 days ×1.1, 7 days ×1.25, 14 days ×1.5). |
+| **Persona check-ins** | Pick a character and have an evening check-in about the day. Missed events come up first; if you log why you missed something, the persona replies in its own voice. |
+| **Korean / English** | The web UI starts in English with an **Eng \| Kor** switch. Notifications, cards and labels follow the screen language; chat replies follow the language of your last message. |
 
-## 기술 스택
+## Tech stack
 
-Python 3.12+ · FastAPI · SQLAlchemy 2.x · Alembic · SQLite(개발) / PostgreSQL · APScheduler ·
-OpenAI 호환 LLM API · Firebase Cloud Messaging · python-telegram-bot · pytest
+Python 3.12+ · FastAPI · SQLAlchemy 2.x · Alembic · SQLite (dev) / PostgreSQL · APScheduler · OpenAI Responses & Chat Completions APIs · Firebase Cloud Messaging · Telegram Bot API · pytest · plain HTML/CSS/JS front end (no build step)
 
-## 빠르게 시작하기
-
-### 로컬 실행
+## Quick start
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate              # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-cp .env.example .env              # 값 채우기 (아래 "환경변수" 참고). 최소한 LLM_API_KEY가 있어야 LLM 기능이 동작한다
+cp .env.example .env                   # then fill in values; LLM_API_KEY is needed for the assistant and personas
 
-alembic upgrade head               # DB 스키마 생성/최신화 (기본: ./schreduler.db)
-python -m app.scripts.seed         # 테스트 사용자 생성 (생성된 id가 출력된다)
-python -m app.scripts.seed_personas  # 기본 페르소나 넣기 (app/scripts/personas_seed_data.json)
+alembic upgrade head                   # create / migrate the database (default: ./schreduler.db)
+python -m app.scripts.seed             # create a test user — prints its id
+python -m app.scripts.seed_personas    # load the default personas (app/scripts/personas_seed_data.json)
 
 uvicorn app.main:app --reload
 ```
 
-- 웹 화면(개발용 프론트엔드): http://localhost:8000/app/
-- API 문서(Swagger UI): http://localhost:8000/docs
-- 상태 확인: http://localhost:8000/health
+Then open:
 
-### 로컬에서 프론트엔드 실행하기
+- Web app: <http://localhost:8000/app/> — enter the user id printed by the seed script in **User ID** (top right)
+- Swagger UI: <http://localhost:8000/docs>
+- Health check: <http://localhost:8000/health>
 
-별도 빌드나 서버 없이, 백엔드가 `frontend/` 폴더를 같은 서버에서 함께 서빙합니다 (CORS 설정 불필요).
-
-1. 위 순서대로 `uvicorn app.main:app --reload`로 서버를 실행합니다.
-2. 브라우저에서 http://localhost:8000/app/ 에 접속합니다.
-3. 상단 **사용자 ID**에 `python -m app.scripts.seed`가 출력한 id를 입력합니다 (브라우저에 저장됨).
-
-이벤트(일정 어시스턴트)·할 일·포인트·페르소나 대화 탭을 쓸 수 있습니다. 일정 어시스턴트와 페르소나 대화는
-`.env`의 `LLM_API_KEY`가 있어야 동작합니다. 프론트엔드 JS 테스트는 `node --test tests/frontend/*.test.mjs`
-(또는 `python -m pytest`가 Node가 있으면 함께 실행)로 돌립니다.
+The web app is served by the same FastAPI process from `frontend/`, so there is nothing to build and no CORS to configure.
 
 ### Docker
 
 ```bash
-docker compose up --build                                                        # SQLite (볼륨에 저장)
+docker compose up --build                                                        # SQLite, stored in a named volume
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build    # PostgreSQL
 ```
 
-컨테이너가 시작될 때 `alembic upgrade head`를 먼저 실행합니다. 스케줄러가 서버 프로세스 안에서 돌기 때문에 워커는 1개로 실행됩니다.
+The container runs `alembic upgrade head` on start. The scheduler lives inside the server process, so it runs with a single worker.
 
-## 환경변수
+## Configuration
 
-`.env` 파일 또는 환경변수로 설정합니다. 항목별 설명과 예시는 [`.env.example`](.env.example)에 있습니다. `.env`는 저장소에 커밋하지 않습니다.
+Settings come from environment variables or a `.env` file. [`.env.example`](.env.example) documents each one; never commit `.env`.
 
-| 이름 | 기본값 | 설명 |
+| Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `sqlite:///./schreduler.db` | SQLAlchemy DB URL. PostgreSQL은 `postgresql+psycopg://user:pw@host:5432/db` |
-| `LLM_API_KEY` | (없음) | LLM API 키. 없으면 LLM 엔드포인트가 500을 돌려준다 |
-| `LLM_MODEL` | `gpt-5.6-luna` | 페르소나 대화·체크인·미준수 피드백에 쓰는 모델 |
-| `ASSISTANT_MODEL` | `gpt-5.6-luna` | 일정 어시스턴트(Responses API)에 쓸 모델 |
-| `ASSISTANT_REASONING_EFFORT` | `medium` | 일정 어시스턴트의 `reasoning.effort` |
-| `APP_TIMEZONE` | `America/Toronto` | 날짜·시각 해석 기준 시간대 (IANA 이름) |
-| `FIREBASE_CREDENTIALS_PATH` | (없음) | FCM 서비스 계정 JSON 경로. 없으면 푸시는 로그만 남기고 건너뛴다 |
-| `TELEGRAM_BOT_TOKEN` | (없음) | 에스컬레이션용 텔레그램 봇 토큰. 없으면 로그만 남긴다 |
-| `LOG_LEVEL` | `INFO` | 앱 로그 레벨 |
-| `ENVIRONMENT` | `development` | 실행 환경 이름 |
+| `DATABASE_URL` | `sqlite:///./schreduler.db` | SQLAlchemy URL. For PostgreSQL: `postgresql+psycopg://user:pw@host:5432/db` |
+| `LLM_API_KEY` | *(none)* | OpenAI API key. Without it, LLM endpoints return 500 |
+| `LLM_MODEL` | `gpt-5.6-luna` | Model for persona chat, check-ins and missed-event feedback |
+| `ASSISTANT_MODEL` | `gpt-5.6-luna` | Model for the scheduling assistant (Responses API) |
+| `ASSISTANT_REASONING_EFFORT` | `medium` | `reasoning.effort` for the assistant; validated per model at startup |
+| `APP_TIMEZONE` | `America/Toronto` | IANA time zone used for "today", weekdays and reminders |
+| `FIREBASE_CREDENTIALS_PATH` | *(none)* | Path to an FCM service-account JSON. Without it, push notifications are only logged |
+| `TELEGRAM_BOT_TOKEN` | *(none)* | Bot token for escalation messages. Without it, they are only logged |
+| `LOG_LEVEL` | `INFO` | Application log level |
+| `ENVIRONMENT` | `development` | Environment name |
 
-Docker 전용: `DOCKER_DATABASE_URL`(컨테이너 DB URL, 로컬 `.env`의 `DATABASE_URL` 대신 사용), `API_PORT`(기본 8000),
-`POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`(기본값 모두 `schreduler`, 개발용).
+Docker only: `DOCKER_DATABASE_URL` (database URL inside the container, used instead of `DATABASE_URL`), `DOCKER_FIREBASE_CREDENTIALS_PATH`, `API_PORT` (default `8000`), and `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` (all default to `schreduler`, for development).
 
-## 테스트
+## Tests and evaluation
 
 ```bash
-python -m pytest                          # 전체 테스트 (tests/ 아래만 수집)
-python -m pytest --cov=app                # 커버리지
+python -m pytest                         # everything under tests/ (also runs the JS tests if Node is installed)
+python -m pytest --cov=app               # with coverage
+node --test tests/frontend/*.test.mjs    # front-end unit tests only
 ```
 
-테스트는 인메모리 SQLite와 가짜 LLM 응답을 쓰므로 외부 API를 호출하지 않습니다.
+Tests use in-memory SQLite and scripted fake LLM responses, so they never call a real API.
 
-## 프로젝트 구조
+The assistant also has an evaluation set of real-world requests (`tests/assistant_eval/cases.yaml`). It calls the real API, so it costs money and is kept out of pytest:
+
+```bash
+python -m app.scripts.eval_assistant --effort medium
+python -m app.scripts.eval_assistant --summarize "tests/assistant_eval/results/*.json"   # compare saved runs
+```
+
+Each run prints pass rates by category, LLM calls, tokens, latency and cost per turn, and saves a JSON report to `tests/assistant_eval/results/`.
+
+Other scripts:
+
+| Command | Purpose |
+|---|---|
+| `python -m app.scripts.export_postman` | Regenerate the Postman collection from the OpenAPI spec (run after API changes) |
+| `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | Compare input tokens with and without prompt caching (real API calls) |
+
+## Project structure
 
 ```
 app/
-├── main.py              # FastAPI 앱, 라우터·예외 처리기·스케줄 잡 등록
-├── api/                 # 라우터 (엔드포인트)
-├── models/              # SQLAlchemy 모델
-├── schemas/             # Pydantic 요청/응답 스키마
-├── services/            # 비즈니스 로직, LLM 클라이언트, 알림, 포인트
-├── child_events/        # 이동시간·준비 하위 일정 (FR-5)
-├── core/                # 설정, DB, 스케줄러, 인증, 예외 처리, 로깅, OpenAPI 메타데이터
-├── i18n/                # 언어별 알림 문구·카테고리 라벨 (ko/en)
-└── scripts/             # 시드, Postman 컬렉션 생성, 프롬프트 캐싱 비교
-frontend/                # 빌드 도구 없는 정적 웹 화면 (HTML/CSS/JS), 같은 서버의 /app에서 서빙
-alembic/                 # DB 마이그레이션
-tests/                   # pytest
-docs/                    # 기획서, API 안내, Postman 컬렉션
+├── main.py              # FastAPI app: routers, exception handlers, scheduled jobs
+├── frontend_serving.py  # serves frontend/ with cache-busting asset URLs
+├── api/                 # routers (endpoints)
+├── models/              # SQLAlchemy models
+├── schemas/             # Pydantic request/response schemas
+├── services/
+│   ├── assistant/       # tool-using scheduling assistant: agent loop, tools, drafts, prompt, execution
+│   ├── draft_rules.py   # shared validation and normalization for drafts (RRULEs, previews, time strings)
+│   ├── llm_client.py    # Responses and Chat Completions clients, prompt caching, usage logging
+│   └── …                # events, ranges, undo history, notifications, points, check-ins
+├── child_events/        # travel-time and prep sub-events
+├── core/                # settings, DB, scheduler, auth, errors, clock, OpenAPI metadata
+├── i18n/                # Korean/English messages, notifications, category labels
+└── scripts/             # seeding, evaluation, Postman export
+frontend/                # static web client (HTML/CSS/JS, en/ko dictionaries in i18n.js)
+alembic/                 # database migrations
+tests/                   # pytest and Node tests, assistant evaluation set
+docs/                    # design docs, API overview, Postman collection
 ```
 
-## 유용한 스크립트
+## Known limitations
 
-| 명령 | 설명 |
-|---|---|
-| `python -m app.scripts.seed` | 테스트 사용자 생성 |
-| `python -m app.scripts.seed_personas` | JSON 파일의 페르소나를 DB에 upsert |
-| `python -m app.scripts.export_postman` | OpenAPI 스펙으로 Postman 컬렉션 재생성 (API 변경 후 실행) |
-| `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | 프롬프트 캐싱 전후 입력 토큰 비교 (실제 LLM API 호출, 비용 발생) |
-| `python -m app.scripts.eval_assistant --effort medium` | 일정 어시스턴트 평가 세트 실행 (실제 LLM API 호출, 비용 발생). 결과는 `tests/assistant_eval/results/` |
+- **No real authentication yet.** Requests identify the user with an `X-User-Id` header; there is no sign-up or user-management API (use the seed script).
+- **No device-token registration.** Without an FCM token endpoint, push notifications are logged rather than delivered.
+- **One time zone per server.** Everything follows `APP_TIMEZONE`; per-user time zones aren't supported yet.
+- **Reminder jobs live in memory.** They are re-registered from the database on startup, but a single worker is required.
+- **The assistant is probabilistic.** It is evaluated against a fixed set of requests (above 90% in recent runs with the default model) and every change needs confirmation, but it can still misread a request.
 
-## 현재 상태와 제약
-
-개발 중인 MVP입니다. 정식 인증 대신 `X-User-Id` 헤더를 쓰고, 일반 일정의 완료 처리·회차 조회, 사용자 관리,
-FCM 디바이스 토큰 등록 API는 아직 없습니다. 자세한 목록은 [`docs/api_overview.md`의 "알려진 제약"](docs/api_overview.md#7-알려진-제약-클라이언트-설계-시-주의)을 참고하세요.
-
-## 라이선스
+## License
 
 [MIT](LICENSE) © 2026 Junseo Kim
