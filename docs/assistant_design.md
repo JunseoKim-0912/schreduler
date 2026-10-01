@@ -98,7 +98,7 @@ event_parse_service에 엉켜 있는 규칙을 **순수 함수 모듈**(예: `ap
 | B | 에이전트 코어: 도구, 루프, DB 세션/제안, `POST /assistant/chat`, 확인 흐름, 시나리오 테스트 | 그대로 |
 | C | 평가 세트 + eval 스크립트, 모델 × reasoning effort 비교 후 기본값 확정 | 그대로 |
 | D | 프론트엔드: 이벤트 탭에 "새 어시스턴트" 전환 스위치, 추정 배지·경고·미리보기 카드 | 스위치로 옛 방식 선택 가능 |
-| E | 며칠 실사용 후 옛 `/events/parse`·slot fill 코드와 관련 테스트 제거, 기획보고서 FR-2 v4 반영 | 제거 |
+| E ✅ | 며칠 실사용 후 옛 `/events/parse`·slot fill 코드와 관련 테스트 제거, 기획보고서 FR-2 v4 반영 (2026-10-01 완료, §11.10) | 제거 |
 
 각 단계는 Claude Code 새 세션(`/clear`)에서 이 문서를 먼저 읽고 시작한다.
 
@@ -188,10 +188,35 @@ event_parse_service에 엉켜 있는 규칙을 **순수 함수 모듈**(예: `ap
 
 ### 11.9 옛 방식과 비용 비교 (2026-09-30)
 
-- `python -m app.scripts.compare_nl_paths`: 평가 세트 10건(생성 8, 수정 2)을 옛 `/events/parse`와 새 어시스턴트로 "일정 하나 확정까지"
+- `python -m app.scripts.compare_nl_paths`(E단계에서 스크립트는 지우고 결과 JSON만 남김): 평가 세트 10건(생성 8, 수정 2)을 옛 `/events/parse`와 새 어시스턴트로 "일정 하나 확정까지"
   돌려 턴·호출·토큰·비용을 나란히 비교한다. 옛 경로 사용량은 `llm_client.collect_chat_usage()`로 코드에서 모으고, Chat
   Completions의 `completion_tokens_details.reasoning_tokens`도 읽는다 (과금은 원래 completion_tokens에 포함돼 있었다).
 - 1회 결과(`results/compare_nl_paths_20260930-190127.json`, 둘 다 gpt-5.6-luna, 옛 방식은 reasoning_effort 미지정):
   둘 다 확정한 8건 기준 1,000건당 옛 $0.74 / 새 $0.75로 사실상 같다. 옛 방식은 2건이 예상 밖의 중요도 질문에서 멈췄다
   (새 방식 10/10 확정·정답). 새 방식은 호출이 많아 캐시 안 된 입력이 약 3배, 옛 방식은 JSON 슬롯 출력·추론 토큰이 많아
   출력이 약 1.8배라 서로 상쇄된다.
+
+### 11.10 E단계: 옛 경로 제거 (2026-10-01)
+
+- 제거 직전 커밋에 태그 `before-remove-nl-parse`. 커밋: 시나리오 이전 → 옛 코드 제거 → `date.today()` 정리 → 문서.
+- **지운 것:** `POST /events/parse`, `POST /events/commands/confirm`, `event_parse_service`, `slot_fill_session`(메모리 세션·옛 확인
+  토큰), `schemas/event_parse`, `llm_client`의 슬롯필링·초안 수정(1,281 → 644줄), `event_command_service`의 `resolve`·확인 토큰 흐름,
+  `compare_nl_paths` 스크립트, 안 쓰게 된 i18n 키 53개(101 → 48), 프론트엔드 [기존 방식] 모드와 전환 스위치(`schreduler.eventsMode`
+  키는 페이지를 열 때 지운다).
+- **남긴 것 (이름은 옛날 것):** `event_command_service`(`execute`, `create_event_from_nl`, `match_events`, `similar_events`,
+  `delete_*_from_ui`), `date_range_command_service`, `ActionSource.NL`(`"nl"`). `CommandDescription.from_dict`는 저장된 제안의
+  예전 키(`all`, `target_weekday`)를 무시한다. 옛 경로 전용 DB 테이블·컬럼은 없었다.
+- **테스트:** 의미 있는 시나리오는 `tests/assistant_flow.py`(가짜 LLM 대본으로 채팅 → [만들기])로 옮겼다 —
+  `test_assistant_scenarios.py`(기간·장소·회차/시리즈 수정·되돌리기), `test_search.py`(제목 매칭), test_undo·test_single_instances·
+  test_i18n_regression의 자연어 부분, LLM 실패 502/500. 평가 세트에 `draft_add_recurrence`, `draft_remove_recurrence`,
+  `draft_switch_to_deadline`, `list_ranges`(옛 `list_message` 대신 프롬프트의 기간 목록으로 답하는지, `reply_contains`) 추가 → 34건.
+  pytest는 1,006(이전 직후) → 795.
+- **시간 기준:** 서비스·API·스크립트·모델 기본값의 `date.today()`/naive `datetime.now()`를 `local_today()`/`local_wall_now()`
+  (APP_TIMEZONE)로 바꿨다. `utcnow`를 쓰던 미준수 리포트·에스컬레이션은 aware로 계산하고 저장은 naive UTC 그대로다.
+- **제거 후 평가 (luna/medium 1회, `results/gpt-5.6-luna_medium_20260930-234747.json`):** 32/34(94%), 기준 미충족(오전오후 4/5).
+  이전 1차는 29/30(97%). 어시스턴트의 프롬프트·도구·요청은 제거 전과 같다(diff 확인) — 실패 2건은 이번 변경과 무관하다.
+  - `delete_all_followup`: 지금까지 4회 모두 실패. "전부 다 없애줘"를 직전 삭제 제안의 승인으로 보고 실행한다 (알려진 실패).
+  - `sleep_overnight`("밤 11시부터 새벽 7시까지 수면"): **알려진 흔들림, 4회 중 2회 실패.** 날짜·반복 여부가 없어 초안 대신
+    "어느 날짜로/매일 반복할까요?"라고 되묻는 경우가 있다. 다음 작업에서 "날짜 없는 단발 일정은 오늘(지났으면 내일)로 추정"
+    같은 규칙으로 따로 고친다.
+

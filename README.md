@@ -14,7 +14,7 @@
 | 기능 | 설명 |
 |---|---|
 | 일정 (FR-1) | 시작~종료 일정(`scheduled`)과 마감형 일정(`deadline`), RRULE 반복, 학기 같은 중요 기간 |
-| 자연어 일정 추가 (FR-2) | LLM이 부족한 정보(요일, 시간, 반복 기간 등)를 되물어 채운 뒤 초안을 만든다 |
+| 일정 어시스턴트 (FR-2) | 자연어로 일정·반복 기간을 추가·수정·삭제. LLM이 도구로 기존 일정을 찾고 빠진 값은 추론해 초안을 제안하며, 확인(버튼 또는 "좋아")한 뒤에만 저장하고 모두 되돌릴 수 있다 |
 | 알림·에스컬레이션 (FR-4) | 시작/종료/마감 알림(FCM), 장기 무응답 시 텔레그램 에스컬레이션 |
 | 이동시간 (FR-5) | 장소가 있는 일정 앞에 이동시간 하위 일정을 자동 생성 |
 | 미준수 사유 (FR-6) | 버튼만 누르면 LLM 없이 저장, 자유 텍스트일 때만 LLM이 페르소나 말투로 피드백 |
@@ -59,7 +59,7 @@ uvicorn app.main:app --reload
 2. 브라우저에서 http://localhost:8000/app/ 에 접속합니다.
 3. 상단 **사용자 ID**에 `python -m app.scripts.seed`가 출력한 id를 입력합니다 (브라우저에 저장됨).
 
-이벤트(자연어 일정 추가)·할 일·포인트·페르소나 대화 탭을 쓸 수 있습니다. 자연어 일정 추가와 페르소나 대화는
+이벤트(일정 어시스턴트)·할 일·포인트·페르소나 대화 탭을 쓸 수 있습니다. 일정 어시스턴트와 페르소나 대화는
 `.env`의 `LLM_API_KEY`가 있어야 동작합니다. 프론트엔드 JS 테스트는 `node --test tests/frontend/*.test.mjs`
 (또는 `python -m pytest`가 Node가 있으면 함께 실행)로 돌립니다.
 
@@ -80,7 +80,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build  
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///./schreduler.db` | SQLAlchemy DB URL. PostgreSQL은 `postgresql+psycopg://user:pw@host:5432/db` |
 | `LLM_API_KEY` | (없음) | LLM API 키. 없으면 LLM 엔드포인트가 500을 돌려준다 |
-| `LLM_MODEL` | `gpt-5.6-luna` | 페르소나 대화·체크인·미준수 피드백·기존 자연어 일정 추가에 쓰는 모델 |
+| `LLM_MODEL` | `gpt-5.6-luna` | 페르소나 대화·체크인·미준수 피드백에 쓰는 모델 |
 | `ASSISTANT_MODEL` | `gpt-5.6-luna` | 일정 어시스턴트(Responses API)에 쓸 모델 |
 | `ASSISTANT_REASONING_EFFORT` | `medium` | 일정 어시스턴트의 `reasoning.effort` |
 | `APP_TIMEZONE` | `America/Toronto` | 날짜·시각 해석 기준 시간대 (IANA 이름) |
@@ -128,6 +128,7 @@ docs/                    # 기획서, API 안내, Postman 컬렉션
 | `python -m app.scripts.seed_personas` | JSON 파일의 페르소나를 DB에 upsert |
 | `python -m app.scripts.export_postman` | OpenAPI 스펙으로 Postman 컬렉션 재생성 (API 변경 후 실행) |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | 프롬프트 캐싱 전후 입력 토큰 비교 (실제 LLM API 호출, 비용 발생) |
+| `python -m app.scripts.eval_assistant --effort medium` | 일정 어시스턴트 평가 세트 실행 (실제 LLM API 호출, 비용 발생). 결과는 `tests/assistant_eval/results/` |
 
 ## 현재 상태와 제약
 

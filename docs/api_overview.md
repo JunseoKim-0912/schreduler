@@ -62,7 +62,7 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 | `401` | `X-User-Id` 헤더 없음 | 로그인(사용자 선택) 화면으로 |
 | `404` | 대상 없음, 또는 참조한 `user_id`/`date_range_id` 등이 없음 | 목록 새로고침 |
 | `409` | 충돌 — 이미 존재하거나 다른 데이터가 쓰는 중이라 삭제 불가, 되돌리기 순서 위반 등 | `detail`을 그대로 안내 |
-| `410` | 확인 토큰 만료 (`POST /events/commands/confirm`, 발급 후 10분) | 요청을 처음부터 다시 말하도록 안내 |
+| `410` | 어시스턴트 제안 만료 (`POST /assistant/confirm`·`/cancel`, 제안 후 30분) | 요청을 다시 말하도록 안내 |
 | `422` | 입력 규칙 위반 (위 두 형식) | 배열이면 `loc`의 마지막 값으로 해당 입력 필드에 표시 |
 | `500` | 서버 설정 문제(예: LLM 키 미설정) 또는 예상 못 한 오류 | 일반 오류 안내 + 재시도 |
 | `502` | LLM API 호출 실패 | "잠시 후 다시 시도" 안내 |
@@ -88,9 +88,8 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 | `child_kind` | `travel`, `custom` | 하위 일정 종류. `travel`은 장소 이동시간으로 서버가 자동 생성 |
 | `reason_category` | `overslept`, `fatigue`, `priority_shift`, `schedule_conflict`, `forgot`, `transit_issue`, `other` | 미준수 사유. 버튼 라벨은 `GET /compliance-reports/categories`로 받는다 |
 | `role` (대화 메시지) | `user`, `assistant` | |
-| `intent` (자연어 요청) | `create`, `delete`, `update`, `list`, `unknown` | `POST /events/parse`가 분류한 요청 종류. `list`는 반복 기간 목록 보기 |
-| `target_kind` (자연어 요청 대상) | `event`, `date_range` | `command.target_kind`. `date_range`면 반복 기간 자체에 대한 요청 |
-| `option` (사용 중인 기간 삭제) | `range_only`, `with_events` | 기간만 삭제(일정은 이미 만들어진 마지막 회차에서 끝남) / 일정도 함께 삭제 |
+| `kind` (어시스턴트 카드) | `create_event`, `update_event`, `delete_event`, `create_range`, `update_range`, `delete_range` | `proposal.items[].kind` |
+| `mode` (사용 중인 기간 삭제) | `range_only`, `with_events` | 기간만 삭제(일정은 이미 만들어진 마지막 회차에서 끝남) / 일정도 함께 삭제. `DELETE /date-ranges/{id}?mode=`와 기간 삭제 카드 |
 | `action_type` (변경 기록) | `create`, `delete`, `update` | |
 | `source` (변경 기록) | `nl`, `ui` | `nl`=자연어 요청, `ui`=화면 버튼(일정 삭제, 반복 기간 등록·수정·삭제) |
 | 포인트 가중치 | 중요도 `null`→0, `1`~`5`→그대로, `6`(MAX)→10 | 연속 100% 완료 3일 ×1.1, 7일 ×1.25, 14일 ×1.5 |
@@ -115,110 +114,7 @@ PUT  /users/me/persona  {"persona_name": "Hana"}   → 선택 (null이면 해제
 
 선택한 페르소나는 저녁 체크인·미준수 피드백 LLM 응답의 말투에 쓰인다.
 
-### 3.2 자연어로 일정 추가 (여러 턴 대화)
-
-```
-POST /events/parse {"user_id": 1, "utterance": "매주 화요일 저녁 7시에 알고리즘 스터디"}
-  ← {"session_id": "…", "is_complete": false,
-     "next_question": {"slot": "date_range_id", "question": "언제까지 반복할까요?"}, "missing_slots": [...], "draft": null}
-
-POST /events/parse {"user_id": 1, "utterance": "이번 학기까지", "session_id": "…"}   // 같은 session_id로 이어서
-  ← {"is_complete": true, "draft": {...}}
-
-POST /events/commands/confirm {"user_id": 1, "token": "<command.confirmation_token>"}   // "이 내용으로 만들기"
-  ← {"message": "…", "command": {"action": "create", "status": "executed", "action_id": 12, ...}}
-```
-
-- `next_question.question`을 챗 UI에 보여주고, 사용자의 답을 다음 `utterance`로 보낸다.
-- `is_complete: true`가 되면 `draft`와 `command.confirmation_token`이 온다. **서버는 아직 저장하지 않았다** — 확인 화면에서
-  "만들기"를 누르면 토큰으로 `POST /events/commands/confirm`을 부른다(되돌리기 기록이 남는다).
-  초안을 고쳐서 저장하고 싶으면 대신 `POST /events`로 보내도 된다(이때는 되돌리기 기록이 없다).
-- 반복을 말하지 않으면("10월 1일 저녁 8시 미팅") **단발 일정**이다 — `draft.is_recurring: false`, `recurrence_rule`·`date_range_id`는
-  `null`. 연도 없는 날짜는 오늘 이후 가장 가까운 그 날짜다. 반복 여부를 되물었을 때 "반복 없이/한 번만"이라고 답해도 단발이 된다.
-- "8시"처럼 오전/오후가 애매하면 `next_question`이 "오전 8시인가요, 오후 8시인가요?"(`slot: start_time`)로 **한 번** 온다.
-- `date_range_id`(반복 기간)는 반복 일정일 때만 묻는다. 질문은 "2026-2학기(9/1~12/20)까지 반복할까요? 다른 날짜까지라면
-  말해주세요"처럼 등록된 기간을 제안하면서 다른 날짜도 받는다.
-- 등록되지 않은 기간을 말하면("Lecture End Date는 12월 8일, 2학기 시작부터") `draft.date_range_id`는 `null`이고
-  `draft.new_date_range`에 `{name, start_date, end_date, auto_named}`가 온다. **확인할 때 일정과 함께 만들어진다** —
-  초안을 버리면 기간도 생기지 않는다. 이름을 말하지 않으면 `"2026-2학기 (~12/8)"`처럼 붙이고(`auto_named: true`)
-  `message`로 알려 준다. 같은 이름의 기간이 이미 있으면 새로 만들지 않고 그것을 쓴다.
-  `new_date_range`가 있는 초안은 `POST /events`가 아니라 `POST /events/commands/confirm`으로 확정해야 한다.
-- 같은 `session_id` 안에서는 앞서 답한 내용을 서버가 기억해 다시 묻지 않는다.
-- **확인 카드에서 말로 고치기**: 초안이 나온 뒤 같은 `session_id`로 보낸 말은 그 초안을 고치는 말로 처리된다
-  (기존 일정의 수정·삭제로 분류되지 않는다 — "기존 물리 퀴즈를 지워줘"처럼 다른 일정을 분명히 가리킬 때만 예외).
-  - 시간("7시로", 시작만 바꾸면 길이 유지 / "2시간으로"), 날짜, 종류(일반/마감), 중요도, 제목, 반복 추가·제거, 장소를 고칠 수 있다.
-    고치면 새 `draft`와 새 `confirmation_token`이 오고(이전 토큰은 무효), `draft_changes`에 바뀐 항목
-    (`title`, `event_type`, `date`, `time`, `importance`, `recurrence`, `location`)이 온다.
-  - 반복을 추가하면 반복 기간을, 등록되지 않은 장소면 이동 시간(`next_question.slot: "location"`)을 이어서 묻는다.
-    끝나는 시각이 시작보다 빠르거나 같으면 끝나는 시각을 되묻는다. 새 장소는 새 반복 기간처럼 확정할 때 함께 등록된다.
-  - "좋아", "응 만들어줘"는 [만들기]와 같고(`command.status: "executed"`, `action_id`), "취소", "안 만들래"는
-    [취소]와 같다(`command.status: "cancelled"`).
-  - 메모·알림 시각처럼 지원하지 않는 항목은 "지금은 ○○은(는) 설정할 수 없어요"라고 알려 주고 초안은 그대로 둔다.
-- "과제 제출날이야", "~까지 내야 해"처럼 마감을 말하면 `draft.event_type: "deadline"`(`start_time: null`, `end_time`=마감 시각)이다.
-- 말할 때마다 요청을 새로 분류한다. 앱이 방금 물은 질문의 답일 때만 이전 요청을 이어받고, 새 요청이면 이전 상태를 버린다.
-  삭제·수정 요청은 끝나면(실행, 취소, 찾지 못함) 상태가 비워진다.
-- 일정 제목은 대소문자·공백·기호를 무시하고, 과목 코드("ECE360")만 맞아도 찾는다. 맞는 게 없으면 비슷한 제목을
-  `command.candidates`로 제안한다(`needs_clarification`).
-- LLM 응답 형식이 맞지 않으면 서버가 한 번 다시 요청하고, 그래도 안 되면 `422` 대신 "날짜와 시간을 다시 말해줄래요?"라고 묻는다.
-- LLM을 호출하므로 응답이 수 초 걸릴 수 있다. 로딩 표시와 `500`/`502` 처리를 넣는다.
-
-### 3.2.1 자연어로 일정 삭제·수정
-
-`POST /events/parse`는 같은 입력창에서 삭제·수정 요청도 받는다. 응답의 `intent`로 분기한다.
-
-```
-POST /events/parse {"user_id": 1, "utterance": "오늘 물리 퀴즈 5시에서 6시로 옮겨줘"}
-  ← {"intent": "update", "message": "✔ '물리 퀴즈' 9/26 회차: 시간 17:00→18:00",
-     "command": {"action": "update", "status": "executed", "scope": "instance", "affected": [...], "action_id": 13}}
-
-POST /events/parse {"user_id": 1, "utterance": "물리 퀴즈 전부 없애줘"}
-  ← {"intent": "delete", "message": "3개 일정이 영향을 받아요: …. 진행할까요?",
-     "command": {"status": "needs_confirmation", "affected": [...], "affected_count": 3,
-                 "confirmation_token": "…", "expires_at": "…"}}
-POST /events/commands/confirm {"user_id": 1, "token": "…"}   → 실행, command.action_id 반환
-```
-
-| `command.status` | 의미 | 화면 처리 |
-|---|---|---|
-| `executed` | 1개만 영향 → 바로 실행됨 | `message` 표시 + "되돌리기" 버튼(`action_id`) |
-| `needs_confirmation` | 2개 이상 영향 → 아직 실행 안 됨 | `affected` 목록과 확인 버튼. 토큰은 10분, 한 번만 유효(지나면 `410`) |
-| `needs_clarification` | 후보가 여럿이거나 "이번만/반복 전체"를 모름 | `message`(질문)와 `candidates`를 보여주고, 답을 같은 `session_id`로 보낸다 |
-| `not_found` | 일치하는 일정 없음 | `message` 표시 |
-
-- 일정 찾기는 제목 부분 일치(대소문자·공백 무시)이고, 날짜를 말하면 그 날짜 회차로 좁힌다.
-- 시작 시각만 바꾸면 길이를 유지한다. 마감형은 마감 시각만 바뀐다.
-- 반복 일정의 한 회차만 삭제하면 그 회차가 `cancelled`가 된다. 제목·중요도 변경은 항상 반복 전체에 적용된다.
-- 장소도 말로 넣고·바꾸고·뺄 수 있다("ESC360 Lecture에 장소 넣어줘 Bahen", "장소 빼줘"). 장소는 반복 시리즈 단위 값이라
-  여러 요일로 반복되는 일정의 한 요일만 가리키면 `needs_confirmation`("장소는 반복 일정 전체(월·수)에 적용돼요")이 온다.
-  등록되지 않은 장소면 이동 시간을 묻고(`needs_clarification`) 답을 받아 새로 등록한다. 이름 없이 "장소 추가해줘"면 장소를 묻는다.
-  장소를 넣으면 이동시간 하위 일정과 회차가 생기고, 바꾸면 그 시각을 다시 맞추고, 빼면 앞으로 남은 이동 회차만 `cancelled`가 된다.
-  `PUT /events/{id}`에 `location_id`를 보내도 같은 처리가 된다(되돌리기 기록은 자연어 수정만 남는다).
-- 추가·삭제·수정이 아닌 말이면 `intent: "unknown"`과 안내 `message`가 온다.
-
-### 3.2.2 반복 기간을 자연어로 관리
-
-"Lecture End Date 기간 만들어줘, 9월 1일부터 12월 8일까지", "Lecture End Date를 12월 10일까지로 바꿔줘",
-"Lecture End Date 기간 지워줘", "등록된 기간 보여줘"도 같은 입력창에서 된다. `command.target_kind`가 `date_range`다.
-
-- 만들기·바꾸기는 바로 실행되고 `command.action_id`로 되돌릴 수 있다. 기간을 바꾸면 그 기간을 쓰는 반복 일정의
-  회차를 다시 맞춘다: 늘어난 날짜는 회차(와 알림)를 추가하고, 범위 밖의 대기 회차는 `cancelled`가 된다(완료·놓침은 그대로).
-- 목록 보기는 `intent: "list"`와 여러 줄 `message`만 온다.
-- 쓰는 반복 일정이 있는 기간을 지우면 `needs_confirmation`과 `command.options: ["range_only", "with_events"]`,
-  `affected`(그 일정들)가 온다. 사용자가 고른 것을 `POST /events/commands/confirm`의 `option`으로 보낸다(빠지면 `422`, 토큰은 유지).
-
-### 3.2.3 되돌리기
-
-```
-GET  /actions?limit=10                       → 최근 변경 기록 (최신순, undone=true면 이미 되돌림)
-POST /actions/{action_id}/undo               → 되돌린 기록(ActionRead)
-```
-
-- 자연어로 실행한 추가·삭제·수정, `DELETE /events/{id}`, 반복 기간 등록·수정·삭제(`/date-ranges`, 응답 헤더 `X-Action-Id`)가 기록된다. `PUT /events`, `POST /events`는 기록되지 않는다.
-- 여러 개를 한 번에 바꾼 요청도 기록 하나 → 되돌리기 한 번으로 모두 복구된다. 삭제를 되돌리면 원래 ID 그대로 돌아온다(미준수 사유 포함).
-- 같은 일정을 건드린 더 최근 기록이 남아 있으면 `409` ("더 최근 변경을 먼저 되돌려야 해요"). 이미 되돌린 기록도 `409`.
-- 과거 회차가 바뀌었다면 그날부터 어제까지 포인트가 다시 계산된다.
-
-### 3.2.4 일정 어시스턴트 (v4, 개발 중 — `/events/parse`와 나란히 동작)
+### 3.2 자연어로 일정 관리 (일정 어시스턴트)
 
 ```
 GET  /assistant/sessions/current                          → 오늘의 대화 이어보기 (없으면 session_id: null)
@@ -240,6 +136,22 @@ POST /assistant/chat {"session_id": 1, "message": "좋아"}          → execute
 - 한 제안의 여러 초안(예: 새 기간 + 그 기간의 일정)은 **한 트랜잭션**으로 확정된다. `executed[].action_id`마다 `POST /actions/{id}/undo`로 되돌린다.
 - 제안은 30분 뒤 만료(`410`). 이미 확정·취소·대체된 제안은 `409`, 다른 사용자·세션의 토큰은 `404`.
 - 한 턴은 LLM 호출 최대 6회·20초. 넘으면 지금까지 만든 초안을 보여주거나 짧게 되묻는다.
+- 반복 기간도 같은 입력창에서 만들고·바꾸고·지운다 ("Lecture End Date를 12월 10일까지로 바꿔줘"). 기간을 바꾸면 그 기간을 쓰는
+  반복 일정의 회차를 다시 맞춘다: 늘어난 날짜는 회차(와 알림)를 추가하고, 범위 밖의 대기 회차는 `cancelled`(완료·놓침은 그대로).
+  쓰는 일정이 있는 기간을 지우는 카드에는 `range_in_use` 경고와 `mode`(기본 `range_only`, 추정)가 붙는다.
+- "등록된 기간 보여줘" 같은 질문에는 제안 없이 `reply`로 답한다.
+
+### 3.2.1 되돌리기
+
+```
+GET  /actions?limit=10                       → 최근 변경 기록 (최신순, undone=true면 이미 되돌림)
+POST /actions/{action_id}/undo               → 되돌린 기록(ActionRead)
+```
+
+- 어시스턴트로 실행한 추가·삭제·수정, `DELETE /events/{id}`·`DELETE /event-instances/{id}`, 반복 기간 등록·수정·삭제(`/date-ranges`, 응답 헤더 `X-Action-Id`)가 기록된다. `PUT /events`, `POST /events`는 기록되지 않는다.
+- 여러 개를 한 번에 바꾼 요청도 기록 하나 → 되돌리기 한 번으로 모두 복구된다. 삭제를 되돌리면 원래 ID 그대로 돌아온다(미준수 사유 포함).
+- 같은 일정을 건드린 더 최근 기록이 남아 있으면 `409` ("더 최근 변경을 먼저 되돌려야 해요"). 이미 되돌린 기록도 `409`.
+- 과거 회차가 바뀌었다면 그날부터 어제까지 포인트가 다시 계산된다.
 
 ### 3.3 할 일 목록 (마감형 일정)
 
@@ -327,7 +239,7 @@ GET /points/summary
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `POST /assistant/chat` 🤖 | 대화 한 턴 — 초안 제안 또는 채팅 승인 실행 (3.2.4) | `{session_id?, message}` | `AssistantChatResponse` |
+| `POST /assistant/chat` 🤖 | 대화 한 턴 — 초안 제안 또는 채팅 승인 실행 (3.2) | `{session_id?, message}` | `AssistantChatResponse` |
 | `POST /assistant/confirm` | 제안 확정 (버튼, 한 트랜잭션) | `{session_id, token}` | `AssistantConfirmResponse` |
 | `POST /assistant/cancel` | 제안 취소 (버튼) | `{session_id, token}` | `AssistantConfirmResponse` |
 | `GET /assistant/sessions/current` | 오늘의 최근 대화·기록·대기 제안 | | `AssistantSessionRead` |
@@ -449,7 +361,7 @@ GET /points/summary
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `GET /actions` | 최근 변경 기록 (`?limit=10`, 최신순) (3.2.2) | | `ActionRead[]` |
+| `GET /actions` | 최근 변경 기록 (`?limit=10`, 최신순) (3.2.1) | | `ActionRead[]` |
 | `POST /actions/{action_id}/undo` | 되돌리기 (이미 되돌렸거나 더 최근 변경이 있으면 `409`) | | `ActionRead` |
 
 `ActionRead`: `id`, `action_type`, `source`, `summary_text`, `affected_ids`, `created_at`, `undone_at?`, `undone`
@@ -496,6 +408,5 @@ GET /points/summary
 | FCM 디바이스 토큰 등록 API 없음 | 서버가 푸시를 보낼 대상 토큰이 없어, 현재 푸시는 실제로 발송되지 않고 서버 로그에만 남는다 |
 | 일정별 알림 job이 서버 메모리에만 있음 | 일정을 만들거나 바꿀 때 대기 중인 회차의 알림을 예약하고, 서버를 재시작하면 DB에서 다시 예약한다. 완료·취소한 회차와 이미 지난 시각은 예약하지 않는다 |
 | 정식 인증 없음 (`X-User-Id` 신뢰) | 개발용. 운영 전에 토큰 인증으로 바뀐다 |
-| 자연어 입력 세션·확인 토큰이 서버 메모리에만 있음 | 서버가 재시작되면 진행 중인 `session_id`와 `confirmation_token`이 사라져 `404`. 이때는 `session_id` 없이 처음부터 다시 시작 |
-| 시간대가 서버 기준 | "오늘/이번 주", 알림 시각, 자정 포인트 계산이 서버 시간대를 따른다 |
+| 시간대가 서버 설정 하나 | "오늘/이번 주", 알림 시각, 자정 포인트 계산이 서버의 `APP_TIMEZONE`(기본 America/Toronto)을 따른다. 사용자별 시간대는 아직 없다 |
 | LLM이 실패하면 미준수 사유가 저장되지 않음 | `other`/자유 텍스트 사유 입력 중 `502`가 나면 사유도 저장되지 않았다. 재시도 또는 버튼만으로 다시 기록하도록 안내 |

@@ -43,7 +43,7 @@ schreduler/
 │   │   ├── schemas.py           # Pydantic 스키마
 │   │   ├── service.py           # 비즈니스 로직
 │   │   └── router.py            # FastAPI 라우터
-│   ├── nlp_event/                # FR-2: LLM 기반 자연어 슬롯필링
+│   ├── nlp_event/                # FR-2: 도구 기반 일정 어시스턴트 (현재는 app/services/assistant/)
 │   ├── importance/              # FR-3: 중요도 체계
 │   ├── enforcement/              # FR-4, FR-4-1: 알림, 에스컬레이션 엔진
 │   ├── child_events/             # FR-5: 이동/준비 시간 하위 이벤트
