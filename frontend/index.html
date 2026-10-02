@@ -12,7 +12,10 @@
          태그 안의 영어는 스크립트가 돌기 전 잠깐 보이는 기본값이다. -->
     <header class="site-header">
       <div class="container header-row">
-        <h1 class="brand">Schreduler</h1>
+        <div class="brand-group">
+          <h1 class="brand">Schreduler</h1>
+          <button id="about-open" type="button" class="proto-badge" aria-haspopup="dialog" data-i18n-aria-label="about.openLabel" aria-label="About this prototype">Prototype</button>
+        </div>
         <div class="header-controls">
           <div id="account" class="account" hidden>
             <span id="account-email" class="account-email"></span>
@@ -44,6 +47,9 @@
 
       <section id="auth-screen" class="auth-screen" hidden>
         <div class="auth-column">
+        <aside id="proto-notice" class="proto-notice">
+          <p><strong data-i18n="proto.noticeTitle">Early prototype.</strong> <span data-i18n="proto.noticeBody">Schreduler is a work-in-progress prototype of a larger scheduling app I'm building. Some features are incomplete, and things may change or break.</span></p>
+        </aside>
         <div id="demo-entry" class="demo-entry" hidden>
           <button id="demo-start" type="button" class="button demo-start" data-i18n="demo.start">Try the demo</button>
           <p class="hint" data-i18n="demo.startHint">No sign-up needed. You get a sample student week to play with; it is deleted after 24 hours.</p>
@@ -229,6 +235,35 @@
       </section>
       </div>
     </main>
+
+    <dialog id="about-dialog" class="about-dialog" aria-labelledby="about-title">
+      <div class="about-head">
+        <h2 id="about-title"><span data-i18n="about.title">About Schreduler</span> <span id="about-version" class="about-version"></span></h2>
+        <button id="about-close" type="button" class="button button-secondary button-small" data-i18n="about.close">Close</button>
+      </div>
+      <p data-i18n="about.intro">An early prototype of a larger scheduling app: it doesn't just record plans, it helps you keep them.</p>
+      <h3 data-i18n="about.nowHeading">What works now</h3>
+      <ul>
+        <li data-i18n="about.now.assistant">Plain-language scheduling assistant — it drafts the change, you confirm it, and you can undo it</li>
+        <li data-i18n="about.now.calendar">Weekly calendar with repeating events, every-other-week rules, repeat periods and travel time</li>
+        <li data-i18n="about.now.tasks">Tasks with deadlines, done/missed tracking, points and streaks</li>
+        <li data-i18n="about.now.persona">Evening check-in chat with a persona</li>
+        <li data-i18n="about.now.lang">English and Korean throughout</li>
+      </ul>
+      <h3 data-i18n="about.nextHeading">Coming next</h3>
+      <ul>
+        <li data-i18n="about.next.mobile">Mobile app</li>
+        <li data-i18n="about.next.push">Push notifications for start, end and deadline reminders</li>
+        <li data-i18n="about.next.memory">Long-term memory for personas</li>
+      </ul>
+      <h3 data-i18n="about.limitsHeading">Known limitations</h3>
+      <ul>
+        <li data-i18n="about.limits.notifications">The web version doesn't send notifications yet.</li>
+        <li data-i18n="about.limits.demo">Demo accounts and their data are deleted after 24 hours.</li>
+        <li data-i18n="about.limits.change">Features and data may change while this is a prototype.</li>
+      </ul>
+      <p><a href="https://github.com/JunseoKim-0912/schreduler" target="_blank" rel="noopener" data-i18n="about.github">Source code on GitHub</a></p>
+    </dialog>
 
     <footer class="container site-footer">
       <button id="health-check" type="button" class="button" data-i18n="health.check">Check server</button>

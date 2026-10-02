@@ -50,6 +50,7 @@ for (const button of langButtons) {
 onLangChange(async () => {
   applyStaticText();
   renderDemoBanner();
+  renderVersion();
   await syncBackendLanguage();
   // 화면에 그려 둔 목록·카드도 새 언어로 다시 그린다 (지금 탭만 다시 불러오고, 나머지는 열 때 불러온다).
   hideError();
@@ -200,10 +201,32 @@ demoStart.addEventListener("click", async () => {
   }
 });
 
-// The demo button only shows when the server has DEMO_MODE_ENABLED (GET /health says so).
+// --- Prototype badge and About ----------------------------------------------------------
+// GET /health says whether the demo is on (the demo button only shows then) and which version is running
+// (app/core/version.py), shown as "Prototype · v0.1.0" next to the name. The badge opens the About dialog.
+
+const aboutDialog = document.getElementById("about-dialog");
+const aboutOpen = document.getElementById("about-open");
+let appVersion = "";
+
+function renderVersion() {
+  aboutOpen.textContent = appVersion ? t("proto.badgeVersion", { version: appVersion }) : t("proto.badge");
+  document.getElementById("about-version").textContent = appVersion ? `v${appVersion}` : "";
+}
+
+aboutOpen.addEventListener("click", () => aboutDialog.showModal());
+document.getElementById("about-close").addEventListener("click", () => aboutDialog.close());
+// A click on the backdrop lands on the <dialog> itself (its content is in child elements).
+aboutDialog.addEventListener("click", (event) => {
+  if (event.target === aboutDialog) aboutDialog.close();
+});
+aboutDialog.addEventListener("close", () => aboutOpen.focus());
+
 apiFetch("/health", { showError: false })
   .then((health) => {
     demoEntry.hidden = !health?.demo_mode;
+    appVersion = health?.version ?? "";
+    renderVersion();
   })
   .catch(() => {
     demoEntry.hidden = true;

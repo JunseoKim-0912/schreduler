@@ -27,6 +27,7 @@ from app.core.logging import setup_logging
 from app.core.openapi import APP_DESCRIPTION, TAGS_METADATA
 from app.core.request_guards import install_request_guards, reject_user_id, warn_about_cookie_settings
 from app.core.scheduler import shutdown_scheduler, start_scheduler
+from app.core.version import APP_VERSION
 from app.frontend_serving import FRONTEND_DIR, RevalidatedStaticFiles
 from app.frontend_serving import router as frontend_router
 from app.services import notification
@@ -66,7 +67,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version=APP_VERSION,
     description=APP_DESCRIPTION,
     openapi_tags=TAGS_METADATA,
     lifespan=lifespan,

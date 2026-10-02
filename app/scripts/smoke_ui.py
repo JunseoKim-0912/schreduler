@@ -5,7 +5,8 @@
     SMOKE_EMAIL=... SMOKE_PASSWORD=... python -m app.scripts.smoke_ui --base-url https://<your domain>
     ... --base-url https://<your domain> --with-demo   # also start a demo account there (deleted after 24 hours)
 
-Steps: login screen -> sign in -> open every tab -> log out -> login screen again, then the demo: [Try the demo]
+Steps: login screen (prototype notice, About opens and closes) -> sign in -> open every tab -> log out -> login screen
+again, then the demo: [Try the demo]
 -> demo banner -> every tab -> [Exit demo] -> login screen. Nothing here calls the LLM: the local server gets no
 LLM_API_KEY and the browser refuses any request to an LLM endpoint. Against --base-url it only reads unless
 --with-demo is given (the demo account it starts is a throwaway, removed by the hourly cleanup after 24 hours).
@@ -183,6 +184,31 @@ def run_browser(base_url: str, email: str, password: str, *, browser: str, heade
         page.locator("#login-form").wait_for(state="visible", timeout=10_000)
         report.steps.append("login screen shown")
 
+        notice = page.text_content("#proto-notice") or ""
+        if not page.locator("#proto-notice").is_visible() or "Early prototype." not in notice:
+            report.failed_requests.append(f"prototype notice missing on the login screen: {notice!r}")
+        else:
+            report.steps.append("prototype notice shown")
+
+        def check_about(close_with: str) -> None:
+            page.locator("#about-open").filter(has_text="Prototype · v").wait_for(timeout=5_000)
+            page.click("#about-open")
+            dialog = page.locator("#about-dialog")
+            dialog.wait_for(state="visible", timeout=5_000)
+            if dialog.locator('a[href="https://github.com/JunseoKim-0912/schreduler"]').count() != 1:
+                report.failed_requests.append("About has no GitHub link")
+            box = dialog.bounding_box()
+            if box is None or box["width"] > page.viewport_size["width"]:
+                report.failed_requests.append(f"About does not fit the screen: {box}")
+            if close_with == "Escape":
+                page.keyboard.press("Escape")
+            else:
+                page.click("#about-close")
+            dialog.wait_for(state="hidden", timeout=5_000)
+            report.steps.append(f"About opened and closed ({close_with})")
+
+        check_about("button")
+
         page.fill("#login-email", email)
         page.fill("#login-password", password)
         signed_in = True
@@ -208,6 +234,7 @@ def run_browser(base_url: str, email: str, password: str, *, browser: str, heade
                 report.steps.append(f"{who}: tab {name} opened")
 
         open_every_tab("account")
+        check_about("Escape")
 
         page.click("#logout")
         signed_in = False
