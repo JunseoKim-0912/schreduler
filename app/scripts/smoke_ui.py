@@ -4,6 +4,7 @@
     python -m app.scripts.smoke_ui --headed            # watch it
     SMOKE_EMAIL=... SMOKE_PASSWORD=... python -m app.scripts.smoke_ui --base-url https://<your domain>
     ... --base-url https://<your domain> --with-demo   # also start a demo account there (deleted after 24 hours)
+    python -m app.scripts.smoke_ui --base-url https://<your domain> --demo-only   # no credentials: demo path only
 
 Steps: login screen (prototype notice, About opens and closes) -> sign in -> open every tab -> log out -> login screen
 again, then the demo: [Try the demo]
@@ -133,7 +134,10 @@ def local_server() -> Iterator[tuple[str, str, str]]:
             log.close()
 
 
-def run_browser(base_url: str, email: str, password: str, *, browser: str, headed: bool, seed: bool, demo: bool) -> Report:
+def run_browser(
+    base_url: str, email: str | None, password: str | None, *, browser: str, headed: bool, seed: bool, demo: bool
+) -> Report:
+    """Without an email the signed-in account part is skipped (--demo-only)."""
     from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import sync_playwright
 
@@ -209,20 +213,6 @@ def run_browser(base_url: str, email: str, password: str, *, browser: str, heade
 
         check_about("button")
 
-        page.fill("#login-email", email)
-        page.fill("#login-password", password)
-        signed_in = True
-        page.click("#login-submit")
-        page.locator("#account").wait_for(state="visible", timeout=10_000)
-        report.steps.append(f"signed in as {page.text_content('#account-email')}")
-
-        if seed:
-            # A little data so the lists and the calendar have something to draw (local throwaway server only).
-            page.request.post(f"{base_url}/tasks", data={"title": "Smoke task", "end_time": _tomorrow_at(18)})
-            page.request.post(
-                f"{base_url}/events", data={"title": "Smoke event", "start_time": _tomorrow_at(9), "end_time": _tomorrow_at(10)}
-            )
-
         def open_every_tab(who: str) -> None:
             tabs = page.locator('[role="tab"]')
             for index in range(tabs.count()):
@@ -233,14 +223,29 @@ def run_browser(base_url: str, email: str, password: str, *, browser: str, heade
                 page.locator(f"#panel-{name}").wait_for(state="visible", timeout=5_000)
                 report.steps.append(f"{who}: tab {name} opened")
 
-        open_every_tab("account")
-        check_about("Escape")
+        if email and password:
+            page.fill("#login-email", email)
+            page.fill("#login-password", password)
+            signed_in = True
+            page.click("#login-submit")
+            page.locator("#account").wait_for(state="visible", timeout=10_000)
+            report.steps.append(f"signed in as {page.text_content('#account-email')}")
 
-        page.click("#logout")
-        signed_in = False
-        page.locator("#login-form").wait_for(state="visible", timeout=10_000)
-        page.wait_for_load_state("networkidle")
-        report.steps.append("logged out, login screen shown again")
+            if seed:
+                # A little data so the lists and the calendar have something to draw (local throwaway server only).
+                page.request.post(f"{base_url}/tasks", data={"title": "Smoke task", "end_time": _tomorrow_at(18)})
+                page.request.post(
+                    f"{base_url}/events", data={"title": "Smoke event", "start_time": _tomorrow_at(9), "end_time": _tomorrow_at(10)}
+                )
+
+            open_every_tab("account")
+            check_about("Escape")
+
+            page.click("#logout")
+            signed_in = False
+            page.locator("#login-form").wait_for(state="visible", timeout=10_000)
+            page.wait_for_load_state("networkidle")
+            report.steps.append("logged out, login screen shown again")
 
         if demo:
             page.locator("#demo-start").wait_for(state="visible", timeout=10_000)
@@ -250,8 +255,10 @@ def run_browser(base_url: str, email: str, password: str, *, browser: str, heade
             banner = page.text_content("#demo-banner-text") or ""
             if "Demo account" not in banner or not page.locator("#account").is_hidden():
                 report.failed_requests.append(f"demo banner looks wrong: {banner!r}")
-            report.steps.append(f"demo started: {banner}")
+            demo_id = page.evaluate("fetch('/auth/me').then((r) => r.json()).then((me) => me.id)")
+            report.steps.append(f"demo started (user id {demo_id}): {banner}")
             open_every_tab("demo")
+            check_about("button")
             if page.locator("#event-list li").count() == 0:
                 report.failed_requests.append("the demo account has no sample events")
             page.click("#demo-exit")
@@ -278,14 +285,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--browser", default="chrome", choices=["chrome", "msedge", "chromium"], help="installed browser to drive")
     parser.add_argument("--headed", action="store_true", help="show the browser window")
     parser.add_argument("--with-demo", action="store_true", help="with --base-url: also start a demo account there")
+    parser.add_argument("--demo-only", action="store_true", help="with --base-url: no credentials, check only the demo path")
     args = parser.parse_args(argv)
 
     if args.base_url:
         email, password = os.environ.get("SMOKE_EMAIL"), os.environ.get("SMOKE_PASSWORD")
-        if not email or not password:
+        if args.demo_only:
+            email = password = None
+        elif not email or not password:
             parser.error("--base-url needs SMOKE_EMAIL and SMOKE_PASSWORD in the environment")
         report = run_browser(
-            args.base_url.rstrip("/"), email, password, browser=args.browser, headed=args.headed, seed=False, demo=args.with_demo
+            args.base_url.rstrip("/"), email, password, browser=args.browser, headed=args.headed, seed=False, demo=args.with_demo or args.demo_only
         )
     else:
         with local_server() as (base_url, email, password):

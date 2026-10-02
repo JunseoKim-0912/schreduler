@@ -134,7 +134,7 @@ DEMO_LLM_BUDGET_TOTAL_USD=2.00
 - 매시간 `demo_cleanup` 작업이 만료된 데모 계정과 그 데이터를 모두 지운다. LLM 사용 기록만 `user_id`를 비운 채 남긴다(그날 데모 합계와 비용 보고서가 실제 지출을 유지하도록).
 - 데모 계정은 알림 job·체크인 알림·자정 포인트 계산에서 빠지고, 페르소나 생성·수정·삭제와 비밀번호 설정은 할 수 없다.
 - 데모의 LLM 사용량은 `DEMO_LLM_BUDGET_TOTAL_USD`로 따로 센다. 데모가 한도에 닿아도 내 계정은 `LLM_DAILY_BUDGET_*`로 계속 쓴다.
-- 확인: `curl -s https://<도메인>/health` → `"demo_mode":true`. 화면 점검은 `smoke_ui --base-url https://<도메인> --with-demo`(데모 계정을 하나 만든다).
+- 확인: `curl -s https://<도메인>/health` → `"demo_mode":true`. 화면 점검은 `smoke_ui --base-url https://<도메인> --with-demo`, 계정 비밀번호 없이 데모 경로만 보려면 `--demo-only`(둘 다 데모 계정을 하나 만든다).
 - 끄려면 `DEMO_MODE_ENABLED=false` → `/auth/demo`는 404, 버튼은 사라지고, 남은 데모 계정은 정리 작업이 24시간 안에 지운다.
 
 ---
