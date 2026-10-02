@@ -61,6 +61,7 @@
   "assistant.budget_no_drafts": "오늘 AI 사용 한도에 도달해서 여기서 멈췄어요. 자정({city} 시간)에 다시 열려요.",
   "llm_budget.user_limit": "오늘 AI 사용 한도에 도달했어요. 자정({city} 시간)에 다시 열려요.",
   "llm_budget.total_limit": "오늘 앱 전체의 AI 사용 한도에 도달했어요. 자정({city} 시간)에 다시 열려요.",
+  "llm_budget.demo_limit": "데모 AI 한도에 도달했어요. 다른 기능은 계속 써볼 수 있어요.",
   "auth.login_failed": "이메일 또는 비밀번호가 틀렸어요.",
   "auth.too_many_attempts": "로그인 실패가 너무 많아요. {minutes}분 뒤에 다시 시도해 주세요.",
   "auth.signup_closed": "지금은 회원가입을 받지 않아요.",
@@ -69,5 +70,7 @@
   "auth.not_signed_in": "로그인이 필요해요.",
   "auth.admin_only": "관리자만 할 수 있어요.",
   "auth.bad_origin": "다른 사이트에서 온 요청이라 거부했어요.",
+  "demo.rate_limited": "방금 데모 계정이 너무 많이 만들어졌어요. 잠시 후 다시 시도해 주세요 ({minutes}분 뒤).",
+  "demo.account_locked": "데모 계정은 이 설정을 바꿀 수 없어요.",
   "request.user_id_not_allowed": "user_id는 더 이상 받지 않아요. 로그인한 사용자 기준으로 처리돼요."
 }

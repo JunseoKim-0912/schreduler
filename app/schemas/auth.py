@@ -34,6 +34,9 @@ class MeRead(BaseModel):
     id: int
     email: str | None
     is_admin: bool
+    is_demo: bool
+    # Naive UTC. Only demo accounts expire; the web client shows the time left in the demo banner.
+    demo_expires_at: datetime | None
     preferred_language: str
     created_at: datetime
     last_login_at: datetime | None

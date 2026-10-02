@@ -17,6 +17,12 @@ const today = (spent, limit = 1, totalBlocked = false) => ({
 afterEach(() => setLang("en"));
 
 describe("usageView", () => {
+  test("a demo account at its limit gets the demo notice", () => {
+    assert.equal(usageView({ ...today(0.05, 0.05), is_demo: true }).text, "You've reached the demo's AI limit. You can keep trying everything else.");
+    setLang("ko");
+    assert.equal(usageView({ ...today(0.01, 0.05, true), is_demo: true }).text, "데모 AI 한도에 도달했어요. 다른 기능은 계속 써볼 수 있어요.");
+  });
+
   test("shows spend over limit in dollars", () => {
     setLang("en");
     assert.deepEqual(usageView(today(0.12)), { level: "ok", blocked: false, text: "Today's AI usage $0.12 / $1.00" });

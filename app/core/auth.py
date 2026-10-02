@@ -18,11 +18,11 @@ SESSION_COOKIE = "schreduler_session"
 session_cookie = APIKeyCookie(name=SESSION_COOKIE, auto_error=False, description="Set by POST /auth/login or /auth/signup")
 
 
-def set_session_cookie(response: Response, token: str) -> None:
+def set_session_cookie(response: Response, token: str, max_age_seconds: int | None = None) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         token,
-        max_age=int(auth_service.SESSION_TTL.total_seconds()),
+        max_age=max_age_seconds if max_age_seconds is not None else int(auth_service.SESSION_TTL.total_seconds()),
         path="/",
         httponly=True,
         samesite="lax",

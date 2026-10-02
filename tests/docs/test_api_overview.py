@@ -45,7 +45,7 @@ def test_signed_in_endpoints_are_marked() -> None:
 
 def test_only_health_and_auth_are_open() -> None:
     open_endpoints = _spec_endpoints() - SIGNED_IN_ENDPOINTS
-    assert open_endpoints == {("GET", "/health"), ("POST", "/auth/signup"), ("POST", "/auth/login")}
+    assert open_endpoints == {("GET", "/health"), ("POST", "/auth/signup"), ("POST", "/auth/login"), ("POST", "/auth/demo")}
 
 
 def test_mark_check_catches_a_missing_mark() -> None:

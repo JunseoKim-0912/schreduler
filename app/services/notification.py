@@ -21,6 +21,7 @@ from app.i18n import render_notification
 from app.models.enums import EventInstanceStatus, EventType
 from app.models.event import Event
 from app.models.event_instance import EventInstance
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ def schedule_event_instance_notifications(instance: EventInstance) -> None:
     계산한다. 같은 instance로 다시 호출해도 job id가
     같아서(replace_existing=True) 중복 등록되지 않는다.
     """
-    if instance.status == EventInstanceStatus.CANCELLED:
+    if instance.status == EventInstanceStatus.CANCELLED or instance.event.user.is_demo:
         return
     for kind, run_date in _notification_times(instance):
         _add_notification_job(instance.id, kind, run_date)
@@ -179,7 +180,8 @@ def sync_instance_notifications(instance: EventInstance, now: datetime | None = 
     if not scheduler.running:
         return
     remove_instance_notifications(instance.id)
-    if instance.status != EventInstanceStatus.PENDING:
+    # Demo accounts get no reminders: nobody is there to receive them, and they would only fill the scheduler.
+    if instance.status != EventInstanceStatus.PENDING or instance.event.user.is_demo:
         return
     now = now or local_wall_now()
     for kind, run_date in _notification_times(instance):
@@ -216,7 +218,10 @@ def register_upcoming_notifications(today: date | None = None) -> int:
     try:
         with SessionLocal() as db:
             instances = db.execute(
-                select(EventInstance).where(EventInstance.status == EventInstanceStatus.PENDING, EventInstance.date >= since)
+                select(EventInstance)
+                .join(Event, EventInstance.event_id == Event.id)
+                .join(User, Event.user_id == User.id)
+                .where(EventInstance.status == EventInstanceStatus.PENDING, EventInstance.date >= since, User.is_demo.is_(False))
             ).scalars().all()
             for instance in instances:
                 sync_instance_notifications(instance)

@@ -33,6 +33,7 @@ from app.services import notification
 from app.services.auth_service import validate_signup_settings
 from app.services.daily_checkin import register_daily_checkin_job
 from app.services.db_backup import register_backup_job
+from app.services.demo_service import register_demo_cleanup_job
 from app.services.engagement_service import register_escalation_job
 from app.services.llm_client import validate_assistant_settings
 from app.services.llm_pricing import validate_configured_models
@@ -55,6 +56,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         register_daily_checkin_job()
         register_daily_points_job()
         register_backup_job()
+        register_demo_cleanup_job()
         notification.register_upcoming_notifications()
     else:
         logger.warning("RUN_SCHEDULER=false: no reminders, check-ins, midnight points or backups run in this process")

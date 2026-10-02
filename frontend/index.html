@@ -26,6 +26,13 @@
       </div>
     </header>
 
+    <div id="demo-banner" class="demo-banner" hidden>
+      <div class="container demo-banner-row">
+        <span id="demo-banner-text" role="status"></span>
+        <button id="demo-exit" type="button" class="button button-secondary button-small" data-i18n="demo.exit">Exit demo</button>
+      </div>
+    </div>
+
     <main class="container">
       <div id="error-banner" class="error-banner" role="alert" hidden>
         <div>
@@ -36,6 +43,12 @@
       </div>
 
       <section id="auth-screen" class="auth-screen" hidden>
+        <div class="auth-column">
+        <div id="demo-entry" class="demo-entry" hidden>
+          <button id="demo-start" type="button" class="button demo-start" data-i18n="demo.start">Try the demo</button>
+          <p class="hint" data-i18n="demo.startHint">No sign-up needed. You get a sample student week to play with; it is deleted after 24 hours.</p>
+          <p id="demo-status" class="auth-status" role="status" hidden></p>
+        </div>
         <form id="login-form" class="auth-form" novalidate>
           <h2 data-i18n="auth.loginHeading">Log in</h2>
           <label for="login-email" data-i18n="auth.email">Email</label>
@@ -59,6 +72,7 @@
           <p id="signup-status" class="auth-status" role="status" hidden></p>
           <p class="hint"><span data-i18n="auth.haveAccount">Already have an account?</span> <button id="show-login" type="button" class="link-button" data-i18n="auth.toLogin">Log in</button></p>
         </form>
+        </div>
       </section>
 
       <div id="app-content" hidden>

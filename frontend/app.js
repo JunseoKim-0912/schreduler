@@ -6,6 +6,7 @@ import { initPointsPanel } from "./points.js";
 import { initTasksPanel } from "./tasks.js";
 import { getLang, onLangChange, setLang, t } from "./i18n.js";
 import { clearUsage, relabelUsage } from "./usage.js";
+import { demoBannerText } from "./demo.js";
 import { setStatus } from "./dom.js";
 
 // --- 화면 언어 (Eng | Kor) ------------------------------------------------------
@@ -48,6 +49,7 @@ for (const button of langButtons) {
 
 onLangChange(async () => {
   applyStaticText();
+  renderDemoBanner();
   await syncBackendLanguage();
   // 화면에 그려 둔 목록·카드도 새 언어로 다시 그린다 (지금 탭만 다시 불러오고, 나머지는 열 때 불러온다).
   hideError();
@@ -90,6 +92,27 @@ const loginForm = document.getElementById("login-form");
 const signupForm = document.getElementById("signup-form");
 const loginStatus = document.getElementById("login-status");
 const signupStatus = document.getElementById("signup-status");
+const demoEntry = document.getElementById("demo-entry");
+const demoStart = document.getElementById("demo-start");
+const demoStatus = document.getElementById("demo-status");
+const demoBanner = document.getElementById("demo-banner");
+const demoBannerLabel = document.getElementById("demo-banner-text");
+let demoTimer = null;
+
+// Demo accounts have no email; the banner (time left + Exit demo) replaces the account box. Exit is a plain log out —
+// the account and its data stay until they expire, so the same browser can come back within 24 hours.
+function renderDemoBanner() {
+  const account = getAccount();
+  const demo = Boolean(account?.is_demo);
+  demoBanner.hidden = !demo;
+  if (demo) demoBannerLabel.textContent = demoBannerText(account);
+}
+
+function startDemoBanner() {
+  clearInterval(demoTimer);
+  renderDemoBanner();
+  demoTimer = getAccount()?.is_demo ? setInterval(renderDemoBanner, 60_000) : null;
+}
 
 function showAuth(form = "login") {
   authScreen.hidden = false;
@@ -103,12 +126,14 @@ function showAuth(form = "login") {
 async function enterApp(me) {
   setAccount(me);
   accountEmail.textContent = me.email ?? "";
-  accountBox.hidden = false;
+  accountBox.hidden = Boolean(me.is_demo);
+  startDemoBanner();
   authScreen.hidden = true;
   appContent.hidden = false;
   for (const form of [loginForm, signupForm]) form.reset();
   setStatus(loginStatus, "");
   setStatus(signupStatus, "");
+  setStatus(demoStatus, "");
   await syncBackendLanguage();
   activateTab(activeTab ?? "calendar");
 }
@@ -116,6 +141,7 @@ async function enterApp(me) {
 function leaveApp() {
   // 이전 사용자의 화면 상태(목록·대화·사용량)를 모두 지운다.
   setAccount(null);
+  startDemoBanner();
   hideError();
   clearUsage();
   for (const panel of Object.values(panels)) panel.reset();
@@ -162,15 +188,39 @@ signupForm.addEventListener("submit", (event) => {
   });
 });
 
+demoStart.addEventListener("click", async () => {
+  demoStart.disabled = true;
+  setStatus(demoStatus, t("demo.starting"));
+  try {
+    await enterApp(await apiFetch("/auth/demo", { method: "POST", showError: false }));
+  } catch (error) {
+    setStatus(demoStatus, error.status === 404 ? t("demo.unavailable") : error.message);
+  } finally {
+    demoStart.disabled = false;
+  }
+});
+
+// The demo button only shows when the server has DEMO_MODE_ENABLED (GET /health says so).
+apiFetch("/health", { showError: false })
+  .then((health) => {
+    demoEntry.hidden = !health?.demo_mode;
+  })
+  .catch(() => {
+    demoEntry.hidden = true;
+  });
+
 document.getElementById("show-signup").addEventListener("click", () => showAuth("signup"));
 document.getElementById("show-login").addEventListener("click", () => showAuth("login"));
-document.getElementById("logout").addEventListener("click", async () => {
+async function logOut() {
   try {
     await apiFetch("/auth/logout", { method: "POST", showError: false });
   } finally {
     leaveApp();
   }
-});
+}
+
+document.getElementById("logout").addEventListener("click", logOut);
+document.getElementById("demo-exit").addEventListener("click", logOut);
 
 // --- 탭별 기능 ---------------------------------------------------------------
 

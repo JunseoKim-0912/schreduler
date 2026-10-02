@@ -117,19 +117,32 @@ def day_window(now: datetime | None = None) -> DayWindow:
     )
 
 
-def spent_usd(db: Session, window: DayWindow, user_id: int | None = None) -> float:
+def spent_usd(db: Session, window: DayWindow, user_id: int | None = None, *, demo: bool | None = None) -> float:
+    """Spend in the window: one user's, or (demo=True/False) the demo or the regular pool's."""
     query = select(func.coalesce(func.sum(LlmUsageLog.cost_usd), 0.0)).where(
         LlmUsageLog.created_at >= window.start_utc, LlmUsageLog.created_at < window.end_utc
     )
     if user_id is not None:
         query = query.where(LlmUsageLog.user_id == user_id)
+    if demo is not None:
+        query = query.where(LlmUsageLog.is_demo.is_(demo))
     return float(db.scalar(query) or 0.0)
 
 
+def is_demo_user(user: User | None) -> bool:
+    return user is not None and user.is_demo
+
+
 def user_limit_usd(user: User | None) -> float:
+    if is_demo_user(user):
+        return settings.demo_llm_budget_per_user_usd
     if user is not None and user.is_admin and settings.llm_daily_budget_admin_usd is not None:
         return settings.llm_daily_budget_admin_usd
     return settings.llm_daily_budget_per_user_usd
+
+
+def total_limit_usd(user: User | None) -> float:
+    return settings.demo_llm_budget_total_usd if is_demo_user(user) else settings.llm_daily_budget_total_usd
 
 
 @dataclass(frozen=True)
@@ -150,12 +163,14 @@ class BudgetStatus:
 
 
 def budget_status(db: Session, user: User | None, now: datetime | None = None) -> BudgetStatus:
+    """A demo account is measured against the demo pool, everyone else against the regular one — so demos using up
+    their pool never blocks a real account, and real use never blocks the demo."""
     window = day_window(now)
     return BudgetStatus(
         spent_usd=spent_usd(db, window, user.id) if user is not None else 0.0,
         limit_usd=user_limit_usd(user),
-        total_spent_usd=spent_usd(db, window),
-        total_limit_usd=settings.llm_daily_budget_total_usd,
+        total_spent_usd=spent_usd(db, window, demo=is_demo_user(user)),
+        total_limit_usd=total_limit_usd(user),
         resets_at=window.resets_at,
     )
 
@@ -172,6 +187,8 @@ def check_budget(db: Session, user: User | None) -> None:
         return
     language = user.preferred_language if user is not None else None
     key: MessageKey = "llm_budget.user_limit" if reason == "user_limit" else "llm_budget.total_limit"
+    if is_demo_user(user):
+        key = "llm_budget.demo_limit"
     logger.info("[LLM budget] blocked user_id=%s reason=%s spent=%.4f limit=%.2f", user.id if user else None, reason, spent, limit)
     raise LlmBudgetExceeded(
         render_message(key, language, city=timezone_city(settings.app_timezone, language)),
@@ -190,8 +207,10 @@ def ensure_budget() -> None:
 
 def record_llm_call(model: str, input_tokens: int, cached_tokens: int, output_tokens: int, reasoning_tokens: int) -> LlmUsageLog:
     scope = _current_scope()
+    user = scope.db.get(User, scope.user_id) if scope.user_id is not None else None
     row = LlmUsageLog(
         user_id=scope.user_id,
+        is_demo=is_demo_user(user),
         feature=scope.feature,
         model=model,
         input_tokens=input_tokens,

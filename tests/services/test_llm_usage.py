@@ -377,6 +377,7 @@ def test_usage_today_reports_spend_limit_and_total_block(client, engine, users) 
         "limit_usd": 1.0,
         "total_blocked": False,
         "resets_at": "2026-10-02T00:00:00-04:00",
+        "is_demo": False,
         "timezone": "America/Toronto",
     }
     _spend(engine, other, 4.58)

@@ -81,6 +81,10 @@ Settings come from environment variables or a `.env` file. [`.env.example`](.env
 | `LLM_DAILY_BUDGET_PER_USER_USD` | `1.00` | Daily LLM spend cap per user (USD), reset at `APP_TIMEZONE` midnight |
 | `LLM_DAILY_BUDGET_TOTAL_USD` | `5.00` | Daily LLM spend cap for all users and scripts together |
 | `LLM_DAILY_BUDGET_ADMIN_USD` | *(none)* | Cap for users with `is_admin`; without it, admins get the per-user cap |
+| `DEMO_MODE_ENABLED` | `false` | Show [Try the demo] and open `POST /auth/demo`: a throwaway account with a sample week, deleted after 24 hours. Independent of `SIGNUP_MODE` |
+| `DEMO_MAX_CREATIONS_PER_HOUR` | `30` | Demo accounts that can be started in any hour, across everyone (not per IP — behind a proxy the IP can't be trusted) |
+| `DEMO_LLM_BUDGET_PER_USER_USD` | `0.05` | Daily LLM cap per demo account |
+| `DEMO_LLM_BUDGET_TOTAL_USD` | `2.00` | Daily LLM cap for all demo accounts together, counted apart from `LLM_DAILY_BUDGET_TOTAL_USD` |
 | `APP_TIMEZONE` | `America/Toronto` | IANA time zone used for "today", weekdays and reminders |
 | `SIGNUP_MODE` | `invite` | `closed` (no sign-ups), `invite` (needs `INVITE_CODE`) or `open` |
 | `INVITE_CODE` | *(none)* | Code new users must enter when `SIGNUP_MODE=invite`. Without it nobody can sign up |

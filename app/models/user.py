@@ -38,6 +38,9 @@ class User(Base):
     telegram_opt_in: Mapped[bool] = mapped_column(Boolean, default=False)
     # Admins manage personas and get LLM_DAILY_BUDGET_ADMIN_USD when it is set.
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # One-click demo account (POST /auth/demo): no email or password, deleted with all its data after demo_expires_at.
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), index=True)
+    demo_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Stored lowercased. Null only for accounts made before sign-in existed, until create_admin attaches one.
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)

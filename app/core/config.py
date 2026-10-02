@@ -31,6 +31,12 @@ class Settings:
     llm_daily_budget_admin_usd: float | None = (
         float(os.environ["LLM_DAILY_BUDGET_ADMIN_USD"]) if os.getenv("LLM_DAILY_BUDGET_ADMIN_USD") else None
     )
+    # One-click demo accounts (POST /auth/demo). Each lives DEMO_TTL_HOURS and is then deleted with all its data.
+    demo_mode_enabled: bool = _flag("DEMO_MODE_ENABLED", default=False)
+    demo_max_creations_per_hour: int = int(os.getenv("DEMO_MAX_CREATIONS_PER_HOUR") or "30")
+    # Demo spend is counted apart from LLM_DAILY_BUDGET_TOTAL_USD, so demos running out never blocks real accounts.
+    demo_llm_budget_per_user_usd: float = float(os.getenv("DEMO_LLM_BUDGET_PER_USER_USD") or "0.05")
+    demo_llm_budget_total_usd: float = float(os.getenv("DEMO_LLM_BUDGET_TOTAL_USD") or "2.00")
     # Sign-in. SIGNUP_MODE: closed (nobody can sign up) / invite (needs INVITE_CODE) / open.
     signup_mode: str = (os.getenv("SIGNUP_MODE") or "invite").strip().lower()
     invite_code: str | None = os.getenv("INVITE_CODE") or None

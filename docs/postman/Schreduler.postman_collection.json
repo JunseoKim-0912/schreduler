@@ -94,6 +94,25 @@
           "response": []
         },
         {
+          "name": "데모 계정으로 시작",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/demo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "demo"
+              ]
+            },
+            "description": "이메일·비밀번호 없는 임시 계정을 만들고 예시 일정(대학생 일주일)을 채운 뒤 바로 로그인시킨다. 24시간 뒤 계정과 데이터가\n모두 지워지고, 그때까지는 같은 쿠키로 다시 들어올 수 있다. LLM은 DEMO_LLM_BUDGET_* 한도를 따로 쓴다.\n\n**오류 응답**\n- `404`: 데모 모드가 꺼져 있음 (DEMO_MODE_ENABLED=false)\n- `429`: 최근 1시간 동안 데모 계정이 DEMO_MAX_CREATIONS_PER_HOUR개 만들어짐"
+          },
+          "response": []
+        },
+        {
           "name": "로그아웃",
           "request": {
             "method": "POST",

@@ -93,20 +93,34 @@ def _token_hash(token: str) -> str:
 # --- sessions ---------------------------------------------------------------------------------
 
 
+def session_expires_at(user: User, now: datetime) -> datetime:
+    """A demo account's session ends with the account; everyone else gets SESSION_TTL."""
+    if user.is_demo and user.demo_expires_at is not None:
+        return min(user.demo_expires_at, now + SESSION_TTL)
+    return now + SESSION_TTL
+
+
 def start_session(db: Session, user: User, now: datetime | None = None) -> str:
     """New session for this user; returns the cookie token. Also drops the user's expired sessions."""
     now = now or utc_now_naive()
     db.execute(delete(UserSession).where(UserSession.user_id == user.id, UserSession.expires_at <= now))
     token = secrets.token_urlsafe(32)
-    db.add(UserSession(user_id=user.id, token_hash=_token_hash(token), created_at=now, expires_at=now + SESSION_TTL))
+    db.add(UserSession(user_id=user.id, token_hash=_token_hash(token), created_at=now, expires_at=session_expires_at(user, now)))
     return token
 
 
 def user_for_token(db: Session, token: str, now: datetime | None = None) -> User | None:
+    now = now or utc_now_naive()
     session = db.execute(
-        select(UserSession).where(UserSession.token_hash == _token_hash(token), UserSession.expires_at > (now or utc_now_naive()))
+        select(UserSession).where(UserSession.token_hash == _token_hash(token), UserSession.expires_at > now)
     ).scalar_one_or_none()
-    return session.user if session is not None else None
+    if session is None:
+        return None
+    user = session.user
+    # Between expiry and the hourly cleanup an expired demo account still exists; it must not be usable.
+    if user.is_demo and (user.demo_expires_at is None or user.demo_expires_at <= now):
+        return None
+    return user
 
 
 def end_session(db: Session, token: str) -> None:
@@ -190,7 +204,9 @@ def login(db: Session, email: str, password: str, ip: str | None, language: Lang
 
 
 def set_password(db: Session, user: User, password: str) -> None:
-    """Sets a new password and signs the user out everywhere (create_admin's reset)."""
+    """Sets a new password and signs the user out everywhere (create_admin's reset). Demo accounts never get one."""
+    if user.is_demo:
+        raise ForbiddenError(render_message("demo.account_locked", user.preferred_language))
     user.password_hash = hash_password(password)
     db.execute(delete(UserSession).where(UserSession.user_id == user.id))
 

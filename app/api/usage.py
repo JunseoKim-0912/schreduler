@@ -23,5 +23,6 @@ def get_usage_today(user: User = Depends(get_current_user), db: Session = Depend
         limit_usd=current.limit_usd,
         total_blocked=current.total_blocked,
         resets_at=current.resets_at,
+        is_demo=user.is_demo,
         timezone=settings.app_timezone,
     )

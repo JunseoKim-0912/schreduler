@@ -27,12 +27,13 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 POST /auth/signup {"email": "june@example.com", "password": "8자 이상", "invite_code": "..."}  → 201, 바로 로그인됨
 POST /auth/login  {"email": "june@example.com", "password": "..."}                             → 200 + Set-Cookie
 GET  /auth/me                                                                                   → 내 계정 (401이면 로그인 화면으로)
+POST /auth/demo                                                                                 → 201, 데모 계정(24시간)으로 바로 로그인
 POST /auth/logout                                                                               → 204, 서버 세션 삭제
 ```
 
 - 로그인하면 서버가 `schreduler_session` 쿠키(HttpOnly, SameSite=Lax, 30일)를 준다. 이후 요청에 이 쿠키를 그대로 실어 보내면
   된다 — 앱에서는 쿠키 저장소(cookie jar)를 쓰는 HTTP 클라이언트를 쓴다. 토큰을 따로 다룰 필요는 없다.
-- `/health`와 `/auth/signup`·`/auth/login`을 뺀 **모든 엔드포인트가 로그인 필요**다(아래 표의 🔑). 로그인하지 않았거나 세션이
+- `/health`와 `/auth/signup`·`/auth/login`·`/auth/demo`를 뺀 **모든 엔드포인트가 로그인 필요**다(아래 표의 🔑). 로그인하지 않았거나 세션이
   만료되면 `401` → 로그인 화면으로.
 - 요청은 항상 로그인한 사용자로 처리된다. 다른 사용자의 리소스 id로 조회·수정·삭제·되돌리기를 하면 `404`다.
 - 예전 방식의 `X-User-Id` 헤더는 무시되고(로그인 안 했으면 `401`), 본문·쿼리에 `user_id`를 보내면 `422`로 거절한다.
@@ -253,6 +254,7 @@ GET /points/summary
 |---|---|---|---|
 | `POST /auth/signup` | 회원가입, 성공하면 바로 로그인 (1.2) | `{email, password, invite_code?}` | `201 MeRead` + 쿠키 |
 | `POST /auth/login` | 로그인 | `{email, password}` | `MeRead` + 쿠키 |
+| `POST /auth/demo` | 데모 계정 만들고 바로 로그인 (`DEMO_MODE_ENABLED=true`일 때만, 아니면 `404`). 24시간 뒤 데이터와 함께 삭제 | | `201 MeRead` + 쿠키 (`429`: 시간당 생성 한도) |
 | `POST /auth/logout` 🔑 | 로그아웃 (로그인 안 했어도 `204`) | | `204` |
 | `GET /auth/me` 🔑 | 내 계정 | | `MeRead` |
 

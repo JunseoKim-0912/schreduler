@@ -66,7 +66,7 @@ def test_layout_has_five_tabs_with_calendar_first() -> None:
 
 def test_missing_file_is_404_and_api_routes_still_work() -> None:
     assert client.get("/app/nope.js").status_code == 404
-    assert client.get("/health").json() == {"status": "ok"}
+    assert client.get("/health").json()["status"] == "ok"
     assert "/app" not in app.openapi()["paths"]
 
 

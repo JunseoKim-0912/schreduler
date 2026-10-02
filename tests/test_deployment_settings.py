@@ -47,7 +47,7 @@ def test_run_scheduler_true_starts_the_jobs_including_the_backup(lifespan_client
     monkeypatch.setattr(settings, "run_scheduler", True)
     with lifespan_client():
         assert scheduler.running
-        assert {"sqlite_backup", "daily_points_calculation", "daily_evening_checkin", "daily_sleep_checkin"} <= {
+        assert {"sqlite_backup", "daily_points_calculation", "daily_evening_checkin", "daily_sleep_checkin", "demo_cleanup"} <= {
             job.id for job in scheduler.get_jobs()
         }
     assert not scheduler.running

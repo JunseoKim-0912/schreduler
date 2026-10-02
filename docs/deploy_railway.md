@@ -55,7 +55,11 @@
 | `LLM_DAILY_BUDGET_TOTAL_USD` | `5.00` | |
 | `LLM_DAILY_BUDGET_ADMIN_USD` | (선택) | |
 | `APP_TIMEZONE` | `America/Toronto` | |
-| `SIGNUP_MODE` | `invite` | 처음엔 `closed`로 두고 관리자만 만든 뒤 바꿔도 된다 |
+| `SIGNUP_MODE` | `invite` | 처음엔 `closed`로 두고 관리자만 만든 뒤 바꿔도 된다. 포트폴리오 공개용이면 `closed` + 데모(아래) |
+| `DEMO_MODE_ENABLED` | `false` (기본) | `true`면 로그인 화면에 [Try the demo]가 생긴다. 아래 1-10 참고 |
+| `DEMO_MAX_CREATIONS_PER_HOUR` | `30` | |
+| `DEMO_LLM_BUDGET_PER_USER_USD` | `0.05` | |
+| `DEMO_LLM_BUDGET_TOTAL_USD` | `2.00` | 데모 전체 하루 한도. 일반 전체 한도와 따로 센다 |
 | `INVITE_CODE` 🔒 | 길고 추측하기 어려운 값 | 비어 있으면 아무도 가입 못 함 |
 | `SESSION_COOKIE_SECURE` | `true` | |
 | `ALLOWED_ORIGINS` | `https://<도메인>` | 1-5에서 도메인을 만든 뒤 채운다. 비어 있는데 `SESSION_COOKIE_SECURE=true`면 시작 로그에 경고가 남는다 |
@@ -113,6 +117,25 @@ python -m app.scripts.create_admin --email you@example.com --new   # 빈 DB: 첫
 - **재배포**: `main`에 push하면 자동 배포된다. 같은 커밋을 다시: Deployments → ⋮ → **Redeploy**.
 - **롤백**: Deployments에서 이전 배포의 ⋮ → **Rollback**. 이전 배포의 이미지와 변수로 새 배포가 만들어지고 다시 빌드하지 않는다 **[문서 11]**.
 - **주의**: 롤백은 **볼륨 데이터를 되돌리지 않는다**. DB 마이그레이션(`alembic/versions`)이 들어간 배포를 롤백하면 새 스키마 DB에 옛 코드가 붙는다. 스키마를 바꾸는 배포 직전에는 `python -m app.scripts.backup_db`를 실행하거나 Railway 볼륨 백업을 먼저 만든다.
+
+### 1-10. 데모 모드 켜기 (포트폴리오 공개용)
+
+가입은 닫아 둔 채(`SIGNUP_MODE=closed`) 방문자가 써볼 수 있게 한다. Variables에 아래를 **한 번에** 넣고 Deploy:
+
+```
+DEMO_MODE_ENABLED=true
+DEMO_MAX_CREATIONS_PER_HOUR=30
+DEMO_LLM_BUDGET_PER_USER_USD=0.05
+DEMO_LLM_BUDGET_TOTAL_USD=2.00
+```
+
+- 마이그레이션(`users.is_demo`, `llm_usage_logs.is_demo`)은 시작 스크립트의 `alembic upgrade head`가 적용한다.
+- [Try the demo]를 누르면 이메일 없는 임시 계정이 생기고 예시 대학생 일주일(강의·격주 랩·튜토리얼·마감·기간·장소, 지난 며칠 완료 기록)이 채워진다. 쿠키는 24시간 유효.
+- 매시간 `demo_cleanup` 작업이 만료된 데모 계정과 그 데이터를 모두 지운다. LLM 사용 기록만 `user_id`를 비운 채 남긴다(그날 데모 합계와 비용 보고서가 실제 지출을 유지하도록).
+- 데모 계정은 알림 job·체크인 알림·자정 포인트 계산에서 빠지고, 페르소나 생성·수정·삭제와 비밀번호 설정은 할 수 없다.
+- 데모의 LLM 사용량은 `DEMO_LLM_BUDGET_TOTAL_USD`로 따로 센다. 데모가 한도에 닿아도 내 계정은 `LLM_DAILY_BUDGET_*`로 계속 쓴다.
+- 확인: `curl -s https://<도메인>/health` → `"demo_mode":true`. 화면 점검은 `smoke_ui --base-url https://<도메인> --with-demo`(데모 계정을 하나 만든다).
+- 끄려면 `DEMO_MODE_ENABLED=false` → `/auth/demo`는 404, 버튼은 사라지고, 남은 데모 계정은 정리 작업이 24시간 안에 지운다.
 
 ---
 
@@ -208,7 +231,7 @@ Railway SSH는 SFTP를 지원해서 `scp`로 파일을 올릴 수 있다 **[문�
 
 ## 5. 배포 후 확인 목록
 
-- [ ] `https://<도메인>/health` → `{"status":"ok"}`
+- [ ] `https://<도메인>/health` → `{"status":"ok", ...}` (데모를 켰으면 `"demo_mode":true`)
 - [ ] `https://<도메인>/app/` → 로그인 화면, 관리자 계정으로 로그인
 - [ ] 할 일 탭에서 일정 하나 추가 → 캘린더에 보임
 - [ ] 알림 로그: `railway logs --filter "알림"` 또는 대시보드 로그에 `[알림] 대기 중인 회차 N개의 알림 job을 등록했습니다`, 시각이 되면 `[알림][start]`

@@ -11,6 +11,7 @@ from app.core.scheduler import scheduler
 from app.i18n import render_notification
 from app.models.engagement_state import EngagementState
 from app.models.enums import EngagementScope, EscalationStage
+from app.models.user import User
 from app.services.telegram_bot import send_telegram_message
 
 ESCALATION_JOB_ID = "engagement_escalation_check"
@@ -131,7 +132,9 @@ def evaluate_escalation(
 def run_escalation_check() -> None:
     """등록된 모든 EngagementState를 한 번씩 평가한다. 스케줄러가 주기적으로 호출한다."""
     with SessionLocal() as db:
-        states = db.execute(select(EngagementState)).scalars().all()
+        states = db.execute(
+            select(EngagementState).join(User, EngagementState.user_id == User.id).where(User.is_demo.is_(False))
+        ).scalars().all()
         now = utc_now_naive()
         for state in states:
             evaluate_escalation(db, state, now=now)

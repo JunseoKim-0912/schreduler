@@ -168,7 +168,10 @@ def _fallback_reply(ctx: TurnContext, stop_reason: str | None) -> str:
     if stop_reason == "budget_limit":
         if ctx.drafts:
             return render_message("assistant.budget_with_drafts", ctx.language)
-        notice = render_message("assistant.budget_no_drafts", ctx.language, city=timezone_city(settings.app_timezone, ctx.language))
+        if ctx.user.is_demo:
+            notice = render_message("llm_budget.demo_limit", ctx.language)
+        else:
+            notice = render_message("assistant.budget_no_drafts", ctx.language, city=timezone_city(settings.app_timezone, ctx.language))
         return f"{_executed_text(ctx)} {notice}" if ctx.executed else notice
     if stop_reason is not None:
         if ctx.drafts:

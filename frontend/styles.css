@@ -110,6 +110,53 @@ code {
   padding: 32px 0;
 }
 
+.auth-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.demo-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.demo-entry .hint,
+.demo-entry .auth-status {
+  margin: 0;
+}
+
+.demo-start {
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+/* --- 데모 계정 배너 --- */
+
+.demo-banner {
+  background: #fff8c5;
+  border-bottom: 1px solid #d4a72c;
+  color: #6a5000;
+  font-size: 14px;
+}
+
+.demo-banner-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.demo-banner-row span {
+  font-weight: 600;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;

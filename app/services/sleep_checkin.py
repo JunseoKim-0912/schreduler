@@ -38,7 +38,7 @@ def send_daily_sleep_checkin_reminders() -> None:
     POST /sleep-logs로 기록한다 — 이 함수는 "물어보는" 역할만 한다.
     """
     with SessionLocal() as db:
-        users = db.execute(select(User)).scalars().all()
+        users = db.execute(select(User).where(User.is_demo.is_(False))).scalars().all()
         for user in users:
             _send_sleep_checkin_to_user(user)
 

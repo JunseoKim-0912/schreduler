@@ -180,6 +180,7 @@ MessageKey = Literal[
     "assistant.budget_no_drafts",
     "llm_budget.user_limit",
     "llm_budget.total_limit",
+    "llm_budget.demo_limit",
     "auth.login_failed",
     "auth.too_many_attempts",
     "auth.signup_closed",
@@ -188,6 +189,8 @@ MessageKey = Literal[
     "auth.not_signed_in",
     "auth.admin_only",
     "auth.bad_origin",
+    "demo.rate_limited",
+    "demo.account_locked",
     "request.user_id_not_allowed",
 ]
 

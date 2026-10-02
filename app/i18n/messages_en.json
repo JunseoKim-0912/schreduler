@@ -61,6 +61,7 @@
   "assistant.budget_no_drafts": "You've reached today's AI usage limit, so I had to stop here. It reopens at midnight ({city} time).",
   "llm_budget.user_limit": "You've reached today's AI usage limit. It reopens at midnight ({city} time).",
   "llm_budget.total_limit": "The app has reached today's overall AI usage limit. It reopens at midnight ({city} time).",
+  "llm_budget.demo_limit": "You've reached the demo's AI limit. You can keep trying everything else.",
   "auth.login_failed": "The email or password is incorrect.",
   "auth.too_many_attempts": "Too many failed sign-ins. Try again in {minutes} min.",
   "auth.signup_closed": "Sign-up is closed right now.",
@@ -69,5 +70,7 @@
   "auth.not_signed_in": "Please sign in.",
   "auth.admin_only": "Only admins can do this.",
   "auth.bad_origin": "Request refused because it came from another site.",
+  "demo.rate_limited": "Too many demo accounts were started just now. Please try again in {minutes} min.",
+  "demo.account_locked": "Demo accounts can't change this setting.",
   "request.user_id_not_allowed": "user_id is no longer accepted. Requests act as the signed-in user."
 }

@@ -171,11 +171,11 @@ def recalculate_points_since(
 def run_daily_points_job(target_date: dt_date | None = None) -> None:
     """모든 사용자의 전날(target_date 기본값) 포인트를 계산해 PointsLedger에 기록한다.
 
-    한 사용자에서 실패해도 나머지 사용자는 계속 처리한다.
+    한 사용자에서 실패해도 나머지 사용자는 계속 처리한다. 데모 계정은 만들 때 시드한 원장을 그대로 보여주므로 건너뛴다.
     """
     target_date = target_date or local_today() - timedelta(days=1)
     with SessionLocal() as db:
-        user_ids = db.execute(select(User.id)).scalars().all()
+        user_ids = db.execute(select(User.id).where(User.is_demo.is_(False))).scalars().all()
         for user_id in user_ids:
             try:
                 entry = record_daily_points(db, user_id, target_date)

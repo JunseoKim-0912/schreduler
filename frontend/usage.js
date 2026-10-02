@@ -26,7 +26,10 @@ export function usd(value, { roundDown = false } = {}) {
 export function usageView(data) {
   if (!data) return null;
   const blocked = Boolean(data.total_blocked) || data.spent_usd >= data.limit_usd;
-  if (blocked) return { level: "blocked", blocked, text: t("usage.blocked", { city: zoneCity(data.timezone) }) };
+  if (blocked) {
+    const text = data.is_demo ? t("usage.demoBlocked") : t("usage.blocked", { city: zoneCity(data.timezone) });
+    return { level: "blocked", blocked, text };
+  }
   const level = data.spent_usd >= data.limit_usd * WARN_RATIO ? "warn" : "ok";
   return { level, blocked, text: t("usage.meter", { spent: usd(data.spent_usd, { roundDown: true }), limit: usd(data.limit_usd) }) };
 }

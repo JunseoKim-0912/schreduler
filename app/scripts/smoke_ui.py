@@ -3,10 +3,12 @@
     python -m app.scripts.smoke_ui                     # starts its own server on a throwaway database
     python -m app.scripts.smoke_ui --headed            # watch it
     SMOKE_EMAIL=... SMOKE_PASSWORD=... python -m app.scripts.smoke_ui --base-url https://<your domain>
+    ... --base-url https://<your domain> --with-demo   # also start a demo account there (deleted after 24 hours)
 
-Steps: login screen -> sign in -> open every tab -> log out -> login screen again. Nothing here calls the LLM:
-the local server gets no LLM_API_KEY and the browser refuses any request to an LLM endpoint. Against --base-url
-it only reads (it never creates data on a deployed server).
+Steps: login screen -> sign in -> open every tab -> log out -> login screen again, then the demo: [Try the demo]
+-> demo banner -> every tab -> [Exit demo] -> login screen. Nothing here calls the LLM: the local server gets no
+LLM_API_KEY and the browser refuses any request to an LLM endpoint. Against --base-url it only reads unless
+--with-demo is given (the demo account it starts is a throwaway, removed by the hourly cleanup after 24 hours).
 
 Needs Playwright (pip install -r requirements-dev.txt) and an installed Chrome or Edge (--browser), so no browser
 download is required.
@@ -102,6 +104,7 @@ def local_server() -> Iterator[tuple[str, str, str]]:
             "RUN_SCHEDULER": "false",
             "LLM_API_KEY": "",
             "SIGNUP_MODE": "closed",
+            "DEMO_MODE_ENABLED": "true",
             "SESSION_COOKIE_SECURE": "false",
             "ALLOWED_ORIGINS": "",
             "TRUST_PROXY_HEADERS": "false",
@@ -129,7 +132,7 @@ def local_server() -> Iterator[tuple[str, str, str]]:
             log.close()
 
 
-def run_browser(base_url: str, email: str, password: str, *, browser: str, headed: bool, seed: bool) -> Report:
+def run_browser(base_url: str, email: str, password: str, *, browser: str, headed: bool, seed: bool, demo: bool) -> Report:
     from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import sync_playwright
 
@@ -194,20 +197,41 @@ def run_browser(base_url: str, email: str, password: str, *, browser: str, heade
                 f"{base_url}/events", data={"title": "Smoke event", "start_time": _tomorrow_at(9), "end_time": _tomorrow_at(10)}
             )
 
-        tabs = page.locator('[role="tab"]')
-        for index in range(tabs.count()):
-            tab = tabs.nth(index)
-            name = tab.get_attribute("data-tab")
-            tab.click()
-            page.wait_for_load_state("networkidle")
-            page.locator(f"#panel-{name}").wait_for(state="visible", timeout=5_000)
-            report.steps.append(f"tab {name} opened")
+        def open_every_tab(who: str) -> None:
+            tabs = page.locator('[role="tab"]')
+            for index in range(tabs.count()):
+                tab = tabs.nth(index)
+                name = tab.get_attribute("data-tab")
+                tab.click()
+                page.wait_for_load_state("networkidle")
+                page.locator(f"#panel-{name}").wait_for(state="visible", timeout=5_000)
+                report.steps.append(f"{who}: tab {name} opened")
+
+        open_every_tab("account")
 
         page.click("#logout")
         signed_in = False
         page.locator("#login-form").wait_for(state="visible", timeout=10_000)
         page.wait_for_load_state("networkidle")
         report.steps.append("logged out, login screen shown again")
+
+        if demo:
+            page.locator("#demo-start").wait_for(state="visible", timeout=10_000)
+            signed_in = True
+            page.click("#demo-start")
+            page.locator("#demo-banner").wait_for(state="visible", timeout=20_000)
+            banner = page.text_content("#demo-banner-text") or ""
+            if "Demo account" not in banner or not page.locator("#account").is_hidden():
+                report.failed_requests.append(f"demo banner looks wrong: {banner!r}")
+            report.steps.append(f"demo started: {banner}")
+            open_every_tab("demo")
+            if page.locator("#event-list li").count() == 0:
+                report.failed_requests.append("the demo account has no sample events")
+            page.click("#demo-exit")
+            signed_in = False
+            page.locator("#login-form").wait_for(state="visible", timeout=10_000)
+            page.wait_for_load_state("networkidle")
+            report.steps.append("exited the demo, login screen shown again")
         context.close()
         instance.close()
     return report
@@ -226,16 +250,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-url", help="check a running deployment instead (SMOKE_EMAIL / SMOKE_PASSWORD env vars)")
     parser.add_argument("--browser", default="chrome", choices=["chrome", "msedge", "chromium"], help="installed browser to drive")
     parser.add_argument("--headed", action="store_true", help="show the browser window")
+    parser.add_argument("--with-demo", action="store_true", help="with --base-url: also start a demo account there")
     args = parser.parse_args(argv)
 
     if args.base_url:
         email, password = os.environ.get("SMOKE_EMAIL"), os.environ.get("SMOKE_PASSWORD")
         if not email or not password:
             parser.error("--base-url needs SMOKE_EMAIL and SMOKE_PASSWORD in the environment")
-        report = run_browser(args.base_url.rstrip("/"), email, password, browser=args.browser, headed=args.headed, seed=False)
+        report = run_browser(
+            args.base_url.rstrip("/"), email, password, browser=args.browser, headed=args.headed, seed=False, demo=args.with_demo
+        )
     else:
         with local_server() as (base_url, email, password):
-            report = run_browser(base_url, email, password, browser=args.browser, headed=args.headed, seed=True)
+            report = run_browser(base_url, email, password, browser=args.browser, headed=args.headed, seed=True, demo=True)
 
     for step in report.steps:
         print(f"  ok  {step}")

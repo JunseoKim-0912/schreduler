@@ -98,6 +98,10 @@ uvicorn 워커 1개로 실행됩니다.
 | `LLM_DAILY_BUDGET_PER_USER_USD` | `1.00` | 사용자 한 명의 하루 LLM 비용 한도(USD). `APP_TIMEZONE` 자정에 초기화 |
 | `LLM_DAILY_BUDGET_TOTAL_USD` | `5.00` | 모든 사용자와 스크립트를 합친 하루 한도 |
 | `LLM_DAILY_BUDGET_ADMIN_USD` | (없음) | `is_admin` 사용자의 한도. 없으면 관리자도 사용자 한도를 쓴다 |
+| `DEMO_MODE_ENABLED` | `false` | 로그인 화면의 [데모 체험하기]와 `POST /auth/demo`를 연다. 예시 일주일이 든 임시 계정으로, 24시간 뒤 삭제. `SIGNUP_MODE`와 무관 |
+| `DEMO_MAX_CREATIONS_PER_HOUR` | `30` | 한 시간 동안 만들 수 있는 데모 계정 수 (전체 합계. 프록시 뒤라 IP 기준은 쓰지 않는다) |
+| `DEMO_LLM_BUDGET_PER_USER_USD` | `0.05` | 데모 계정 한 명의 하루 LLM 한도 |
+| `DEMO_LLM_BUDGET_TOTAL_USD` | `2.00` | 모든 데모 계정을 합친 하루 LLM 한도. `LLM_DAILY_BUDGET_TOTAL_USD`와 따로 센다 |
 | `APP_TIMEZONE` | `America/Toronto` | 날짜·시각 해석 기준 시간대 (IANA 이름) |
 | `SIGNUP_MODE` | `invite` | `closed`(가입 불가) / `invite`(`INVITE_CODE` 필요) / `open` |
 | `INVITE_CODE` | (없음) | `SIGNUP_MODE=invite`일 때 가입에 필요한 코드. 없으면 아무도 가입할 수 없다 |
