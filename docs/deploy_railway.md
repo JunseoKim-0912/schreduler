@@ -17,8 +17,8 @@
 | 포트 | `PORT` 환경변수로 `0.0.0.0`에서 뜬다(Railway가 넣어 준다, 없으면 8000). 헬스체크도 같은 포트로 온다 **[문서 4]** |
 | 시작 순서 | `prepare_volume`(DB·백업 폴더 생성) → `alembic upgrade head` → uvicorn. 마이그레이션이 실패하면 서버를 띄우지 않고 컨테이너가 종료된다(배포 실패로 표시됨) |
 | 워커 | uvicorn `--workers 1` 고정 |
-| 볼륨 권한 | Railway 볼륨은 root 소유로 붙어 일반 사용자 이미지에서 권한 문제가 생긴다 **[문서 1]**. 이 이미지는 root로 시작해 `/data`를 만들고 소유자를 앱 사용자(uid 1000)로 바꾼 뒤, `setpriv`로 권한을 낮춰 서버를 실행한다. 그래서 Railway가 안내하는 `RAILWAY_RUN_UID=0`(컨테이너 전체를 root로 실행)은 **필요 없다**. 이 방식이 Railway 볼륨에서 그대로 동작하는지는 로컬 Docker 볼륨(root 소유)으로만 확인했다 **[추정]** — 첫 배포에서 권한 오류가 나면 `RAILWAY_RUN_UID=0`을 넣으면 된다 **[문서 1]** |
-| 설정 파일 | `railway.json`: Dockerfile 빌드, 헬스체크 `/health`(120초), 실패 시 재시작. 코드의 설정이 대시보드 설정보다 우선한다 **[문서 5]** |
+| 볼륨 권한 | Railway 볼륨은 root 소유로 붙어 일반 사용자 이미지에서 권한 문제가 생긴다 **[문서 1]**. 이 이미지는 root로 시작해 `/data`를 만들고 소유자를 앱 사용자(uid 1000)로 바꾼 뒤, `setpriv`로 권한을 낮춰 서버를 실행한다. 그래서 Railway가 안내하는 `RAILWAY_RUN_UID=0`(컨테이너 전체를 root로 실행)은 **필요 없다**. 2026-10-02 실제 배포에서 확인: 새 볼륨(root 소유, `lost+found`만 있음)에 `/data/schreduler.db`와 `/data/backups`가 `app` 소유로 만들어지고 서버는 uid 1000으로 돈다 |
+| 설정 파일 | `railway.json`: Dockerfile 빌드, 헬스체크 `/health`(120초), 실패 시 재시작. 코드의 설정이 대시보드 설정보다 우선한다 **[문서 5]**. Railway CLI 5.63은 Config as Code(`railway.json`)가 지원 중단 예정이며 **2026-12-01까지** 동작한다고 경고한다(`railway config migrate`로 `.railway/railway.ts`로 옮기라고 안내). 그 전에 옮겨야 한다 |
 | 스케줄러 | `RUN_SCHEDULER`(기본 `true`). 끄면 알림·체크인·자정 포인트·백업이 돌지 않는다 |
 | 시간대 | 스케줄러가 `APP_TIMEZONE` 기준으로 돈다(컨테이너 기본 시간대 UTC가 아니라) |
 | DB 백업 | 매일 04:30(`APP_TIMEZONE`)에 SQLite backup API로 `/data/backups/schreduler-YYYY-MM-DD.db`를 만들고 최근 14개만 남긴다. 수동: `python -m app.scripts.backup_db` |
@@ -68,6 +68,15 @@
 | `LOG_LEVEL` | `INFO` | |
 
 `PORT`는 Railway가 넣으므로 설정하지 않는다 **[문서 4]**. 변수를 바꾸면 "staged changes"가 생기고, **Deploy**를 눌러야 적용된다 **[문서 7]**.
+
+> **로컬 `.env`를 그대로 붙여 넣지 않는다.** 실제로 겪은 일: `.env`의 `DATABASE_URL=sqlite:///./schreduler.db`(상대 경로),
+> `SESSION_COOKIE_SECURE=false`, `SIGNUP_MODE=invite`가 그대로 들어갔다. 이 경우 서버는 정상(`/health` 200)으로 보이지만 DB가
+> 볼륨이 아닌 컨테이너 안(`/app/schreduler.db`)에 생겨 **재배포 때마다 사라진다**. 배포 후 반드시 확인한다:
+> ```bash
+> railway ssh -- sh -c 'echo $DATABASE_URL; ls -la /data'     # sqlite:////data/schreduler.db, /data에 schreduler.db와 backups/
+> ```
+> CLI로 고칠 때는 여러 변수를 **한 번에** 넣어야 재배포가 한 번만 일어난다:
+> `railway variables -s <서비스> --set "DATABASE_URL=sqlite:////data/schreduler.db" --set "SESSION_COOKIE_SECURE=true" --set ...`
 
 ### 1-5. 도메인
 1. 서비스 → **Settings → Networking → Generate Domain** → `<이름>.up.railway.app` 형태의 HTTPS 도메인이 생긴다. TLS는 Railway 엣지에서 끝난다 **[문서 2]**.
@@ -152,29 +161,48 @@ python -m app.scripts.create_admin --email you@example.com --new   # 빈 DB: 첫
 ### 4-2. 기존 데이터 옮기기 (로컬 `schreduler.db` → `/data/schreduler.db`)
 
 Railway SSH는 SFTP를 지원해서 `scp`로 파일을 올릴 수 있다 **[문서 8]**. 실행 중인 서버가 쓰고 있는 파일을 그냥 덮어쓰면 깨질 수 있으므로 아래 순서로 한다.
+2026-10-02에 이 순서대로 실제로 옮겼다(Windows, Railway CLI 5.63.1, OpenSSH 10.3).
 
-1. **로컬 준비**
+> **Windows에서 실행할 때**
+> - Git Bash는 `/data/...` 같은 인자를 `C:/Program Files/Git/data/...`로 바꿔 보낸다. `railway ssh`·`scp` 전에 `export MSYS_NO_PATHCONV=1`.
+> - PowerShell은 `railway ssh -- sh -c '... | ...'`의 따옴표 안 `|`를 자기 파이프로 잘라 버린다. 파이프가 있는 명령은 Git Bash에서 실행한다.
+> - `railway ssh`의 사용자는 **root**다(확인함). 파일을 만들거나 바꾸는 명령은 `setpriv --reuid=app --regid=app --init-groups`를 앞에 붙여 앱 사용자로 실행하면 소유자를 따로 맞출 필요가 없다.
+
+0. **미리 확인**: `railway status`가 이 저장소 폴더에서 올바른 프로젝트·서비스를 가리키는지(다른 폴더에서 `railway link`한 프로젝트가 잡혀 있지 않은지), 위 1-4의 `DATABASE_URL`·`/data` 확인.
+1. **로컬 준비** (로컬 서버는 꺼 둔다)
    ```bash
-   alembic upgrade head                                  # 배포할 코드와 같은 스키마로
-   python -m app.scripts.backup_db --dir ./to-railway    # 일관된 스냅샷 (서버가 돌고 있어도 안전)
+   alembic current                                       # head인지 확인 (아니면 alembic upgrade head)
+   python -m app.scripts.backup_db --dir ./to-railway --keep 1    # 원본은 그대로 두고 일관된 스냅샷을 만든다
    ```
-   이 파일에는 개인 데이터가 들어 있으니 저장소에 커밋하지 않는다(`.gitignore`, `.dockerignore` 대상).
-2. **배포 쪽 준비**: 1절대로 한 번 배포해 볼륨이 생긴 상태에서, 덮어쓰기 전 안전을 위해 Railway 볼륨 백업을 하나 만든다 **[문서 3]**.
+   올리기 전후 비교용으로 사용자·이벤트·회차·기간·장소·페르소나 개수와 `sha256sum`을 적어 둔다.
+   이 파일에는 개인 데이터가 들어 있으니 커밋하지 않는다(`*.db`는 `.gitignore`·`.dockerignore` 대상). 끝나면 지운다.
+2. **배포 DB 백업**: 덮어쓰기 전 지금 배포 DB를 **별도 폴더**에 백업한다. `/data/backups/schreduler-<날짜>.db`에 두면 그날 04:30 자동 백업이
+   같은 이름으로 덮어쓴다.
+   ```bash
+   railway ssh -s <서비스> -- setpriv --reuid=app --regid=app --init-groups python -m app.scripts.backup_db --dir /data/backups/before-import
+   ```
+   Railway 볼륨 백업(3절)도 하나 만들어 두면 더 안전하다 **[문서 3]**.
 3. **업로드** (`<서비스 도메인>`은 `xxx.up.railway.app`) **[문서 8]**:
    ```bash
-   scp ./to-railway/schreduler-YYYY-MM-DD.db <서비스 도메인>@ssh.railway.com:/data/incoming.db
+   scp -o StrictHostKeyChecking=accept-new ./to-railway/schreduler-YYYY-MM-DD.db <서비스 도메인>@ssh.railway.com:/data/incoming.db
+   railway ssh -s <서비스> -- sha256sum /data/incoming.db       # 로컬 해시와 같은지
    ```
-   OpenSSH 9.0 미만이면 `scp -s` **[문서 8]**.
-4. **교체** (`railway ssh`로 컨테이너 안에서). 서버가 열어 둔 파일을 `mv`로 바꾸지 말고, SQLite backup API로 내용을 덮어쓴다:
+   OpenSSH 9.0 미만이면 `scp -s` **[문서 8]**. 처음 접속이면 호스트 키를 묻는다(`accept-new`가 받아들인다). 업로드 파일은 root 소유가 된다.
+4. **교체** — 서버가 열어 둔 파일을 `mv`로 바꾸지 말고, SQLite backup API로 내용을 덮어쓴다(앱 사용자로 실행해 소유자 유지):
    ```bash
-   python -m app.scripts.backup_db                       # 지금 배포 DB도 한 번 더 백업
-   python -c "import sqlite3; s=sqlite3.connect('/data/incoming.db'); d=sqlite3.connect('/data/schreduler.db'); s.backup(d); d.close(); s.close()"
-   chown 1000:1000 /data/schreduler.db 2>/dev/null; rm /data/incoming.db
+   railway ssh -s <서비스> -- setpriv --reuid=app --regid=app --init-groups python -c 'import sqlite3; s=sqlite3.connect("file:/data/incoming.db?mode=ro", uri=True); d=sqlite3.connect("/data/schreduler.db"); s.backup(d); d.close(); s.close()'
+   railway ssh -s <서비스> -- rm /data/incoming.db
    ```
-5. **재시작**: Deployments → ⋮ → **Restart**(또는 Redeploy). 시작할 때 마이그레이션과 알림 예약이 새 데이터 기준으로 다시 돈다.
-6. 기존 사용자 1번에는 이메일이 없으므로 `python -m app.scripts.create_admin --email you@example.com`(`--new` 없이)으로 로그인 정보를 붙인다.
-
-4번의 `chown`과 SSH 세션 사용자(root인지)는 문서에서 확인하지 못했다 **[추정]**. 권한 오류가 나면 재시작만 해도 시작 단계(`prepare_volume`)가 소유자를 다시 맞춘다.
+5. **재시작**: `railway restart -s <서비스> -y`(다시 빌드하지 않음) 또는 대시보드 Deployments → ⋮ → **Restart**.
+   CLI가 재시작 후에도 한참 응답하지 않을 수 있다 — 로그에 `APScheduler started`, `[알림] 대기 중인 회차 N개의 알림 job을 등록했습니다`
+   (빈 DB일 때는 0개), `Application startup complete`가 새로 찍혔으면 끝난 것이다.
+6. **확인**
+   ```bash
+   railway ssh -s <서비스> -- sh -c 'cd /app && alembic current'          # head
+   railway ssh -s <서비스> -- python -c 'import sqlite3; c=sqlite3.connect("file:/data/schreduler.db?mode=ro", uri=True); print({t: c.execute("select count(*) from " + t).fetchone()[0] for t in ["users","events","event_instances","important_date_ranges","locations","personas"]})'
+   ```
+   개수가 1번과 같은지, `/health`, 로그에 `ERROR`/`Traceback`이 없는지 본다. 로컬의 `to-railway/`를 지운다.
+7. 로컬에서 이미 `create_admin`으로 이메일·비밀번호를 붙여 둔 사용자는 그대로 로그인된다. 아직이면 `python -m app.scripts.create_admin --email you@example.com`(`--new` 없이).
 
 ---
 
@@ -196,6 +224,9 @@ Railway SSH는 SFTP를 지원해서 `scp`로 파일을 올릴 수 있다 **[문�
   `curl -s -X POST https://<도메인>/auth/login -H "Origin: https://evil.example" -H "Content-Type: application/json" -d '{}'` → `403`
 - [ ] 시작 로그에 `SESSION_COOKIE_SECURE=true but ALLOWED_ORIGINS is empty` 경고가 **없는지**
 - [ ] 다음 날 `/data/backups/`에 백업 파일이 생겼는지: `railway ssh -- ls -l /data/backups`
+- [ ] 스케줄러 시간대: 로그에는 시각이 UTC로 찍히지만 작업은 `APP_TIMEZONE` 기준이다. 같은 설정으로 다음 실행 시각을 보려면
+  `railway ssh -- python -c 'from datetime import datetime; from app.core.scheduler import scheduler; from app.services.points import register_daily_points_job; register_daily_points_job(); j=scheduler.get_jobs()[0]; print(scheduler.timezone, j.trigger.get_next_fire_time(None, datetime.now(scheduler.timezone)))'`
+  → `America/Toronto ... 00:00:00-04:00`
 
 ---
 
