@@ -59,7 +59,13 @@ docker compose up --build                                                       
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build    # PostgreSQL
 ```
 
-The container runs `alembic upgrade head` on start. The scheduler lives inside the server process, so it runs with a single worker.
+The container prepares the data folder, runs `alembic upgrade head` (and does not start the server if that fails), then serves on `$PORT` (default 8000) with a single uvicorn worker.
+
+### Deploying (Railway)
+
+See [`docs/deploy_railway.md`](docs/deploy_railway.md) (Korean): one service from the `Dockerfile`, a volume at `/data` for SQLite, daily backups, environment variables, first admin, logs and rollback.
+
+> **Keep exactly one replica.** Reminders, the evening check-in, midnight points and backups are scheduled inside the server process; two processes would send everything twice. Use `RUN_SCHEDULER=false` for any extra process.
 
 ## Configuration
 
@@ -80,6 +86,11 @@ Settings come from environment variables or a `.env` file. [`.env.example`](.env
 | `INVITE_CODE` | *(none)* | Code new users must enter when `SIGNUP_MODE=invite`. Without it nobody can sign up |
 | `SESSION_COOKIE_SECURE` | `false` | Send the session cookie only over HTTPS. Turn on in production |
 | `ALLOWED_ORIGINS` | *(same host)* | Comma-separated origins allowed to send POST/PUT/DELETE (e.g. `https://schreduler.example.com`). Empty: the request's own host |
+| `RUN_SCHEDULER` | `true` | Run reminders, check-ins, midnight points and backups in this process. Exactly one process may have it on |
+| `TRUST_PROXY_HEADERS` | `false` | Take the client IP from `X-Forwarded-For` / `X-Real-IP` and also lock sign-in per IP. Off: per email only |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | Proxies uvicorn trusts for `X-Forwarded-Proto` (`*` on Railway) |
+| `FIREBASE_CREDENTIALS_JSON` | *(none)* | Service-account JSON as text, instead of a file path. Wins over `FIREBASE_CREDENTIALS_PATH` |
+| `BACKUP_DIR` | *(next to the DB)* | Where the daily SQLite backups go (default `<db folder>/backups`, 14 kept) |
 | `FIREBASE_CREDENTIALS_PATH` | *(none)* | Path to an FCM service-account JSON. Without it, push notifications are only logged |
 | `TELEGRAM_BOT_TOKEN` | *(none)* | Bot token for escalation messages. Without it, they are only logged |
 | `LOG_LEVEL` | `INFO` | Application log level |
@@ -113,6 +124,9 @@ Other scripts:
 | `python -m app.scripts.export_postman` | Regenerate the Postman collection from the OpenAPI spec (run after API changes) |
 | `python -m app.scripts.create_admin --email you@example.com` | Attach an email and password to existing user 1 and make it an admin (`--user-id N` for another user). The password is typed in the terminal, never passed as an argument |
 | `python -m app.scripts.create_admin --email you@example.com --reset` | Set a new password for that account and sign it out everywhere |
+| `python -m app.scripts.create_admin --email you@example.com --new` | On an empty database (a fresh deployment), create the first admin account |
+| `python -m app.scripts.backup_db` | Back up the SQLite database now (consistent copy via the sqlite3 backup API) |
+| `python -m app.scripts.smoke_ui` | Open the web UI in an installed Chrome (Playwright, `pip install -r requirements-dev.txt`) on a throwaway database: log in, every tab, log out; fails on any console error or failed request. `--base-url https://…` with `SMOKE_EMAIL`/`SMOKE_PASSWORD` checks a deployment. Run it after every front-end change |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | Compare input tokens with and without prompt caching (real API calls) |
 | `python -m app.scripts.usage_report --days 7` | LLM cost table by day, user and feature (from `llm_usage_logs`) |
 

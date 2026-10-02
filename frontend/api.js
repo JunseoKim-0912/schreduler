@@ -148,8 +148,9 @@ export async function apiFetch(path, { method = "GET", body, headers, showError 
   }
 
   if (response.ok) onHeaders?.(response.headers);
-  if (response.status === 204) return null;
+  // 204도 (빈) 본문을 끝까지 읽는다. 읽지 않고 버리면 브라우저가 그 요청을 중단된 것(ERR_ABORTED)으로 기록한다.
   const data = await readBody(response);
+  if (response.status === 204) return null;
   if (!response.ok) {
     const detail = data && typeof data === "object" && "detail" in data ? data.detail : data;
     const message = describeError({ status: response.status, detail, method, path });

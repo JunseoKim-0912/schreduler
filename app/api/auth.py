@@ -5,17 +5,13 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import clear_session_cookie, get_current_user, session_cookie, set_session_cookie
 from app.core.db import get_db
+from app.core.request_guards import client_ip
 from app.i18n import accept_language
 from app.models.user import User
 from app.schemas.auth import LoginRequest, MeRead, SignupRequest
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _client_ip(request: Request) -> str:
-    # Behind a proxy, run uvicorn with --proxy-headers so this is the real client address.
-    return request.client.host if request.client else "unknown"
 
 
 @router.post(
@@ -38,12 +34,15 @@ def signup(data: SignupRequest, request: Request, response: Response, db: Sessio
     "/login",
     response_model=MeRead,
     summary="로그인",
-    responses={401: {"description": "이메일 또는 비밀번호가 틀림 (어느 쪽인지는 알려주지 않는다)"}, 429: {"description": "10분 안에 같은 이메일·IP로 10회 넘게 실패"}},
+    responses={
+        401: {"description": "이메일 또는 비밀번호가 틀림 (어느 쪽인지는 알려주지 않는다)"},
+        429: {"description": "10분 안에 같은 이메일로(TRUST_PROXY_HEADERS=true면 같은 IP로도) 10회 실패"},
+    },
 )
 def login(data: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> User:
     """성공하면 HttpOnly 세션 쿠키(30일)를 설정한다."""
     user, token = auth_service.login(
-        db, data.email, data.password, _client_ip(request), accept_language(request.headers.get("accept-language"))
+        db, data.email, data.password, client_ip(request), accept_language(request.headers.get("accept-language"))
     )
     set_session_cookie(response, token)
     return user

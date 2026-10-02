@@ -5,6 +5,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _flag(name: str, *, default: bool) -> bool:
+    value = (os.getenv(name) or "").strip().lower()
+    if not value:
+        return default
+    return value in ("1", "true", "yes", "on")
+
+
 class Settings:
     app_name: str = "Schreduler"
     environment: str = os.getenv("ENVIRONMENT", "development")
@@ -28,7 +35,7 @@ class Settings:
     signup_mode: str = (os.getenv("SIGNUP_MODE") or "invite").strip().lower()
     invite_code: str | None = os.getenv("INVITE_CODE") or None
     # Turn on behind HTTPS so the session cookie is never sent over plain HTTP.
-    session_cookie_secure: bool = (os.getenv("SESSION_COOKIE_SECURE") or "").strip().lower() in ("1", "true", "yes", "on")
+    session_cookie_secure: bool = _flag("SESSION_COOKIE_SECURE", default=False)
     # Comma-separated origins allowed to send POST/PUT/DELETE (e.g. https://schreduler.example.com).
     # Empty: same host as the request.
     allowed_origins: tuple[str, ...] = tuple(
@@ -36,6 +43,16 @@ class Settings:
     )
     # Firebase 서비스 계정 JSON 파일 경로. 미설정이면 FCM 발송은 스킵되고 로그만 남는다.
     firebase_credentials_path: str | None = os.getenv("FIREBASE_CREDENTIALS_PATH")
+    # Same service account as JSON text, so the file never has to be baked into an image. Wins over the path.
+    firebase_credentials_json: str | None = os.getenv("FIREBASE_CREDENTIALS_JSON") or None
+    # The scheduler runs inside the server process; turn it off for one-off containers (or a second replica, which
+    # must not exist: two schedulers send every notification twice).
+    run_scheduler: bool = _flag("RUN_SCHEDULER", default=True)
+    # Behind a proxy every request comes from the proxy's address. Only when this is on is the client IP taken from
+    # X-Forwarded-For and used for the per-IP sign-in lockout; off, the lockout counts per email only.
+    trust_proxy_headers: bool = _flag("TRUST_PROXY_HEADERS", default=False)
+    # Daily SQLite backups. Empty: a "backups" folder next to the database file.
+    backup_dir: str | None = os.getenv("BACKUP_DIR") or None
     # 텔레그램 봇 토큰 (BotFather 발급). 미설정이면 텔레그램 발송은 스킵되고 로그만 남는다.
     telegram_bot_token: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
 

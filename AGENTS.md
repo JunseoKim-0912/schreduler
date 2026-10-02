@@ -88,3 +88,11 @@ schreduler/
 - FR-6의 "LLM 우회 UI 숏컷"처럼 비용 최적화가 기획에 명시된 로직은 임의로 단순화하지 말고 기획서 그대로 구현합니다.
 - 다국어 문자열(페르소나 대사, 카테고리 라벨, 알림 문구)은 코드에 하드코딩하지 않고 `{"ko": ..., "en": ...}` 형태의 JSON 필드 또는 i18n 리소스로 관리합니다.
 - 커밋되는 코드에는 불필요한 주석을 달지 않습니다. WHY가 비직관적인 경우(예: 프롬프트 캐싱 프리픽스 순서, 에스컬레이션 리셋 조건)에만 짧은 주석을 남깁니다.
+
+## 프론트엔드 변경 후 확인
+
+- `frontend/`를 고친 뒤에는 반드시 `python -m app.scripts.smoke_ui`를 돌려 통과(콘솔 에러 0, 실패한 요청 0)를 확인합니다.
+  임시 DB로 서버를 띄워 로그인 → 모든 탭 → 로그아웃을 실제 브라우저(설치된 Chrome, `--browser msedge` 가능)로 확인하며,
+  LLM은 호출하지 않습니다. 필요한 패키지는 `pip install -r requirements-dev.txt`.
+- 배포된 서버는 `SMOKE_EMAIL`/`SMOKE_PASSWORD` 환경변수를 주고 `--base-url https://<도메인>`으로 같은 점검을 합니다.
+- 배포는 Railway 레플리카 1개가 전제입니다(스케줄러가 프로세스 안에서 돈다). 자세한 내용은 [docs/deploy_railway.md](docs/deploy_railway.md).

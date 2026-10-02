@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -24,13 +25,14 @@ from app.core.config import settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.openapi import APP_DESCRIPTION, TAGS_METADATA
-from app.core.request_guards import install_request_guards, reject_user_id
+from app.core.request_guards import install_request_guards, reject_user_id, warn_about_cookie_settings
 from app.core.scheduler import shutdown_scheduler, start_scheduler
 from app.frontend_serving import FRONTEND_DIR, RevalidatedStaticFiles
 from app.frontend_serving import router as frontend_router
 from app.services import notification
 from app.services.auth_service import validate_signup_settings
 from app.services.daily_checkin import register_daily_checkin_job
+from app.services.db_backup import register_backup_job
 from app.services.engagement_service import register_escalation_job
 from app.services.llm_client import validate_assistant_settings
 from app.services.llm_pricing import validate_configured_models
@@ -38,18 +40,24 @@ from app.services.points import register_daily_points_job
 from app.services.sleep_checkin import register_sleep_checkin_job
 
 setup_logging()
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     validate_assistant_settings()
     validate_configured_models()
     validate_signup_settings()
-    start_scheduler()
-    register_escalation_job()
-    register_sleep_checkin_job()
-    register_daily_checkin_job()
-    register_daily_points_job()
-    notification.register_upcoming_notifications()
+    warn_about_cookie_settings()
+    if settings.run_scheduler:
+        start_scheduler()
+        register_escalation_job()
+        register_sleep_checkin_job()
+        register_daily_checkin_job()
+        register_daily_points_job()
+        register_backup_job()
+        notification.register_upcoming_notifications()
+    else:
+        logger.warning("RUN_SCHEDULER=false: no reminders, check-ins, midnight points or backups run in this process")
     yield
     shutdown_scheduler()
 

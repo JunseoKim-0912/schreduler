@@ -80,7 +80,7 @@
                 "login"
               ]
             },
-            "description": "성공하면 HttpOnly 세션 쿠키(30일)를 설정한다.\n\n**오류 응답**\n- `401`: 이메일 또는 비밀번호가 틀림 (어느 쪽인지는 알려주지 않는다)\n- `422`: Validation Error\n- `429`: 10분 안에 같은 이메일·IP로 10회 넘게 실패",
+            "description": "성공하면 HttpOnly 세션 쿠키(30일)를 설정한다.\n\n**오류 응답**\n- `401`: 이메일 또는 비밀번호가 틀림 (어느 쪽인지는 알려주지 않는다)\n- `422`: Validation Error\n- `429`: 10분 안에 같은 이메일로(TRUST_PROXY_HEADERS=true면 같은 IP로도) 10회 실패",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",

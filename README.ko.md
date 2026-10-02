@@ -73,7 +73,16 @@ docker compose up --build                                                       
 docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build    # PostgreSQL
 ```
 
-컨테이너가 시작될 때 `alembic upgrade head`를 먼저 실행합니다. 스케줄러가 서버 프로세스 안에서 돌기 때문에 워커는 1개로 실행됩니다.
+컨테이너는 데이터 폴더를 준비하고 `alembic upgrade head`를 먼저 실행한 뒤(실패하면 서버를 띄우지 않음) `$PORT`(기본 8000)에서
+uvicorn 워커 1개로 실행됩니다.
+
+### 배포 (Railway)
+
+[`docs/deploy_railway.md`](docs/deploy_railway.md)에 순서대로 정리했습니다: `Dockerfile` 서비스 1개, `/data` 볼륨의 SQLite, 매일 백업,
+환경변수, 첫 관리자 만들기, 로그·롤백, 기존 데이터 옮기기.
+
+> **레플리카는 반드시 1개로 유지합니다.** 알림·저녁 체크인·자정 포인트·백업이 서버 프로세스 안의 스케줄러에서 돌기 때문에,
+> 프로세스가 2개면 모든 알림이 두 번 갑니다. 추가 프로세스가 필요하면 `RUN_SCHEDULER=false`로 띄웁니다.
 
 ## 환경변수
 
@@ -94,6 +103,11 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build  
 | `INVITE_CODE` | (없음) | `SIGNUP_MODE=invite`일 때 가입에 필요한 코드. 없으면 아무도 가입할 수 없다 |
 | `SESSION_COOKIE_SECURE` | `false` | 세션 쿠키를 HTTPS로만 보낸다. 배포(HTTPS)에서는 켠다 |
 | `ALLOWED_ORIGINS` | (같은 호스트) | POST/PUT/DELETE를 보낼 수 있는 출처, 쉼표로 구분 (예: `https://schreduler.example.com`). 비우면 요청의 호스트와 같은 출처만 |
+| `RUN_SCHEDULER` | `true` | 알림·체크인·자정 포인트·백업을 이 프로세스에서 돌린다. 켜진 프로세스는 하나뿐이어야 한다 |
+| `TRUST_PROXY_HEADERS` | `false` | `X-Forwarded-For`/`X-Real-IP`를 클라이언트 IP로 믿고 IP 기준 로그인 제한도 켠다. 끄면 이메일 기준만 |
+| `FORWARDED_ALLOW_IPS` | `127.0.0.1` | uvicorn이 `X-Forwarded-Proto`를 믿을 프록시 (Railway에서는 `*`) |
+| `FIREBASE_CREDENTIALS_JSON` | (없음) | 서비스 계정 JSON 내용. 파일 경로 대신 쓰고, 있으면 `FIREBASE_CREDENTIALS_PATH`보다 우선 |
+| `BACKUP_DIR` | (DB 옆) | 매일 SQLite 백업을 둘 폴더 (기본 `<DB 폴더>/backups`, 14개 보관) |
 | `FIREBASE_CREDENTIALS_PATH` | (없음) | FCM 서비스 계정 JSON 경로. 없으면 푸시는 로그만 남기고 건너뛴다 |
 | `TELEGRAM_BOT_TOKEN` | (없음) | 에스컬레이션용 텔레그램 봇 토큰. 없으면 로그만 남긴다 |
 | `LOG_LEVEL` | `INFO` | 앱 로그 레벨 |
@@ -136,9 +150,12 @@ docs/                    # 기획서, API 안내, Postman 컬렉션
 |---|---|
 | `python -m app.scripts.create_admin --email you@example.com` | 기존 사용자 1번에 이메일·비밀번호를 붙이고 관리자로 만든다 (`--user-id N`으로 다른 사용자). 비밀번호는 명령어 인자가 아니라 터미널에서 입력한다 |
 | `python -m app.scripts.create_admin --email you@example.com --reset` | 그 계정의 비밀번호를 새로 정하고 모든 기기에서 로그아웃시킨다 |
+| `python -m app.scripts.create_admin --email you@example.com --new` | 빈 DB(새 배포)에서 첫 관리자 계정을 만든다 |
 | `python -m app.scripts.seed` | 로그인 없는 테스트 사용자 생성 (로그인하려면 `create_admin --user-id <id>`) |
 | `python -m app.scripts.seed_personas` | JSON 파일의 페르소나를 DB에 upsert |
 | `python -m app.scripts.export_postman` | OpenAPI 스펙으로 Postman 컬렉션 재생성 (API 변경 후 실행) |
+| `python -m app.scripts.backup_db` | SQLite DB를 지금 백업 (sqlite3 backup API로 일관된 복사) |
+| `python -m app.scripts.smoke_ui` | 임시 DB로 서버를 띄워 설치된 Chrome(Playwright, `pip install -r requirements-dev.txt`)으로 로그인 → 모든 탭 → 로그아웃, 콘솔 에러·실패한 요청이 있으면 실패. `--base-url https://…` + `SMOKE_EMAIL`/`SMOKE_PASSWORD`로 배포 서버 점검. 프론트엔드를 고친 뒤에는 꼭 실행 |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | 프롬프트 캐싱 전후 입력 토큰 비교 (실제 LLM API 호출, 비용 발생) |
 | `python -m app.scripts.usage_report --days 7` | 날짜별·사용자별·기능별 LLM 비용 표 (`llm_usage_logs` 기준) |
 | `python -m app.scripts.eval_assistant --effort medium` | 일정 어시스턴트 평가 세트 실행 (실제 LLM API 호출, 비용 발생). 결과는 `tests/assistant_eval/results/` |

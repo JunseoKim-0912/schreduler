@@ -150,9 +150,12 @@ def _failures_since(db: Session, column: Any, value: str, since: datetime) -> li
     )
 
 
-def _check_lockout(db: Session, email: str, ip: str, now: datetime, language: Language) -> None:
+def _check_lockout(db: Session, email: str, ip: str | None, now: datetime, language: Language) -> None:
     since = now - LOCKOUT_WINDOW
-    for times in (_failures_since(db, LoginFailure.email, email, since), _failures_since(db, LoginFailure.ip, ip, since)):
+    counted = [_failures_since(db, LoginFailure.email, email, since)]
+    if ip is not None:
+        counted.append(_failures_since(db, LoginFailure.ip, ip, since))
+    for times in counted:
         if len(times) >= MAX_FAILURES:
             # Opens again once enough failures have aged out of the window.
             reopens = times[len(times) - MAX_FAILURES] + LOCKOUT_WINDOW
@@ -160,9 +163,10 @@ def _check_lockout(db: Session, email: str, ip: str, now: datetime, language: La
             raise TooManyLoginFailures(render_message("auth.too_many_attempts", language, minutes=math.ceil(seconds / 60)), seconds)
 
 
-def login(db: Session, email: str, password: str, ip: str, language: Language) -> tuple[User, str]:
+def login(db: Session, email: str, password: str, ip: str | None, language: Language) -> tuple[User, str]:
     """One message for every failure (unknown email, wrong password, no password yet) so accounts can't be probed.
-    After 10 failures within 10 minutes for the same email or the same IP, further attempts are refused for a while."""
+    After 10 failures within 10 minutes for the same email — or the same IP, when the IP is known (ip is None behind
+    an untrusted proxy) — further attempts are refused for a while."""
     now = utc_now_naive()
     email = normalize_email(email)
     db.execute(delete(LoginFailure).where(LoginFailure.created_at <= now - LOCKOUT_WINDOW))
@@ -170,9 +174,10 @@ def login(db: Session, email: str, password: str, ip: str, language: Language) -
 
     user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
     if user is None or not _password_matches(user.password_hash, password):
-        db.add(LoginFailure(email=email, ip=ip, created_at=now))
+        # "-" never matches a real address, so an unknown IP is never counted.
+        db.add(LoginFailure(email=email, ip=ip or "-", created_at=now))
         db.commit()
-        logger.info("[auth] sign-in failed ip=%s", ip)
+        logger.info("[auth] sign-in failed ip=%s", ip or "-")
         raise UnauthorizedError(render_message("auth.login_failed", language))
 
     if _hasher.check_needs_rehash(user.password_hash or ""):

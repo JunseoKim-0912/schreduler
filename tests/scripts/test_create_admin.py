@@ -84,3 +84,22 @@ def test_reset_changes_the_password_and_signs_out_everywhere(engine) -> None:
 def test_reset_for_an_unknown_email_fails(engine) -> None:
     with pytest.raises(SystemExit, match="no user"):
         create_admin.main(["--email", "nobody@example.com", "--reset"], prompt=_prompt(_typed("whatever123", "whatever123")))
+
+
+def test_new_creates_the_first_admin_on_an_empty_database(engine) -> None:
+    create_admin.main(["--email", "First@Example.com", "--new"], prompt=_prompt(_typed("long enough pw", "long enough pw")))
+
+    with Session(engine) as session:
+        user = session.execute(select(User).where(User.email == "first@example.com")).scalar_one()
+        assert user.is_admin
+        assert auth_service.login(session, "first@example.com", "long enough pw", None, "en")[0].id == user.id
+
+
+def test_new_refuses_an_email_that_already_has_an_account(engine) -> None:
+    with pytest.raises(SystemExit, match="already has an account"):
+        create_admin.main(["--email", "taken@example.com", "--new"], prompt=_prompt(_typed("long enough pw", "long enough pw")))
+
+
+def test_missing_user_points_to_new(engine) -> None:
+    with pytest.raises(SystemExit, match="--new"):
+        create_admin.main(["--email", "me@example.com", "--user-id", "99"], prompt=_prompt(_typed("long enough pw", "long enough pw")))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
@@ -39,15 +40,22 @@ def _get_firebase_app() -> firebase_admin.App | None:
     except ValueError:
         pass  # 아직 초기화 안 됨
 
-    if not settings.firebase_credentials_path:
+    if not settings.firebase_credentials_json and not settings.firebase_credentials_path:
         logger.warning(
-            "FIREBASE_CREDENTIALS_PATH가 설정되지 않아 FCM 발송을 건너뜁니다 (.env 확인)"
+            "FIREBASE_CREDENTIALS_JSON / FIREBASE_CREDENTIALS_PATH가 설정되지 않아 FCM 발송을 건너뜁니다 (.env 확인)"
         )
         return None
 
     try:
-        cred = credentials.Certificate(settings.firebase_credentials_path)
+        if settings.firebase_credentials_json:
+            cred = credentials.Certificate(json.loads(settings.firebase_credentials_json))
+        else:
+            cred = credentials.Certificate(settings.firebase_credentials_path)
         return firebase_admin.initialize_app(cred)
+    except json.JSONDecodeError as exc:
+        # 내용은 비밀키라 로그에 남기지 않는다.
+        logger.error("FIREBASE_CREDENTIALS_JSON이 올바른 JSON이 아닙니다 (line %s, column %s)", exc.lineno, exc.colno)
+        return None
     except Exception:
         logger.exception("Firebase Admin SDK 초기화에 실패했습니다")
         return None

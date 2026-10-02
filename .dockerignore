@@ -13,13 +13,22 @@ htmlcov
 .vscode
 .idea
 
-# 로컬 DB와 비밀값은 이미지에 넣지 않는다 (환경변수/볼륨으로 주입)
-*.db
-*.db.bak*
-*.sqlite3
+# 로컬 DB·백업과 비밀값은 이미지에 넣지 않는다 (환경변수/볼륨으로 주입)
 .env
 .env.*
 secrets
+*.db
+*.db.bak*
+*.db-wal
+*.db-shm
+*.db.partial
+*.sqlite3
+backups
+data
+
+# 평가 결과(실제 요청 기록)와 로컬 확인용 파일
+tests/assistant_eval/results
+test_tasks*.py
 
 tests
 docs

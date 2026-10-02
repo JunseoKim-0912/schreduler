@@ -208,11 +208,36 @@ def test_ten_failures_for_one_email_lock_it_for_a_while(client: TestClient) -> N
         assert _login(client).status_code == 200
 
 
-def test_ten_failures_from_one_ip_lock_other_emails_too(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ip_lockout_is_off_unless_proxy_headers_are_trusted(client: TestClient) -> None:
+    """Behind a proxy every request shares the proxy's address; counting it would let one person lock everyone out."""
     _signup(client)
     for index in range(10):
-        _login(client, email=f"guess{index}@example.com")
-    assert _login(client).status_code == 429
+        _login(client, email=f"guess{index}@example.com", headers={"X-Forwarded-For": "203.0.113.7"})
+
+    assert _login(client, headers={"X-Forwarded-For": "203.0.113.7"}).status_code == 200
+
+
+def test_with_trusted_proxy_headers_ten_failures_from_one_client_ip_lock_it(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "trust_proxy_headers", True)
+    _signup(client)
+    for index in range(10):
+        _login(client, email=f"guess{index}@example.com", headers={"X-Forwarded-For": "203.0.113.7, 100.64.0.2"})
+
+    attacker = _login(client, headers={"X-Forwarded-For": "203.0.113.7, 100.64.0.2"})
+    someone_else = _login(client, headers={"X-Forwarded-For": "198.51.100.20, 100.64.0.2"})
+
+    assert attacker.status_code == 429
+    assert someone_else.status_code == 200  # same proxy, different client
+
+
+def test_x_real_ip_is_used_when_there_is_no_forwarded_for(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "trust_proxy_headers", True)
+    _signup(client)
+    for index in range(10):
+        _login(client, email=f"guess{index}@example.com", headers={"X-Real-IP": "203.0.113.9"})
+
+    assert _login(client, headers={"X-Real-IP": "203.0.113.9"}).status_code == 429
+    assert _login(client, headers={"X-Real-IP": "203.0.113.10"}).status_code == 200
 
 
 def test_failures_below_the_limit_do_not_lock(client: TestClient) -> None:

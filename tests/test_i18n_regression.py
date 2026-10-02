@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 
 import httpx
 import pytest
+from freezegun import freeze_time
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -314,6 +315,7 @@ def test_persona_replies(
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
+@freeze_time("2026-09-30 16:00:00")  # Toronto noon the day before the 22:00 draft, so "already passed" never applies
 def test_assistant_texts(client: TestClient, engine, world: dict[str, int], monkeypatch: pytest.MonkeyPatch, language: str) -> None:
     _set_language(engine, world["user"], language)
 

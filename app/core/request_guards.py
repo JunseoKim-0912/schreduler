@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
@@ -19,6 +20,8 @@ from starlette.responses import Response
 
 from app.core.config import settings
 from app.i18n import accept_language, render_message
+
+logger = logging.getLogger(__name__)
 
 UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -69,6 +72,30 @@ async def reject_user_id(request: Request) -> None:
             return  # left to the normal body validation
         if isinstance(body, dict) and "user_id" in body:
             raise _user_id_error("body", language)
+
+
+def client_ip(request: Request) -> str | None:
+    """The real client address, or None when it can't be trusted.
+
+    Behind Railway's proxy every connection comes from the proxy, so the socket address is useless, and a forwarding
+    header is only meaningful when the proxy sets it. Only with TRUST_PROXY_HEADERS on is the first X-Forwarded-For
+    entry (or X-Real-IP) used; off, there is no client IP and the sign-in lockout counts per email only.
+    """
+    if not settings.trust_proxy_headers:
+        return None
+    for value in (request.headers.get("x-forwarded-for", "").split(",")[0], request.headers.get("x-real-ip", "")):
+        if value.strip():
+            return value.strip()[:64]
+    return None
+
+
+def warn_about_cookie_settings() -> None:
+    """Called at startup: a Secure cookie means a real HTTPS deployment, which should pin its own origin."""
+    if settings.session_cookie_secure and not settings.allowed_origins:
+        logger.warning(
+            "SESSION_COOKIE_SECURE=true but ALLOWED_ORIGINS is empty: writes are only checked against the request's "
+            "Host header. Set ALLOWED_ORIGINS=https://<your domain>."
+        )
 
 
 def install_request_guards(app: FastAPI) -> None:

@@ -7,9 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN useradd --create-home --uid 1000 app \
-    && mkdir -p /app/data \
-    && chown app:app /app/data
+RUN useradd --create-home --uid 1000 app
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -18,16 +16,18 @@ COPY alembic.ini .
 COPY alembic ./alembic
 COPY app ./app
 COPY frontend ./frontend
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
 
-USER app
-
-# SQLite 기본값. Postgres로 바꿀 때는 DATABASE_URL만 교체한다 (docker-compose.postgres.yml 참고).
+# SQLite on a volume. Railway mounts it at /data (set DATABASE_URL=sqlite:////data/schreduler.db there);
+# docker compose mounts /app/data. Postgres: just change DATABASE_URL (docker-compose.postgres.yml).
 ENV DATABASE_URL=sqlite:////app/data/schreduler.db
 
 EXPOSE 8000
 
+# Railway ignores this and uses its own healthcheck path (/health); it's for docker run / compose.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\", \"8000\")}/health', timeout=3)"
 
-# APScheduler가 프로세스 안에서 돌기 때문에 워커는 1개여야 한다 (여러 개면 알림·포인트 잡이 중복 실행된다).
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"]
+# Starts as root only to prepare the volume, then runs as the "app" user (see docker/entrypoint.sh).
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
