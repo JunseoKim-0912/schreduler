@@ -16,6 +16,7 @@ from app.models import Base, ComplianceReport, EventInstance, User
 from app.models.enums import EventInstanceStatus, NonComplianceCategory
 from app.services.points import recalculate_points_since
 from tests.assistant_flow import create, delete, find, only_action, run, update
+from tests.auth_helpers import as_user, sign_in
 
 TODAY = date(2026, 9, 26)  # 토요일
 TABLES = ("events", "event_instances", "compliance_reports", "points_ledger")
@@ -51,11 +52,12 @@ def client(engine):
 
 
 @pytest.fixture
-def user_id(engine) -> int:
+def user_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
         session.commit()
+        sign_in(client, user.id)
         return user.id
 
 
@@ -68,12 +70,11 @@ def _dump(engine) -> dict[str, list[dict[str, Any]]]:
 def _weekly_quiz(client: TestClient, user_id: int) -> int:
     date_range = client.post(
         "/date-ranges",
-        json={"user_id": user_id, "name": "가을학기", "start_date": "2026-09-01", "end_date": "2026-10-31"},
+        json={"name": "가을학기", "start_date": "2026-09-01", "end_date": "2026-10-31"}, headers=as_user(user_id),
     ).json()["id"]
     response = client.post(
         "/events",
         json={
-            "user_id": user_id,
             "title": "물리 퀴즈",
             "start_time": "2026-09-05T17:00:00",
             "end_time": "2026-09-05T18:00:00",
@@ -81,7 +82,7 @@ def _weekly_quiz(client: TestClient, user_id: int) -> int:
             "is_recurring": True,
             "recurrence_rule": "FREQ=WEEKLY;BYDAY=SA",
             "date_range_id": date_range,
-        },
+        }, headers=as_user(user_id),
     )
     assert response.status_code == 201
     return response.json()["id"]
@@ -90,7 +91,7 @@ def _weekly_quiz(client: TestClient, user_id: int) -> int:
 def _one_off(client: TestClient, user_id: int, title: str, day: str = "2026-09-28") -> int:
     response = client.post(
         "/events",
-        json={"user_id": user_id, "title": title, "start_time": f"{day}T10:00:00", "end_time": f"{day}T11:00:00"},
+        json={"title": title, "start_time": f"{day}T10:00:00", "end_time": f"{day}T11:00:00"}, headers=as_user(user_id),
     )
     assert response.status_code == 201
     return response.json()["id"]
@@ -104,20 +105,19 @@ def _instance_id(engine, event_id: int, day: date) -> int:
 
 
 def _undo(client: TestClient, user_id: int, action_id: int):
-    return client.post(f"/actions/{action_id}/undo", headers={"X-User-Id": str(user_id)})
+    return client.post(f"/actions/{action_id}/undo", headers=as_user(user_id))
 
 
 def _add_prep_child(client: TestClient, user_id: int, parent_id: int) -> int:
     response = client.post(
         "/events",
         json={
-            "user_id": user_id,
             "title": "퀴즈 준비",
             "start_time": "2026-09-05T16:30:00",
             "end_time": "2026-09-05T17:00:00",
             "parent_event_id": parent_id,
             "child_kind": "custom",
-        },
+        }, headers=as_user(user_id),
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
@@ -220,7 +220,7 @@ def test_delete_all_is_undone_in_one_step(client, engine, user_id, monkeypatch):
 def test_nl_create_then_undo_removes_the_event(client, engine, user_id, monkeypatch):
     client.post(
         "/date-ranges",
-        json={"user_id": user_id, "name": "가을학기", "start_date": "2026-09-01", "end_date": "2026-10-31"},
+        json={"name": "가을학기", "start_date": "2026-09-01", "end_date": "2026-10-31"}, headers=as_user(user_id),
     )
     before = _dump(engine)
     action_id = only_action(run(
@@ -295,11 +295,11 @@ def test_list_actions_newest_first_with_undone_flag(client, engine, user_id):
     second = int(client.delete(f"/events/{_one_off(client, user_id, 'B')}").headers["X-Action-Id"])
     _undo(client, user_id, first)
 
-    response = client.get("/actions", params={"limit": 10}, headers={"X-User-Id": str(user_id)})
+    response = client.get("/actions", params={"limit": 10}, headers=as_user(user_id))
 
     assert response.status_code == 200
     assert [(a["id"], a["undone"]) for a in response.json()] == [(second, False), (first, True)]
-    assert client.get("/actions", params={"limit": 1}, headers={"X-User-Id": str(user_id)}).json()[0]["id"] == second
+    assert client.get("/actions", params={"limit": 1}, headers=as_user(user_id)).json()[0]["id"] == second
 
 
 def test_other_users_action_is_not_found(client, engine, user_id):

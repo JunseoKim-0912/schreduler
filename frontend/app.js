@@ -1,4 +1,4 @@
-import { apiFetch, getUserId, onApiError, setUserId } from "./api.js";
+import { apiFetch, getAccount, getUserId, onApiError, onUnauthorized, setAccount } from "./api.js";
 import { initCalendarPanel } from "./calendar.js";
 import { initEventsPanel } from "./events.js";
 import { initPersonasPanel } from "./personas.js";
@@ -6,6 +6,7 @@ import { initPointsPanel } from "./points.js";
 import { initTasksPanel } from "./tasks.js";
 import { getLang, onLangChange, setLang, t } from "./i18n.js";
 import { clearUsage, relabelUsage } from "./usage.js";
+import { setStatus } from "./dom.js";
 
 // --- 화면 언어 (Eng | Kor) ------------------------------------------------------
 // 처음 방문하면 영어. 고른 언어는 localStorage에 남고, 백엔드 User.preferred_language도 같이 바꿔서 알림·경고·
@@ -77,37 +78,98 @@ function hideError() {
 document.getElementById("error-close").addEventListener("click", hideError);
 onApiError(showError);
 
-// --- 사용자 ID (X-User-Id) ----------------------------------------------------
+// --- 로그인 · 회원가입 ---------------------------------------------------------
+// 세션은 서버가 준 HttpOnly 쿠키다. 시작할 때 GET /auth/me로 로그인 여부를 보고, 아니면 로그인 화면을 보여준다.
+// 어느 요청이든 401이 오면(세션 만료, 다른 곳에서 로그아웃) 로그인 화면으로 돌아간다.
 
-const userIdInput = document.getElementById("user-id");
-const userIdStatus = document.getElementById("user-id-status");
+const authScreen = document.getElementById("auth-screen");
+const appContent = document.getElementById("app-content");
+const accountBox = document.getElementById("account");
+const accountEmail = document.getElementById("account-email");
+const loginForm = document.getElementById("login-form");
+const signupForm = document.getElementById("signup-form");
+const loginStatus = document.getElementById("login-status");
+const signupStatus = document.getElementById("signup-status");
 
-function saveUserId() {
-  const value = userIdInput.value.trim();
-  if (value && !/^[1-9]\d*$/.test(value)) {
-    userIdStatus.textContent = t("user.invalid");
-    userIdStatus.dataset.state = "error";
-    return;
-  }
-  const changed = value !== getUserId();
-  const saved = setUserId(value);
-  userIdStatus.dataset.state = saved ? "ok" : "error";
-  if (!saved) userIdStatus.textContent = t("user.storageBlocked");
-  else userIdStatus.textContent = value ? t("user.saved") : t("user.cleared");
-  if (changed && saved) {
-    // 모든 탭의 이전 사용자 상태는 지우고, 다시 불러오는 건 지금 보이는 탭만 한다
-    // (숨은 탭의 요청 에러가 배너에 뜨지 않게). 다른 탭은 열 때 activateTab이 불러온다.
-    hideError();
-    clearUsage();
-    for (const panel of Object.values(panels)) panel.reset();
-    syncBackendLanguage().then(() => panels[activeTab]?.refresh());
+function showAuth(form = "login") {
+  authScreen.hidden = false;
+  appContent.hidden = true;
+  accountBox.hidden = true;
+  loginForm.hidden = form !== "login";
+  signupForm.hidden = form !== "signup";
+  (form === "login" ? document.getElementById("login-email") : document.getElementById("signup-email")).focus();
+}
+
+async function enterApp(me) {
+  setAccount(me);
+  accountEmail.textContent = me.email ?? "";
+  accountBox.hidden = false;
+  authScreen.hidden = true;
+  appContent.hidden = false;
+  for (const form of [loginForm, signupForm]) form.reset();
+  setStatus(loginStatus, "");
+  setStatus(signupStatus, "");
+  await syncBackendLanguage();
+  activateTab(activeTab ?? "calendar");
+}
+
+function leaveApp() {
+  // 이전 사용자의 화면 상태(목록·대화·사용량)를 모두 지운다.
+  setAccount(null);
+  hideError();
+  clearUsage();
+  for (const panel of Object.values(panels)) panel.reset();
+  showAuth("login");
+}
+
+onUnauthorized(() => {
+  if (getAccount()) leaveApp();
+});
+
+async function submitAuth(event, path, form, status, body) {
+  event.preventDefault();
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  setStatus(status, "");
+  try {
+    await enterApp(await apiFetch(path, { method: "POST", body, showError: false }));
+  } catch (error) {
+    setStatus(status, error.message);
+  } finally {
+    button.disabled = false;
   }
 }
 
-userIdInput.value = getUserId();
-userIdInput.addEventListener("change", saveUserId);
-userIdInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") saveUserId();
+loginForm.addEventListener("submit", (event) =>
+  submitAuth(event, "/auth/login", loginForm, loginStatus, {
+    email: document.getElementById("login-email").value.trim(),
+    password: document.getElementById("login-password").value,
+  }),
+);
+
+signupForm.addEventListener("submit", (event) => {
+  const password = document.getElementById("signup-password").value;
+  if (password.length < 8) {
+    event.preventDefault();
+    setStatus(signupStatus, t("auth.passwordHint"));
+    return;
+  }
+  const invite = document.getElementById("signup-invite").value.trim();
+  submitAuth(event, "/auth/signup", signupForm, signupStatus, {
+    email: document.getElementById("signup-email").value.trim(),
+    password,
+    ...(invite ? { invite_code: invite } : {}),
+  });
+});
+
+document.getElementById("show-signup").addEventListener("click", () => showAuth("signup"));
+document.getElementById("show-login").addEventListener("click", () => showAuth("login"));
+document.getElementById("logout").addEventListener("click", async () => {
+  try {
+    await apiFetch("/auth/logout", { method: "POST", showError: false });
+  } finally {
+    leaveApp();
+  }
 });
 
 // --- 탭별 기능 ---------------------------------------------------------------
@@ -161,8 +223,16 @@ for (const tab of tabs) {
   });
 }
 
-// 페이지를 열면 항상 캘린더 탭부터 보여준다. 백엔드 언어를 먼저 화면 언어로 맞춘다 (처음 방문이면 영어).
-syncBackendLanguage().then(() => activateTab("calendar"));
+// 페이지를 열면 로그인했는지부터 본다. 로그인했으면 캘린더 탭부터 보여준다 (백엔드 언어를 먼저 화면 언어로 맞춘다).
+apiFetch("/auth/me", { showError: false })
+  .then(enterApp)
+  .catch((error) => {
+    if (error.status === 401) showAuth("login");
+    else {
+      showError(error);
+      showAuth("login");
+    }
+  });
 
 // --- 서버 연결 확인 (공통 fetch 동작 확인용) ----------------------------------
 

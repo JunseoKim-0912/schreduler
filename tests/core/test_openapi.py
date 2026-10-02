@@ -12,7 +12,7 @@ HANGUL = re.compile(r"[가-힣]")
 
 def test_app_metadata() -> None:
     assert SPEC["info"]["title"] == "Schreduler"
-    assert "X-User-Id" in SPEC["info"]["description"]
+    assert "/auth/login" in SPEC["info"]["description"]
     assert [tag["name"] for tag in SPEC["tags"]] == [tag["name"] for tag in TAGS_METADATA]
 
 

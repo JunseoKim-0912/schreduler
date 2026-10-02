@@ -24,6 +24,16 @@ class Settings:
     llm_daily_budget_admin_usd: float | None = (
         float(os.environ["LLM_DAILY_BUDGET_ADMIN_USD"]) if os.getenv("LLM_DAILY_BUDGET_ADMIN_USD") else None
     )
+    # Sign-in. SIGNUP_MODE: closed (nobody can sign up) / invite (needs INVITE_CODE) / open.
+    signup_mode: str = (os.getenv("SIGNUP_MODE") or "invite").strip().lower()
+    invite_code: str | None = os.getenv("INVITE_CODE") or None
+    # Turn on behind HTTPS so the session cookie is never sent over plain HTTP.
+    session_cookie_secure: bool = (os.getenv("SESSION_COOKIE_SECURE") or "").strip().lower() in ("1", "true", "yes", "on")
+    # Comma-separated origins allowed to send POST/PUT/DELETE (e.g. https://schreduler.example.com).
+    # Empty: same host as the request.
+    allowed_origins: tuple[str, ...] = tuple(
+        o.strip().rstrip("/").lower() for o in (os.getenv("ALLOWED_ORIGINS") or "").split(",") if o.strip()
+    )
     # Firebase 서비스 계정 JSON 파일 경로. 미설정이면 FCM 발송은 스킵되고 로그만 남는다.
     firebase_credentials_path: str | None = os.getenv("FIREBASE_CREDENTIALS_PATH")
     # 텔레그램 봇 토큰 (BotFather 발급). 미설정이면 텔레그램 발송은 스킵되고 로그만 남는다.

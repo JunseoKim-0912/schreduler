@@ -12,6 +12,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, Event, EventInstance, EventInstanceStatus, User
 from app.services import llm_client as llm_client_module
+from tests.auth_helpers import sign_in
 
 _REAL_HTTPX_CLIENT = httpx.Client  # 몽키패치 전에 원본을 캡처 (안 하면 자기 자신을 재귀 호출함)
 
@@ -49,7 +50,7 @@ def client(engine):
 
 
 @pytest.fixture
-def event_instance_id(engine) -> int:
+def event_instance_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
@@ -69,6 +70,7 @@ def event_instance_id(engine) -> int:
         )
         session.add(instance)
         session.commit()
+        sign_in(client, user.id)
         return instance.id
 
 

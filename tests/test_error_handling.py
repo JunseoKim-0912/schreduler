@@ -17,6 +17,7 @@ from app.main import app
 from app.models import Base, Event, EventInstance, User
 from app.services import llm_client as llm_client_module
 from app.services.llm_client import LLMConfigError, LLMRequestError, LLMResponseParsingError
+from tests.auth_helpers import sign_in
 
 _REAL_HTTPX_CLIENT = httpx.Client
 
@@ -61,7 +62,7 @@ def client(engine) -> Iterator[TestClient]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
+    yield sign_in(TestClient(app), 1)
     app.dependency_overrides.clear()
 
 
@@ -72,15 +73,15 @@ def _count(engine, model) -> int:
 
 def _date_range(client: TestClient) -> int:
     return client.post(
-        "/date-ranges", json={"user_id": 1, "name": "학기", "start_date": "2026-09-01", "end_date": "2026-12-20"}
+        "/date-ranges", json={"name": "학기", "start_date": "2026-09-01", "end_date": "2026-12-20"}
     ).json()["id"]
 
 
 def _location(client: TestClient) -> int:
-    return client.post("/locations", json={"user_id": 1, "name": "학교", "default_travel_minutes": 30}).json()["id"]
+    return client.post("/locations", json={"name": "학교", "default_travel_minutes": 30}).json()["id"]
 
 
-BASE_EVENT = {"user_id": 1, "title": "스터디", "start_time": "2026-09-01T19:00:00", "end_time": "2026-09-01T20:00:00"}
+BASE_EVENT = {"title": "스터디", "start_time": "2026-09-01T19:00:00", "end_time": "2026-09-01T20:00:00"}
 
 
 # --- 잘못된 반복 규칙 ---
@@ -166,7 +167,7 @@ def test_date_range_partial_update_cannot_end_before_existing_start(client: Test
 def test_sleep_log_partial_update_cannot_wake_before_existing_bedtime(client: TestClient) -> None:
     sleep_id = client.post(
         "/sleep-logs",
-        json={"user_id": 1, "date": "2026-09-24", "actual_bedtime": "2026-09-23T23:00:00", "actual_wake_time": "2026-09-24T07:00:00"},
+        json={"date": "2026-09-24", "actual_bedtime": "2026-09-23T23:00:00", "actual_wake_time": "2026-09-24T07:00:00"},
     ).json()["id"]
 
     response = client.put(f"/sleep-logs/{sleep_id}", json={"actual_wake_time": "2026-09-23T22:00:00"})
@@ -178,13 +179,13 @@ def test_sleep_log_partial_update_cannot_wake_before_existing_bedtime(client: Te
 @pytest.mark.parametrize(
     ("create_path", "create_body", "field"),
     [
-        ("/locations", {"user_id": 1, "name": "학교", "default_travel_minutes": 30}, "name"),
-        ("/locations", {"user_id": 1, "name": "학교", "default_travel_minutes": 30}, "default_travel_minutes"),
-        ("/date-ranges", {"user_id": 1, "name": "학기", "start_date": "2026-09-01", "end_date": "2026-12-20"}, "start_date"),
+        ("/locations", {"name": "학교", "default_travel_minutes": 30}, "name"),
+        ("/locations", {"name": "학교", "default_travel_minutes": 30}, "default_travel_minutes"),
+        ("/date-ranges", {"name": "학기", "start_date": "2026-09-01", "end_date": "2026-12-20"}, "start_date"),
         ("/events", BASE_EVENT, "title"),
         ("/events", BASE_EVENT, "end_time"),
         ("/events", BASE_EVENT, "is_recurring"),
-        ("/daily-actual-logs", {"user_id": 1, "date": "2026-09-24", "summary_text": "요약"}, "actual_events"),
+        ("/daily-actual-logs", {"date": "2026-09-24", "summary_text": "요약"}, "actual_events"),
     ],
 )
 def test_explicit_null_for_required_field_is_422_not_db_error(
@@ -205,11 +206,11 @@ def test_explicit_null_for_required_field_is_422_not_db_error(
     ("path", "body"),
     [
         ("/events", {**BASE_EVENT, "title": "   "}),
-        ("/locations", {"user_id": 1, "name": "", "default_travel_minutes": 5}),
-        ("/date-ranges", {"user_id": 1, "name": " ", "start_date": "2026-09-01", "end_date": "2026-09-02"}),
-        ("/daily-actual-logs", {"user_id": 1, "date": "2026-09-24", "summary_text": ""}),
+        ("/locations", {"name": "", "default_travel_minutes": 5}),
+        ("/date-ranges", {"name": " ", "start_date": "2026-09-01", "end_date": "2026-09-02"}),
+        ("/daily-actual-logs", {"date": "2026-09-24", "summary_text": ""}),
         ("/assistant/chat", {"message": "  "}),
-        ("/daily-actual-logs/checkin", {"user_id": 1, "utterance": ""}),
+        ("/daily-actual-logs/checkin", {"utterance": ""}),
     ],
 )
 def test_blank_strings_are_rejected_before_any_llm_call(

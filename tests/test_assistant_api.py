@@ -17,6 +17,7 @@ from app.models import Base, Event, User
 from app.services import llm_client
 from app.services.assistant import agent
 from tests.fake_responses import FakeResponsesClient, call, say
+from tests.auth_helpers import as_user
 
 STUDY = {
     "event_type": "scheduled",
@@ -89,7 +90,7 @@ def _events(engine) -> int:
 def test_chat_returns_a_proposal_and_confirm_executes_with_undoable_action(client, engine, users, script) -> None:
     me, _ = users
     script(call("propose_create_event", **STUDY), say("이렇게 만들까요?"))
-    response = client.post("/assistant/chat", json={"message": "10월 2일 11:00-1:00 스터디 추가해줘"}, headers={"X-User-Id": str(me)})
+    response = client.post("/assistant/chat", json={"message": "10월 2일 11:00-1:00 스터디 추가해줘"}, headers=as_user(me))
 
     assert response.status_code == 200
     body = response.json()
@@ -101,18 +102,18 @@ def test_chat_returns_a_proposal_and_confirm_executes_with_undoable_action(clien
     assert _events(engine) == 0
 
     confirm = client.post(
-        "/assistant/confirm", json={"session_id": body["session_id"], "token": body["proposal"]["token"]}, headers={"X-User-Id": str(me)}
+        "/assistant/confirm", json={"session_id": body["session_id"], "token": body["proposal"]["token"]}, headers=as_user(me)
     )
     assert confirm.status_code == 200
     action_id = confirm.json()["executed"][0]["action_id"]
     assert _events(engine) == 1
 
     again = client.post(
-        "/assistant/confirm", json={"session_id": body["session_id"], "token": body["proposal"]["token"]}, headers={"X-User-Id": str(me)}
+        "/assistant/confirm", json={"session_id": body["session_id"], "token": body["proposal"]["token"]}, headers=as_user(me)
     )
     assert again.status_code == 409
 
-    undo = client.post(f"/actions/{action_id}/undo", headers={"X-User-Id": str(me)})
+    undo = client.post(f"/actions/{action_id}/undo", headers=as_user(me))
     assert undo.status_code == 200
     assert _events(engine) == 0
 
@@ -120,30 +121,30 @@ def test_chat_returns_a_proposal_and_confirm_executes_with_undoable_action(clien
 def test_cancel_and_current_session(client, engine, users, script) -> None:
     me, other = users
     script(call("propose_create_event", **STUDY), say("이렇게 만들까요?"))
-    body = client.post("/assistant/chat", json={"message": "스터디"}, headers={"X-User-Id": str(me)}).json()
+    body = client.post("/assistant/chat", json={"message": "스터디"}, headers=as_user(me)).json()
 
-    current = client.get("/assistant/sessions/current", headers={"X-User-Id": str(me)}).json()
+    current = client.get("/assistant/sessions/current", headers=as_user(me)).json()
     assert current["session_id"] == body["session_id"]
     assert [m["role"] for m in current["messages"]] == ["user", "assistant"]
     assert current["proposal"]["token"] == body["proposal"]["token"]
-    assert client.get("/assistant/sessions/current", headers={"X-User-Id": str(other)}).json() == {
+    assert client.get("/assistant/sessions/current", headers=as_user(other)).json() == {
         "session_id": None, "messages": [], "proposal": None,
     }
 
-    headers = {"X-User-Id": str(other)}
+    headers = as_user(other)
     token_body = {"session_id": body["session_id"], "token": body["proposal"]["token"]}
     assert client.post("/assistant/cancel", json=token_body, headers=headers).status_code == 404
     assert client.post("/assistant/chat", json={"session_id": body["session_id"], "message": "hi"}, headers=headers).status_code == 404
 
-    cancelled = client.post("/assistant/cancel", json=token_body, headers={"X-User-Id": str(me)})
+    cancelled = client.post("/assistant/cancel", json=token_body, headers=as_user(me))
     assert cancelled.status_code == 200 and cancelled.json()["reply"] == "제안을 취소했어요."
-    assert client.get("/assistant/sessions/current", headers={"X-User-Id": str(me)}).json()["proposal"] is None
+    assert client.get("/assistant/sessions/current", headers=as_user(me)).json()["proposal"] is None
     assert _events(engine) == 0
 
 
 def test_new_session_and_header_required(client, users) -> None:
     me, _ = users
-    created = client.post("/assistant/sessions", headers={"X-User-Id": str(me)})
+    created = client.post("/assistant/sessions", headers=as_user(me))
     assert created.status_code == 201 and created.json()["messages"] == []
     assert client.post("/assistant/chat", json={"message": "x"}).status_code == 401
 
@@ -151,11 +152,11 @@ def test_new_session_and_header_required(client, users) -> None:
 def test_expired_confirm_is_410(client, users, script) -> None:
     me, _ = users
     script(call("propose_create_event", **STUDY), say("초안"))
-    body = client.post("/assistant/chat", json={"message": "스터디"}, headers={"X-User-Id": str(me)}).json()
+    body = client.post("/assistant/chat", json={"message": "스터디"}, headers=as_user(me)).json()
 
     with freeze_time("2026-09-27 18:31:00"):
         response = client.post(
-            "/assistant/confirm", json={"session_id": body["session_id"], "token": body["proposal"]["token"]}, headers={"X-User-Id": str(me)}
+            "/assistant/confirm", json={"session_id": body["session_id"], "token": body["proposal"]["token"]}, headers=as_user(me)
         )
     assert response.status_code == 410
 
@@ -168,13 +169,13 @@ def test_llm_failures_keep_their_status_codes(client, engine, users, monkeypatch
     down = httpx.MockTransport(lambda request: httpx.Response(500, text="upstream is down"))
     monkeypatch.setattr(llm_client.httpx, "Client", lambda *a, **k: real_client(transport=down))
 
-    failed = client.post("/assistant/chat", json={"message": "스터디 추가"}, headers={"X-User-Id": str(me)})
+    failed = client.post("/assistant/chat", json={"message": "스터디 추가"}, headers=as_user(me))
 
     assert failed.status_code == 502 and "detail" in failed.json()
 
     monkeypatch.setattr(settings, "llm_api_key", None)
-    missing = client.post("/assistant/chat", json={"message": "스터디 추가"}, headers={"X-User-Id": str(me)})
+    missing = client.post("/assistant/chat", json={"message": "스터디 추가"}, headers=as_user(me))
 
     assert missing.status_code == 500 and "detail" in missing.json()
-    current = client.get("/assistant/sessions/current", headers={"X-User-Id": str(me)}).json()
+    current = client.get("/assistant/sessions/current", headers=as_user(me)).json()
     assert [m["text"] for m in current["messages"]] == ["스터디 추가"]

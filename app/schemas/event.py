@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -35,33 +36,7 @@ def validate_event_times(event_type: EventType, start_time: datetime | None, end
         raise InvalidEventTimesError("end_time must be after start_time")
 
 
-class EventCreate(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "user_id": 1,
-                    "title": "알고리즘 스터디",
-                    "event_type": "scheduled",
-                    "start_time": "2026-09-01T19:00:00",
-                    "end_time": "2026-09-01T21:00:00",
-                    "importance": 3,
-                    "is_recurring": True,
-                    "recurrence_rule": "FREQ=WEEKLY;BYDAY=TU",
-                    "date_range_id": 1
-                },
-                {
-                    "user_id": 1,
-                    "title": "과제 제출",
-                    "event_type": "deadline",
-                    "end_time": "2026-09-25T23:59:00",
-                    "importance": 4
-                }
-            ]
-        },
-    )
-
-    user_id: int
+class EventFields(BaseModel):
     title: NonEmptyStr
     event_type: EventType = EventType.SCHEDULED
     start_time: datetime | None = None
@@ -75,10 +50,43 @@ class EventCreate(BaseModel):
     location_id: int | None = None
 
     @model_validator(mode="after")
-    def check_times(self) -> "EventCreate":
+    def check_times(self) -> Self:
         validate_event_times(self.event_type, self.start_time, self.end_time)
         validate_recurrence(self.is_recurring, self.recurrence_rule)
         return self
+
+
+class EventCreate(EventFields):
+    """Request body of POST /events. The owner is always the signed-in user."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "title": "알고리즘 스터디",
+                    "event_type": "scheduled",
+                    "start_time": "2026-09-01T19:00:00",
+                    "end_time": "2026-09-01T21:00:00",
+                    "importance": 3,
+                    "is_recurring": True,
+                    "recurrence_rule": "FREQ=WEEKLY;BYDAY=TU",
+                    "date_range_id": 1
+                },
+                {
+                    "title": "과제 제출",
+                    "event_type": "deadline",
+                    "end_time": "2026-09-25T23:59:00",
+                    "importance": 4
+                }
+            ]
+        },
+    )
+
+
+class NewEvent(EventFields):
+    """An event about to be built, with its owner — what the services, the assistant and tasks pass around."""
+
+    user_id: int
 
 
 class EventUpdate(PartialUpdate):

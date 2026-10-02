@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Schreduler API",
-    "description": "**Schreduler** — 계획을 \"기록\"이 아니라 \"지키게\" 만드는 엄격한 스케쥴 관리 백엔드.\n\n### 인증\n정식 인증은 아직 없다. `/users/me/*`, `/tasks`, `/event-instances`, `/actions`, `/points/summary`,\n`/compliance-reports/categories`, `/assistant/*`, `/usage/today`는 **`X-User-Id` 헤더**의 사용자를 현재 사용자로 본다.\n그 밖의 엔드포인트는 요청 본문/쿼리의 `user_id`를 쓴다.\n\n### 다국어 (FR-11)\n라벨·알림·LLM 응답은 사용자의 `preferred_language`(`ko`/`en`)를 따른다.\n코드값(예: `overslept`, `deadline`)은 언어와 무관하게 그대로다.\n\n### LLM을 호출하는 엔드포인트\n`POST /assistant/chat`, `POST /daily-actual-logs/checkin`, 그리고 `other` 또는 자유 텍스트가 있는\n`POST /compliance-reports`. LLM 오류는 500(키 미설정) / 502(호출 실패) / 422(응답 형식 오류)로 돌려준다.\n오늘 사용 한도(사용자별·전체, `APP_TIMEZONE` 자정에 초기화)에 닿으면 LLM을 부르기 전에 429로 거절한다 (`GET /usage/today`).",
+    "description": "**Schreduler** — 계획을 \"기록\"이 아니라 \"지키게\" 만드는 엄격한 스케쥴 관리 백엔드.\n\n### 인증\n이메일·비밀번호로 `POST /auth/login`(또는 `/auth/signup`)하면 HttpOnly 세션 쿠키(30일)가 설정된다. `/health`와 `/auth/*`를\n뺀 모든 엔드포인트는 이 쿠키의 사용자로 동작하고, 로그인하지 않았으면 `401`이다. 다른 사용자의 데이터는 `404`다.\n요청 본문·쿼리에 `user_id`를 보내면 `422`로 거절한다(예전 클라이언트용 필드). 상태를 바꾸는 요청(POST/PUT/DELETE)의\n`Origin`(없으면 `Referer`)이 다른 사이트면 `403`이다.\n\n### 다국어 (FR-11)\n라벨·알림·LLM 응답은 사용자의 `preferred_language`(`ko`/`en`)를 따른다.\n코드값(예: `overslept`, `deadline`)은 언어와 무관하게 그대로다.\n\n### LLM을 호출하는 엔드포인트\n`POST /assistant/chat`, `POST /daily-actual-logs/checkin`, 그리고 `other` 또는 자유 텍스트가 있는\n`POST /compliance-reports`. LLM 오류는 500(키 미설정) / 502(호출 실패) / 422(응답 형식 오류)로 돌려준다.\n오늘 사용 한도(사용자별·전체, `APP_TIMEZONE` 자정에 초기화)에 닿으면 LLM을 부르기 전에 429로 거절한다 (`GET /usage/today`).",
     "version": "0.1.0",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -12,16 +12,149 @@
       "description": "API 서버 주소"
     },
     {
-      "key": "userId",
-      "value": "1",
-      "description": "X-User-Id 헤더와 요청 본문의 user_id에 쓰는 사용자 id"
+      "key": "email",
+      "value": "june@example.com",
+      "description": "POST /auth/login에 쓰는 이메일"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "description": "POST /auth/login에 쓰는 비밀번호 (컬렉션에 저장하지 말고 Current value에만)"
     }
   ],
   "item": [
     {
+      "name": "auth",
+      "description": "회원가입·로그인·로그아웃. 가입은 `SIGNUP_MODE`(closed / invite / open)로 제어한다.",
+      "item": [
+        {
+          "name": "회원가입",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            },
+            "description": "`SIGNUP_MODE`가 `invite`면 `invite_code`가 `INVITE_CODE`와 같아야 한다. 가입하면 바로 로그인된다(세션 쿠키).\n\n**오류 응답**\n- `403`: 가입이 닫혀 있거나(SIGNUP_MODE=closed) 초대 코드가 틀림\n- `409`: 이미 가입된 이메일\n- `422`: Validation Error",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"june@example.com\",\n  \"password\": \"correct horse battery\",\n  \"invite_code\": \"spring-2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "로그인",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "성공하면 HttpOnly 세션 쿠키(30일)를 설정한다.\n\n**오류 응답**\n- `401`: 이메일 또는 비밀번호가 틀림 (어느 쪽인지는 알려주지 않는다)\n- `422`: Validation Error\n- `429`: 10분 안에 같은 이메일·IP로 10회 넘게 실패",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "로그아웃",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "이 브라우저의 세션을 서버에서 지우고 쿠키를 없앤다. 로그인하지 않았어도 204."
+          },
+          "response": []
+        },
+        {
+          "name": "내 계정",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "로그인한 계정. 웹 화면은 시작할 때 이것으로 로그인 여부를 확인하고, 401이면 로그인 화면을 보여준다.\n\n**오류 응답**\n- `401`: 로그인하지 않음"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
       "name": "events",
       "description": "일정 CRUD (FR-1). `scheduled`(시작~종료)와 `deadline`(마감만) 두 종류. 자연어로 추가·삭제·수정하는 것은 `assistant`(FR-2).",
       "item": [
+        {
+          "name": "이벤트 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "description": "내 이벤트 전부."
+          },
+          "response": []
+        },
         {
           "name": "이벤트 생성",
           "request": {
@@ -44,7 +177,7 @@
             "description": "일정을 만든다 (FR-1).\n\n- `event_type=scheduled`(기본): `start_time`·`end_time` 모두 필요, 종료가 시작보다 늦어야 한다.\n- `event_type=deadline`: `start_time`은 null, `end_time`이 마감 일시다.\n- `is_recurring` + `recurrence_rule`(RFC 5545 RRULE) + `date_range_id`를 주면 기간 안의 반복 인스턴스를 함께 만든다.\n- `location_id`가 있으면 이동시간 하위 일정(FR-5)을 자동으로 붙인다 (deadline 제외).\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": {{userId}},\n  \"title\": \"알고리즘 스터디\",\n  \"event_type\": \"scheduled\",\n  \"start_time\": \"2026-09-01T19:00:00\",\n  \"end_time\": \"2026-09-01T21:00:00\",\n  \"importance\": 3,\n  \"is_recurring\": true,\n  \"recurrence_rule\": \"FREQ=WEEKLY;BYDAY=TU\",\n  \"date_range_id\": 1\n}",
+              "raw": "{\n  \"title\": \"알고리즘 스터디\",\n  \"event_type\": \"scheduled\",\n  \"start_time\": \"2026-09-01T19:00:00\",\n  \"end_time\": \"2026-09-01T21:00:00\",\n  \"importance\": 3,\n  \"is_recurring\": true,\n  \"recurrence_rule\": \"FREQ=WEEKLY;BYDAY=TU\",\n  \"date_range_id\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -76,39 +209,13 @@
             "description": "일정을 만든다 (FR-1).\n\n- `event_type=scheduled`(기본): `start_time`·`end_time` 모두 필요, 종료가 시작보다 늦어야 한다.\n- `event_type=deadline`: `start_time`은 null, `end_time`이 마감 일시다.\n- `is_recurring` + `recurrence_rule`(RFC 5545 RRULE) + `date_range_id`를 주면 기간 안의 반복 인스턴스를 함께 만든다.\n- `location_id`가 있으면 이동시간 하위 일정(FR-5)을 자동으로 붙인다 (deadline 제외).\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": {{userId}},\n  \"title\": \"과제 제출\",\n  \"event_type\": \"deadline\",\n  \"end_time\": \"2026-09-25T23:59:00\",\n  \"importance\": 4\n}",
+              "raw": "{\n  \"title\": \"과제 제출\",\n  \"event_type\": \"deadline\",\n  \"end_time\": \"2026-09-25T23:59:00\",\n  \"importance\": 4\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "response": []
-        },
-        {
-          "name": "이벤트 목록",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/events",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "events"
-              ],
-              "query": [
-                {
-                  "key": "user_id",
-                  "value": "{{userId}}",
-                  "description": "이 사용자의 것만 조회",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "이벤트 목록. `user_id`로 특정 사용자의 것만 거를 수 있다.\n\n**오류 응답**\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -133,7 +240,7 @@
                 }
               ]
             },
-            "description": "이벤트 하나를 조회한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
+            "description": "이벤트 하나를 조회한다. 다른 사용자의 이벤트는 404.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -213,10 +320,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -231,7 +334,7 @@
                 "chat"
               ]
             },
-            "description": "자연어 한 턴. `session_id`를 생략하면 새 대화를 시작한다 (다른 사용자의 세션이면 404).\n\n- 어시스턴트는 되묻기보다 추론해서 **초안**을 만든다. 초안은 저장되지 않고 `proposal`(확인 카드)로 돌아온다.\n  `items[].inferred_fields`는 사용자가 말하지 않아 추정한 항목, `warnings`는 자정 넘김·12시간 초과·지난 날짜·\n  여러 개 한꺼번에 변경 등 확인이 필요한 점이다. 반복 일정 카드에는 처음 3회차 `preview_dates`가 있다.\n- 새 제안은 같은 대화의 이전 대기 제안을 대체한다. 제안은 30분 뒤 만료된다.\n- 사용자가 채팅으로 승인하면(\"좋아\") 이전 턴에 보여준 제안이 실행되고 `executed[].action_id`가 돌아온다.\n- 한 턴은 LLM 호출 최대 6회, 20초. 넘으면 지금까지 만든 초안을 보여주거나 짧게 되묻는다.\n\n카드 `kind`: `create_event`(title, event_type, date, start_time, end_time, time_display, importance, recurring,\nrecurrence_rule, date_range, location, preview_dates) / `update_event`·`delete_event`(scope, targets[], changes) /\n`create_range`·`update_range`·`delete_range`(name, start_date, end_date, events_using, mode).\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error\n- `429`: 오늘 LLM 사용 한도에 도달함. 본문: `detail`, `reason`(`user_limit` / `total_limit`), `spent_usd`, `limit_usd`, `resets_at`(다시 열리는 시각)\n- `500`: LLM_API_KEY가 설정되지 않음\n- `502`: LLM API 호출 실패",
+            "description": "자연어 한 턴. `session_id`를 생략하면 새 대화를 시작한다 (다른 사용자의 세션이면 404).\n\n- 어시스턴트는 되묻기보다 추론해서 **초안**을 만든다. 초안은 저장되지 않고 `proposal`(확인 카드)로 돌아온다.\n  `items[].inferred_fields`는 사용자가 말하지 않아 추정한 항목, `warnings`는 자정 넘김·12시간 초과·지난 날짜·\n  여러 개 한꺼번에 변경 등 확인이 필요한 점이다. 반복 일정 카드에는 처음 3회차 `preview_dates`가 있다.\n- 새 제안은 같은 대화의 이전 대기 제안을 대체한다. 제안은 30분 뒤 만료된다.\n- 사용자가 채팅으로 승인하면(\"좋아\") 이전 턴에 보여준 제안이 실행되고 `executed[].action_id`가 돌아온다.\n- 한 턴은 LLM 호출 최대 6회, 20초. 넘으면 지금까지 만든 초안을 보여주거나 짧게 되묻는다.\n\n카드 `kind`: `create_event`(title, event_type, date, start_time, end_time, time_display, importance, recurring,\nrecurrence_rule, date_range, location, preview_dates) / `update_event`·`delete_event`(scope, targets[], changes) /\n`create_range`·`update_range`·`delete_range`(name, start_date, end_date, events_using, mode).\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error\n- `429`: 오늘 LLM 사용 한도에 도달함. 본문: `detail`, `reason`(`user_limit` / `total_limit`), `spent_usd`, `limit_usd`, `resets_at`(다시 열리는 시각)\n- `500`: LLM_API_KEY가 설정되지 않음\n- `502`: LLM API 호출 실패",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"message\": \"10월 2일 11:00-1:00 스터디 추가해줘\"\n}",
@@ -250,10 +353,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -268,7 +367,7 @@
                 "confirm"
               ]
             },
-            "description": "확인 카드의 [만들기] 버튼. 제안의 모든 초안을 **한 트랜잭션**으로 실행한다 (하나라도 실패하면 아무것도 저장되지 않음).\n\n`executed[].action_id`로 `POST /actions/{id}/undo`를 부르면 되돌릴 수 있다. 만료(30분)면 410, 이미 확정·취소·대체된\n제안이거나 그사이 대상이 바뀌었으면 409, 이 세션의 토큰이 아니면 404.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `410`: 확인 토큰이 만료됨 (발급 후 10분)\n- `422`: Validation Error",
+            "description": "확인 카드의 [만들기] 버튼. 제안의 모든 초안을 **한 트랜잭션**으로 실행한다 (하나라도 실패하면 아무것도 저장되지 않음).\n\n`executed[].action_id`로 `POST /actions/{id}/undo`를 부르면 되돌릴 수 있다. 만료(30분)면 410, 이미 확정·취소·대체된\n제안이거나 그사이 대상이 바뀌었으면 409, 이 세션의 토큰이 아니면 404.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `410`: 확인 토큰이 만료됨 (발급 후 10분)\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"session_id\": 1,\n  \"token\": \"Qm9…(proposal.token)\"\n}",
@@ -287,10 +386,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -305,7 +400,7 @@
                 "cancel"
               ]
             },
-            "description": "확인 카드의 [취소] 버튼. 아무것도 저장하지 않고 제안을 닫는다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `410`: 확인 토큰이 만료됨 (발급 후 10분)\n- `422`: Validation Error",
+            "description": "확인 카드의 [취소] 버튼. 아무것도 저장하지 않고 제안을 닫는다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `410`: 확인 토큰이 만료됨 (발급 후 10분)\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"session_id\": 1,\n  \"token\": \"Qm9…(proposal.token)\"\n}",
@@ -322,12 +417,7 @@
           "name": "오늘의 대화 이어보기",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/assistant/sessions/current",
               "host": [
@@ -339,7 +429,7 @@
                 "current"
               ]
             },
-            "description": "오늘(앱 시간대) 마지막으로 쓴 대화와 그 기록(사용자 말·어시스턴트 답), 아직 대기 중인 제안. 없으면 `session_id: null`.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "오늘(앱 시간대) 마지막으로 쓴 대화와 그 기록(사용자 말·어시스턴트 답), 아직 대기 중인 제안. 없으면 `session_id: null`.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)"
           },
           "response": []
         },
@@ -347,12 +437,7 @@
           "name": "새 대화",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/assistant/sessions",
               "host": [
@@ -363,7 +448,7 @@
                 "sessions"
               ]
             },
-            "description": "빈 대화를 새로 시작한다. 이후 `POST /assistant/chat`에 이 `session_id`를 보낸다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "빈 대화를 새로 시작한다. 이후 `POST /assistant/chat`에 이 `session_id`를 보낸다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)"
           },
           "response": []
         }
@@ -377,12 +462,7 @@
           "name": "기간의 일정 회차 (캘린더)",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/event-instances?start=&end=",
               "host": [
@@ -406,7 +486,7 @@
                 }
               ]
             },
-            "description": "start~end 날짜의 일정 회차를 이벤트 정보(제목·종류·중요도·반복 여부)와 함께 시간순으로 돌려준다.\n\n- 취소된(`cancelled`) 회차는 빠진다.\n- `start_time`/`end_time`은 회차별 시간 변경을 반영한 실제 시각이다(타임존 없는 로컬 시각). `deadline`은 `start_time`이 null.\n- 회차가 없는 단발성 일정(`POST /events`로 만든 비반복 일정)은 `event_instance_id: null`로 포함된다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "start~end 날짜의 일정 회차를 이벤트 정보(제목·종류·중요도·반복 여부)와 함께 시간순으로 돌려준다.\n\n- 취소된(`cancelled`) 회차는 빠진다.\n- `start_time`/`end_time`은 회차별 시간 변경을 반영한 실제 시각이다(타임존 없는 로컬 시각). `deadline`은 `start_time`이 null.\n- 회차가 없는 단발성 일정(`POST /events`로 만든 비반복 일정)은 `event_instance_id: null`로 포함된다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -414,12 +494,7 @@
           "name": "일정 회차 완료 처리",
           "request": {
             "method": "PUT",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/event-instances/:event_instance_id/complete",
               "host": [
@@ -437,7 +512,7 @@
                 }
               ]
             },
-            "description": "`scheduled`·`deadline` 모두 가능(`PUT /tasks/{id}/complete`와 같은 처리). 다시 호출해도 결과가 같고,\n지난 날짜면 포인트를 다시 계산한다. 취소된 회차는 409.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
+            "description": "`scheduled`·`deadline` 모두 가능(`PUT /tasks/{id}/complete`와 같은 처리). 다시 호출해도 결과가 같고,\n지난 날짜면 포인트를 다시 계산한다. 취소된 회차는 409.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -445,12 +520,7 @@
           "name": "일정 회차 하나 삭제",
           "request": {
             "method": "DELETE",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/event-instances/:event_instance_id",
               "host": [
@@ -467,7 +537,7 @@
                 }
               ]
             },
-            "description": "반복 일정의 이 회차만 취소(`cancelled`)한다. 같은 날짜의 하위 일정(이동시간·준비)도 함께 취소된다.\n\n변경 기록(source=ui)이 남아 `POST /actions/{id}/undo`로 되돌릴 수 있고, 기록 id는 응답 헤더 `X-Action-Id`로 준다.\n일정 전체를 지우려면 `DELETE /events/{event_id}`.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
+            "description": "반복 일정의 이 회차만 취소(`cancelled`)한다. 같은 날짜의 하위 일정(이동시간·준비)도 함께 취소된다.\n\n변경 기록(source=ui)이 남아 `POST /actions/{id}/undo`로 되돌릴 수 있고, 기록 id는 응답 헤더 `X-Action-Id`로 준다.\n일정 전체를 지우려면 `DELETE /events/{event_id}`.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
           },
           "response": []
         }
@@ -481,12 +551,7 @@
           "name": "할 일 목록",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/tasks",
               "host": [
@@ -496,7 +561,7 @@
                 "tasks"
               ]
             },
-            "description": "내 `deadline` 일정을 마감이 빠른 순으로 돌려준다. 반복 할 일은 완료 안 된 가장 이른 회차를 보여준다.\n\n`overdue`는 마감 시각이 지났는데 아직 완료하지 않은 경우 true.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "내 `deadline` 일정을 마감이 빠른 순으로 돌려준다. 반복 할 일은 완료 안 된 가장 이른 회차를 보여준다.\n\n`overdue`는 마감 시각이 지났는데 아직 완료하지 않은 경우 true.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)"
           },
           "response": []
         },
@@ -505,10 +570,6 @@
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -523,7 +584,7 @@
                 "tasks"
               ]
             },
-            "description": "`event_type=deadline` 이벤트를 만드는 축약형. 반복이면 `recurrence_rule`과 `date_range_id`가 모두 필요하다. 다른 Event 필드를 보내면 422.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error",
+            "description": "`event_type=deadline` 이벤트를 만드는 축약형. 반복이면 `recurrence_rule`과 `date_range_id`가 모두 필요하다. 다른 Event 필드를 보내면 422.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"과제 제출\",\n  \"end_time\": \"2026-09-25T23:59:00\",\n  \"importance\": 4\n}",
@@ -542,10 +603,6 @@
             "method": "POST",
             "header": [
               {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              },
-              {
                 "key": "Content-Type",
                 "value": "application/json"
               }
@@ -559,7 +616,7 @@
                 "tasks"
               ]
             },
-            "description": "`event_type=deadline` 이벤트를 만드는 축약형. 반복이면 `recurrence_rule`과 `date_range_id`가 모두 필요하다. 다른 Event 필드를 보내면 422.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error",
+            "description": "`event_type=deadline` 이벤트를 만드는 축약형. 반복이면 `recurrence_rule`과 `date_range_id`가 모두 필요하다. 다른 Event 필드를 보내면 422.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"주간 리포트 제출\",\n  \"end_time\": \"2026-09-04T18:00:00\",\n  \"importance\": 3,\n  \"recurrence_rule\": \"FREQ=WEEKLY;BYDAY=FR\",\n  \"date_range_id\": 1\n}",
@@ -576,12 +633,7 @@
           "name": "할 일 완료 처리",
           "request": {
             "method": "PUT",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/tasks/:event_instance_id/complete",
               "host": [
@@ -599,7 +651,7 @@
                 }
               ]
             },
-            "description": "해당 회차(EventInstance)를 완료 처리한다. 다시 호출해도 결과가 같다. 포인트에는 즉시 반영된다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "해당 회차(EventInstance)를 완료 처리한다. 다시 호출해도 결과가 같다. 포인트에는 즉시 반영된다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error"
           },
           "response": []
         }
@@ -609,6 +661,24 @@
       "name": "date-ranges",
       "description": "'2026 가을학기' 같은 중요 기간. 반복 일정의 종료 기준으로 재사용한다 (FR-2).",
       "item": [
+        {
+          "name": "중요 기간 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/date-ranges",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "date-ranges"
+              ]
+            },
+            "description": "내 기간 전부. `event_count`는 이 기간을 반복 기준으로 쓰는 일정 수(하위 일정 제외)."
+          },
+          "response": []
+        },
         {
           "name": "중요 기간 등록",
           "request": {
@@ -628,42 +698,16 @@
                 "date-ranges"
               ]
             },
-            "description": "반복 일정의 종료 기준으로 재사용할 기간을 등록한다 (예: '2026 가을학기'). 되돌리기 id는 헤더 `X-Action-Id`.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
+            "description": "반복 일정의 종료 기준으로 재사용할 기간을 등록한다 (예: '2026 가을학기'). 되돌리기 id는 헤더 `X-Action-Id`.\n\n**오류 응답**\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": {{userId}},\n  \"name\": \"2026 가을학기\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-12-20\"\n}",
+              "raw": "{\n  \"name\": \"2026 가을학기\",\n  \"start_date\": \"2026-09-01\",\n  \"end_date\": \"2026-12-20\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "response": []
-        },
-        {
-          "name": "중요 기간 목록",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/date-ranges",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "date-ranges"
-              ],
-              "query": [
-                {
-                  "key": "user_id",
-                  "value": "{{userId}}",
-                  "description": "이 사용자의 것만 조회",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "`user_id`로 특정 사용자의 기간만 거를 수 있다. `event_count`는 이 기간을 반복 기준으로 쓰는 일정 수(하위 일정 제외).\n\n**오류 응답**\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -688,7 +732,7 @@
                 }
               ]
             },
-            "description": "기간 하나를 조회한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
+            "description": "기간 하나를 조회한다. 다른 사용자의 기간은 404.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -771,6 +815,24 @@
       "description": "일정 장소와 기본 이동시간. 이동시간 하위 일정 생성에 쓰인다 (FR-5).",
       "item": [
         {
+          "name": "장소 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/locations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "locations"
+              ]
+            },
+            "description": "내 장소 전부."
+          },
+          "response": []
+        },
+        {
           "name": "장소 등록",
           "request": {
             "method": "POST",
@@ -789,42 +851,16 @@
                 "locations"
               ]
             },
-            "description": "장소와 기본 이동시간(분)을 등록한다. 이 장소의 일정에는 이동시간 하위 일정이 자동으로 붙는다 (FR-5).\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
+            "description": "장소와 기본 이동시간(분)을 등록한다. 이 장소의 일정에는 이동시간 하위 일정이 자동으로 붙는다 (FR-5).\n\n**오류 응답**\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": {{userId}},\n  \"name\": \"학교\",\n  \"default_travel_minutes\": 40\n}",
+              "raw": "{\n  \"name\": \"학교\",\n  \"default_travel_minutes\": 40\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "response": []
-        },
-        {
-          "name": "장소 목록",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/locations",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "locations"
-              ],
-              "query": [
-                {
-                  "key": "user_id",
-                  "value": "{{userId}}",
-                  "description": "이 사용자의 것만 조회",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "`user_id`로 특정 사용자의 장소만 거를 수 있다.\n\n**오류 응답**\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -849,7 +885,7 @@
                 }
               ]
             },
-            "description": "장소 하나를 조회한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
+            "description": "장소 하나를 조회한다. 다른 사용자의 장소는 404.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -991,12 +1027,7 @@
           "name": "미준수 카테고리 목록 (버튼용)",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/compliance-reports/categories",
               "host": [
@@ -1007,7 +1038,7 @@
                 "categories"
               ]
             },
-            "description": "FR-6 카테고리 버튼 목록. code는 POST의 reason_category로 그대로 보내고, label만 화면에 보여준다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "FR-6 카테고리 버튼 목록. code는 POST의 reason_category로 그대로 보내고, label만 화면에 보여준다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)"
           },
           "response": []
         },
@@ -1031,16 +1062,10 @@
                   "value": "30",
                   "description": "최근 며칠간을 집계할지",
                   "disabled": true
-                },
-                {
-                  "key": "user_id",
-                  "value": "{{userId}}",
-                  "description": "이 사용자의 리포트만 집계 (라벨도 이 사용자의 언어로)",
-                  "disabled": true
                 }
               ]
             },
-            "description": "최근 days일(기본 30일)간 reason_category별 ComplianceReport 분포를 반환한다.\n\n**오류 응답**\n- `422`: Validation Error"
+            "description": "최근 days일(기본 30일)간 내 일정의 reason_category별 ComplianceReport 분포 (라벨은 내 언어).\n\n**오류 응답**\n- `422`: Validation Error"
           },
           "response": []
         }
@@ -1050,6 +1075,24 @@
       "name": "sleep-logs",
       "description": "실제 취침·기상 기록 (FR-7).",
       "item": [
+        {
+          "name": "수면 기록 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/sleep-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sleep-logs"
+              ]
+            },
+            "description": "내 수면 기록 전부."
+          },
+          "response": []
+        },
         {
           "name": "수면 기록 생성",
           "request": {
@@ -1069,42 +1112,16 @@
                 "sleep-logs"
               ]
             },
-            "description": "실제 취침·기상 시각을 기록한다 (FR-7). 기상이 취침보다 늦어야 한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
+            "description": "실제 취침·기상 시각을 기록한다 (FR-7). 기상이 취침보다 늦어야 한다.\n\n**오류 응답**\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": {{userId}},\n  \"date\": \"2026-09-24\",\n  \"actual_bedtime\": \"2026-09-23T23:40:00\",\n  \"actual_wake_time\": \"2026-09-24T07:10:00\"\n}",
+              "raw": "{\n  \"date\": \"2026-09-24\",\n  \"actual_bedtime\": \"2026-09-23T23:40:00\",\n  \"actual_wake_time\": \"2026-09-24T07:10:00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "response": []
-        },
-        {
-          "name": "수면 기록 목록",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/sleep-logs",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "sleep-logs"
-              ],
-              "query": [
-                {
-                  "key": "user_id",
-                  "value": "{{userId}}",
-                  "description": "이 사용자의 것만 조회",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "`user_id`로 특정 사용자의 기록만 거를 수 있다.\n\n**오류 응답**\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1129,7 +1146,7 @@
                 }
               ]
             },
-            "description": "수면 기록 하나를 조회한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
+            "description": "수면 기록 하나를 조회한다. 다른 사용자의 기록은 404.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1204,6 +1221,24 @@
       "description": "하루 실제 기록과 저녁 9시 체크인 대화 (FR-8).",
       "item": [
         {
+          "name": "하루 실제 기록 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/daily-actual-logs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "daily-actual-logs"
+              ]
+            },
+            "description": "내 기록 전부."
+          },
+          "response": []
+        },
+        {
           "name": "하루 실제 기록 생성",
           "request": {
             "method": "POST",
@@ -1222,42 +1257,16 @@
                 "daily-actual-logs"
               ]
             },
-            "description": "그날 실제로 한 일을 기록한다 (FR-8). 보통 저녁 체크인 알림을 받은 뒤 클라이언트가 보낸다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
+            "description": "그날 실제로 한 일을 기록한다 (FR-8). 보통 저녁 체크인 알림을 받은 뒤 클라이언트가 보낸다.\n\n**오류 응답**\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": {{userId}},\n  \"date\": \"2026-09-24\",\n  \"summary_text\": \"스터디는 못 했지만 운동은 했다\",\n  \"actual_events\": [\n    {\n      \"end\": \"20:00\",\n      \"start\": \"19:00\",\n      \"title\": \"헬스\"\n    }\n  ]\n}",
+              "raw": "{\n  \"date\": \"2026-09-24\",\n  \"summary_text\": \"스터디는 못 했지만 운동은 했다\",\n  \"actual_events\": [\n    {\n      \"end\": \"20:00\",\n      \"start\": \"19:00\",\n      \"title\": \"헬스\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
                 }
               }
             }
-          },
-          "response": []
-        },
-        {
-          "name": "하루 실제 기록 목록",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/daily-actual-logs",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "daily-actual-logs"
-              ],
-              "query": [
-                {
-                  "key": "user_id",
-                  "value": "{{userId}}",
-                  "description": "이 사용자의 것만 조회",
-                  "disabled": true
-                }
-              ]
-            },
-            "description": "`user_id`로 특정 사용자의 기록만 거를 수 있다.\n\n**오류 응답**\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1281,10 +1290,10 @@
                 "checkin"
               ]
             },
-            "description": "FR-8 저녁 9시 체크인 대화 한 턴. 그날 놓친 일정 위주로 LLM이 대화한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error\n- `429`: 오늘 LLM 사용 한도에 도달함. 본문: `detail`, `reason`(`user_limit` / `total_limit`), `spent_usd`, `limit_usd`, `resets_at`(다시 열리는 시각)\n- `500`: LLM_API_KEY가 설정되지 않음\n- `502`: LLM API 호출 실패",
+            "description": "FR-8 저녁 9시 체크인 대화 한 턴. 그날 놓친 일정 위주로 LLM이 대화한다. `conversation_id`는 내 대화여야 한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error\n- `429`: 오늘 LLM 사용 한도에 도달함. 본문: `detail`, `reason`(`user_limit` / `total_limit`), `spent_usd`, `limit_usd`, `resets_at`(다시 열리는 시각)\n- `500`: LLM_API_KEY가 설정되지 않음\n- `502`: LLM API 호출 실패",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"user_id\": {{userId}},\n  \"utterance\": \"오늘 너무 피곤해서 스터디를 못 했어\"\n}",
+              "raw": "{\n  \"utterance\": \"오늘 너무 피곤해서 스터디를 못 했어\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1315,7 +1324,7 @@
                 }
               ]
             },
-            "description": "기록 하나를 조회한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
+            "description": "기록 하나를 조회한다. 다른 사용자의 기록은 404.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1393,12 +1402,7 @@
           "name": "이 페르소나와의 오늘 대화",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/personas/:persona_id/conversations/current",
               "host": [
@@ -1425,7 +1429,7 @@
                 }
               ]
             },
-            "description": "(현재 사용자, 이 페르소나, 상황, 오늘)의 대화. 그날 [새 대화]를 눌렀으면 가장 최근 대화. 아직 없으면 `null`.\n\n탭을 옮겼다 오거나 페르소나를 바꿨다 돌아와도 이 대화를 불러와 이어 간다. 날짜가 바뀌면 새 대화다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "(현재 사용자, 이 페르소나, 상황, 오늘)의 대화. 그날 [새 대화]를 눌렀으면 가장 최근 대화. 아직 없으면 `null`.\n\n탭을 옮겼다 오거나 페르소나를 바꿨다 돌아와도 이 대화를 불러와 이어 간다. 날짜가 바뀌면 새 대화다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1433,12 +1437,7 @@
           "name": "이 페르소나와 오늘 새 대화 시작",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/personas/:persona_id/conversations",
               "host": [
@@ -1464,7 +1463,7 @@
                 }
               ]
             },
-            "description": "[새 대화]: 오늘의 새 대화를 시작한다. 이전 대화는 지우지 않고 `/users/me/persona-conversations`에 남는다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "[새 대화]: 오늘의 새 대화를 시작한다. 이전 대화는 지우지 않고 `/users/me/persona-conversations`에 남는다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1487,7 +1486,7 @@
           "response": []
         },
         {
-          "name": "페르소나 생성",
+          "name": "페르소나 생성 (관리자)",
           "request": {
             "method": "POST",
             "header": [
@@ -1505,7 +1504,7 @@
                 "personas"
               ]
             },
-            "description": "코드 수정 없이 페르소나를 추가한다 (FR-9). `display_name`·`description`은 ko/en이 모두 필요하다.\n\n**오류 응답**\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error",
+            "description": "코드 수정 없이 페르소나를 추가한다 (FR-9). `display_name`·`description`은 ko/en이 모두 필요하다.\n\n**오류 응답**\n- `403`: 관리자(`is_admin`)만 가능\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Hana\",\n  \"display_name\": {\n    \"en\": \"Hana\",\n    \"ko\": \"하나\"\n  },\n  \"description\": {\n    \"en\": \"Kind and friendly college student\",\n    \"ko\": \"상냥하고 친절한 대학생\"\n  },\n  \"example_lines\": {\n    \"en\": [\n      {\n        \"line\": \"You did great!\",\n        \"situation\": \"praise\"\n      }\n    ],\n    \"ko\": [\n      {\n        \"line\": \"정말 잘했어요!\",\n        \"situation\": \"칭찬\"\n      }\n    ]\n  }\n}",
@@ -1544,7 +1543,7 @@
           "response": []
         },
         {
-          "name": "페르소나 수정",
+          "name": "페르소나 수정 (관리자)",
           "request": {
             "method": "PUT",
             "header": [
@@ -1569,7 +1568,7 @@
                 }
               ]
             },
-            "description": "보낸 필드만 수정한다. `display_name`·`description`은 null로 지울 수 없다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
+            "description": "보낸 필드만 수정한다. `display_name`·`description`은 null로 지울 수 없다.\n\n**오류 응답**\n- `403`: 관리자(`is_admin`)만 가능\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"backstory\": {\n    \"en\": \"Third-year psychology student\",\n    \"ko\": \"심리학과 3학년\"\n  }\n}",
@@ -1583,7 +1582,7 @@
           "response": []
         },
         {
-          "name": "페르소나 삭제",
+          "name": "페르소나 삭제 (관리자)",
           "request": {
             "method": "DELETE",
             "header": [],
@@ -1603,7 +1602,7 @@
                 }
               ]
             },
-            "description": "선택한 사용자나 대화 기록이 있으면 409로 거부한다.\n\n**오류 응답**\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
+            "description": "선택한 사용자나 대화 기록이 있으면 409로 거부한다.\n\n**오류 응답**\n- `403`: 관리자(`is_admin`)만 가능\n- `404`: 대상(또는 참조한 user/date_range 등)을 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
           },
           "response": []
         }
@@ -1611,17 +1610,13 @@
     },
     {
       "name": "users",
-      "description": "현재 사용자(`X-User-Id`)의 페르소나 선택과 대화 기록.",
+      "description": "로그인한 사용자의 언어·페르소나 선택과 대화 기록.",
       "item": [
         {
           "name": "내 언어 바꾸기",
           "request": {
             "method": "PUT",
             "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -1638,7 +1633,7 @@
                 "language"
               ]
             },
-            "description": "화면의 [Eng | Kor] 전환. 알림·경고·카테고리 라벨·시간 표시 문자열 등 서버가 만드는 고정 문구가 이 언어로 나온다.\n대화 답변은 사용자가 마지막에 쓴 말의 언어를 따른다 (애매하면 이 언어).\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error",
+            "description": "화면의 [Eng | Kor] 전환. 알림·경고·카테고리 라벨·시간 표시 문자열 등 서버가 만드는 고정 문구가 이 언어로 나온다.\n대화 답변은 사용자가 마지막에 쓴 말의 언어를 따른다 (애매하면 이 언어).\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"language\": \"en\"\n}",
@@ -1655,12 +1650,7 @@
           "name": "내 페르소나 조회",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/users/me/persona",
               "host": [
@@ -1672,7 +1662,7 @@
                 "persona"
               ]
             },
-            "description": "현재 선택한 페르소나. 선택하지 않았으면 `selected_persona`가 null.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "현재 선택한 페르소나. 선택하지 않았으면 `selected_persona`가 null.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)"
           },
           "response": []
         },
@@ -1681,10 +1671,6 @@
           "request": {
             "method": "PUT",
             "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
@@ -1701,7 +1687,7 @@
                 "persona"
               ]
             },
-            "description": "`persona_name`에 null을 보내면 선택을 해제한다. 선택한 페르소나는 체크인·미준수 피드백 LLM 응답의 말투에 쓰인다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error",
+            "description": "`persona_name`에 null을 보내면 선택을 해제한다. 선택한 페르소나는 체크인·미준수 피드백 LLM 응답의 말투에 쓰인다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"persona_name\": \"Hana\"\n}",
@@ -1718,12 +1704,7 @@
           "name": "내 페르소나 대화 목록",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/users/me/persona-conversations",
               "host": [
@@ -1743,7 +1724,7 @@
                 }
               ]
             },
-            "description": "최신순. `context_type`(예: `daily_checkin`)으로 거를 수 있다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "최신순. `context_type`(예: `daily_checkin`)으로 거를 수 있다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1751,12 +1732,7 @@
           "name": "내 페르소나 대화 조회",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/users/me/persona-conversations/:conversation_id",
               "host": [
@@ -1775,7 +1751,7 @@
                 }
               ]
             },
-            "description": "대화 하나의 전체 메시지. 다른 사용자의 대화는 404.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "대화 하나의 전체 메시지. 다른 사용자의 대화는 404.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error"
           },
           "response": []
         }
@@ -1789,12 +1765,7 @@
           "name": "포인트 요약 (오늘/이번 주/누적)",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/points/summary",
               "host": [
@@ -1805,7 +1776,7 @@
                 "summary"
               ]
             },
-            "description": "오늘은 현재까지 완료 상태로 실시간 계산하고, 이번 주(월요일 시작)와 누적은 어제까지 기록된 포인트에 오늘 값을 더한다.\n\n`current_streak_days`는 오늘 일정이 남아 있으면 어제까지의 연속 일수, 오늘 전부 완료하면 오늘 포함, 오늘 하나라도 놓치면 0이다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "오늘은 현재까지 완료 상태로 실시간 계산하고, 이번 주(월요일 시작)와 누적은 어제까지 기록된 포인트에 오늘 값을 더한다.\n\n`current_streak_days`는 오늘 일정이 남아 있으면 어제까지의 연속 일수, 오늘 전부 완료하면 오늘 포함, 오늘 하나라도 놓치면 0이다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)"
           },
           "response": []
         }
@@ -1819,12 +1790,7 @@
           "name": "최근 변경 기록",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/actions",
               "host": [
@@ -1842,7 +1808,7 @@
                 }
               ]
             },
-            "description": "자연어로 실행한 생성·삭제·수정과 목록의 삭제 버튼 기록을 최신순으로 돌려준다. `undone`이 true면 이미 되돌린 기록.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "자연어로 실행한 생성·삭제·수정과 목록의 삭제 버튼 기록을 최신순으로 돌려준다. `undone`이 true면 이미 되돌린 기록.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `422`: Validation Error"
           },
           "response": []
         },
@@ -1850,12 +1816,7 @@
           "name": "변경 되돌리기",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/actions/:action_id/undo",
               "host": [
@@ -1873,7 +1834,7 @@
                 }
               ]
             },
-            "description": "기록된 변경을 되돌린다.\n\n- 삭제는 원래 ID 그대로 다시 넣고(회차·하위 일정·미준수 사유 포함), 수정은 이전 값으로, 생성은 만든 일정을 지운다.\n- 과거 날짜 회차가 영향을 받았으면 그날부터 어제까지 포인트 원장을 다시 계산한다.\n- 이미 되돌린 기록이거나, 같은 일정을 건드린 더 최근 기록이 아직 남아 있으면 409. 되돌리기 자체는 다시 되돌릴 수 없다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
+            "description": "기록된 변경을 되돌린다.\n\n- 삭제는 원래 ID 그대로 다시 넣고(회차·하위 일정·미준수 사유 포함), 수정은 이전 값으로, 생성은 만든 일정을 지운다.\n- 과거 날짜 회차가 영향을 받았으면 그날부터 어제까지 포인트 원장을 다시 계산한다.\n- 이미 되돌린 기록이거나, 같은 일정을 건드린 더 최근 기록이 아직 남아 있으면 409. 되돌리기 자체는 다시 되돌릴 수 없다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)\n- `409`: 이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음\n- `422`: Validation Error"
           },
           "response": []
         }
@@ -1887,12 +1848,7 @@
           "name": "오늘 AI(LLM) 사용량과 한도",
           "request": {
             "method": "GET",
-            "header": [
-              {
-                "key": "X-User-Id",
-                "value": "{{userId}}"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/usage/today",
               "host": [
@@ -1903,7 +1859,7 @@
                 "today"
               ]
             },
-            "description": "입력창 옆 사용량 표시용. `spent_usd >= limit_usd`이거나 `total_blocked`면 LLM을 부르는 요청은 429로 거절된다.\n\n**오류 응답**\n- `401`: `X-User-Id` 헤더가 없음\n- `404`: `X-User-Id`의 사용자(또는 대상)를 찾을 수 없음\n- `422`: Validation Error"
+            "description": "입력창 옆 사용량 표시용. `spent_usd >= limit_usd`이거나 `total_blocked`면 LLM을 부르는 요청은 429로 거절된다.\n\n**오류 응답**\n- `401`: 로그인하지 않았거나 세션이 만료됨\n- `404`: 대상을 찾을 수 없음 (다른 사용자의 것도 404)"
           },
           "response": []
         }

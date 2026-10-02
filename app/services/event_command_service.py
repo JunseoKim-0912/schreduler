@@ -25,7 +25,7 @@ from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.location import Location
 from app.models.user import User
-from app.schemas.event import EventCreate
+from app.schemas.event import NewEvent
 from app.schemas.event_command import CommandTarget, NewDateRangeDraft, NewLocationDraft
 from app.services import date_range_command_service as ranges
 from app.services.action_history_service import AfterCommit, Snapshot, finish_change, record_action
@@ -424,7 +424,7 @@ def _detach_instance(
 
     detached = build_event(
         db,
-        EventCreate(
+        NewEvent(
             user_id=user.id,
             title=desc.new_title or event.title,
             event_type=EventType(desc.new_event_type) if desc.new_event_type else event.event_type,
@@ -505,7 +505,7 @@ def delete_instance_from_ui(db: Session, instance: EventInstance) -> ActionHisto
 def create_event_from_nl(
     db: Session,
     user: User,
-    data: EventCreate,
+    data: NewEvent,
     new_date_range: NewDateRangeDraft | None = None,
     new_location: NewLocationDraft | None = None,
     *,

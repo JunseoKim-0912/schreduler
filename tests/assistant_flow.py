@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from app.services.assistant import agent
 from tests.fake_responses import FakeResponsesClient, ScriptedCall, call, say
+from tests.auth_helpers import as_user
 
 Targets = list[tuple[int, int | None]]
 
@@ -58,7 +59,7 @@ def _ids(targets: Targets) -> list[dict[str, int | None]]:
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def propose(client: TestClient, monkeypatch: pytest.MonkeyPatch, user_id: int, *tool_calls: ScriptedCall, message: str = "요청") -> dict:

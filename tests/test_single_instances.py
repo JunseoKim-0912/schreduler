@@ -17,6 +17,7 @@ from app.models.enums import EventInstanceStatus
 from app.services import notification
 from app.services.points import recalculate_points_since
 from tests.assistant_flow import create, find, only_action, propose, run, update
+from tests.auth_helpers import as_user, sign_in
 
 TODAY = date(2026, 9, 26)
 
@@ -61,20 +62,21 @@ def client(engine):
 
 
 @pytest.fixture
-def user_id(engine) -> int:
+def user_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
         session.commit()
+        sign_in(client, user.id)
         return user.id
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def _create(client: TestClient, user_id: int, title: str, start: str, end: str, **extra) -> int:
-    response = client.post("/events", json={"user_id": user_id, "title": title, "start_time": start, "end_time": end, **extra})
+    response = client.post("/events", json={"title": title, "start_time": start, "end_time": end, **extra}, headers=as_user(user_id))
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
@@ -112,7 +114,7 @@ def test_only_future_notifications_are_registered(client, engine, user_id):
 
 def test_recurring_event_is_not_given_an_extra_instance(client, engine, user_id):
     date_range = client.post(
-        "/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-11"}
+        "/date-ranges", json={"name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-11"}, headers=as_user(user_id)
     ).json()["id"]
     event_id = _create(
         client, user_id, "강의", "2026-09-28T09:00:00", "2026-09-28T10:00:00",
@@ -212,7 +214,7 @@ def test_nl_update_of_one_off_event_changes_the_event_and_instance_follows(clien
 
 
 def test_undoing_nl_create_removes_the_instance_and_its_jobs(client, engine, user_id, monkeypatch):
-    client.post("/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-11"})
+    client.post("/date-ranges", json={"name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-11"}, headers=as_user(user_id))
     confirmed = run(
         client, monkeypatch, user_id,
         create(title="강의", start_time="09:00", end_time="10:00",
@@ -233,14 +235,14 @@ def test_undoing_nl_create_removes_the_instance_and_its_jobs(client, engine, use
 
 def test_undoing_one_off_create_removes_its_single_instance_and_jobs(client, engine, user_id):
     """자연어 생성은 반복 일정만 만들므로, 단발 일정 생성→되돌리기는 같은 되돌리기 경로(생성 기록)로 확인한다."""
-    from app.schemas.event import EventCreate
+    from app.schemas.event import NewEvent
     from app.services.event_command_service import create_event_from_nl
 
     local = sessionmaker(bind=engine)
     with local() as db:
         user = db.get(User, user_id)
         result = create_event_from_nl(
-            db, user, EventCreate(user_id=user_id, title="치과", start_time=datetime(2026, 9, 28, 10), end_time=datetime(2026, 9, 28, 11))
+            db, user, NewEvent(user_id=user_id, title="치과", start_time=datetime(2026, 9, 28, 10), end_time=datetime(2026, 9, 28, 11))
         )
         event_id = result.affected[0].event_id
         action_id = result.action.id
@@ -324,7 +326,7 @@ def test_changing_a_one_off_deadline_moves_its_single_instance_and_jobs(client, 
 
 def test_changing_one_occurrence_of_a_repeating_deadline_uses_an_override(client, engine, user_id, monkeypatch):
     range_id = client.post(
-        "/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-25"}
+        "/date-ranges", json={"name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-25"}, headers=as_user(user_id)
     ).json()["id"]
     task = _task(client, user_id, "주간 퀴즈", "2026-10-02T23:59:00", recurrence_rule="FREQ=WEEKLY;BYDAY=FR", date_range_id=range_id)
     before = {i.date: i.id for i in _instances(engine, task["event_id"])}
@@ -366,7 +368,7 @@ def test_no_similar_warning_far_away_or_for_a_different_title(client, engine, us
 
 def test_detaching_one_occurrence_moves_its_notification_jobs_to_the_new_event(client, engine, user_id, monkeypatch):
     range_id = client.post(
-        "/date-ranges", json={"user_id": user_id, "name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-25"}
+        "/date-ranges", json={"name": "학기", "start_date": "2026-09-28", "end_date": "2026-10-25"}, headers=as_user(user_id)
     ).json()["id"]
     event_id = _create(client, user_id, "ECE355 Tutorial", "2026-09-30T11:00:00", "2026-09-30T13:00:00",
                        is_recurring=True, recurrence_rule="FREQ=WEEKLY;BYDAY=WE", date_range_id=range_id)

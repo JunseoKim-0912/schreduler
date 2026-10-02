@@ -10,6 +10,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, PersonaConversation, User
 from app.services import llm_client as llm_client_module
+from tests.auth_helpers import as_admin, as_user
 
 _REAL_HTTPX_CLIENT = httpx.Client  # 몽키패치 전에 원본을 캡처 (안 하면 자기 자신을 재귀 호출함)
 
@@ -77,37 +78,37 @@ def _mock_llm(monkeypatch: pytest.MonkeyPatch, reply_text: str) -> list[httpx.Re
 
 
 def test_persona_crud(client: TestClient) -> None:
-    response = client.post("/personas", json=_persona_payload())
+    response = client.post("/personas", json=_persona_payload(), headers=as_admin())
     assert response.status_code == 201
     assert response.json()["example_lines"] is None
 
-    assert client.post("/personas", json=_persona_payload()).status_code == 409
-    assert [p["name"] for p in client.get("/personas").json()] == ["Hana"]
-    assert client.get("/personas/Hana").json()["display_name"]["ko"] == "하나"
-    assert client.get("/personas/Nobody").status_code == 404
+    assert client.post("/personas", json=_persona_payload(), headers=as_admin()).status_code == 409
+    assert [p["name"] for p in client.get("/personas", headers=as_admin()).json()] == ["Hana"]
+    assert client.get("/personas/Hana", headers=as_admin()).json()["display_name"]["ko"] == "하나"
+    assert client.get("/personas/Nobody", headers=as_admin()).status_code == 404
 
     backstory = {"ko": "과거", "en": "past"}
-    response = client.put("/personas/Hana", json={"backstory": backstory})
+    response = client.put("/personas/Hana", json={"backstory": backstory}, headers=as_admin())
     assert response.status_code == 200
     assert response.json()["backstory"] == backstory
     assert response.json()["description"]["ko"] == "상냥한 대학생"
 
-    assert client.put("/personas/Hana", json={"display_name": None}).status_code == 422
-    assert client.put("/personas/Nobody", json={"backstory": backstory}).status_code == 404
+    assert client.put("/personas/Hana", json={"display_name": None}, headers=as_admin()).status_code == 422
+    assert client.put("/personas/Nobody", json={"backstory": backstory}, headers=as_admin()).status_code == 404
 
-    assert client.delete("/personas/Hana").status_code == 204
-    assert client.get("/personas/Hana").status_code == 404
-    assert client.delete("/personas/Hana").status_code == 404
+    assert client.delete("/personas/Hana", headers=as_admin()).status_code == 204
+    assert client.get("/personas/Hana", headers=as_admin()).status_code == 404
+    assert client.delete("/personas/Hana", headers=as_admin()).status_code == 404
 
 
 def test_create_persona_rejects_incomplete_localization(client: TestClient) -> None:
-    response = client.post("/personas", json=_persona_payload(display_name={"ko": "하나"}))
+    response = client.post("/personas", json=_persona_payload(display_name={"ko": "하나"}), headers=as_admin())
     assert response.status_code == 422
 
 
 def test_select_my_persona(client: TestClient, user_id: int) -> None:
-    client.post("/personas", json=_persona_payload())
-    headers = {"X-User-Id": str(user_id)}
+    client.post("/personas", json=_persona_payload(), headers=as_admin())
+    headers = as_user(user_id)
 
     assert client.get("/users/me/persona", headers=headers).json()["selected_persona"] is None
 
@@ -122,35 +123,35 @@ def test_select_my_persona(client: TestClient, user_id: int) -> None:
     assert response.json()["selected_persona"] is None
 
 
-def test_me_requires_user_header(client: TestClient) -> None:
+def test_me_requires_sign_in(client: TestClient, user_id: int) -> None:
     assert client.put("/users/me/persona", json={"persona_name": None}).status_code == 401
-    assert client.get("/users/me/persona", headers={"X-User-Id": "999"}).status_code == 404
+    assert client.get("/users/me/persona", headers={"X-User-Id": str(user_id)}).status_code == 401
 
 
 def test_delete_persona_in_use_is_rejected(client: TestClient, user_id: int) -> None:
-    client.post("/personas", json=_persona_payload())
-    client.put("/users/me/persona", json={"persona_name": "Hana"}, headers={"X-User-Id": str(user_id)})
+    client.post("/personas", json=_persona_payload(), headers=as_admin())
+    client.put("/users/me/persona", json={"persona_name": "Hana"}, headers=as_user(user_id))
 
-    assert client.delete("/personas/Hana").status_code == 409
+    assert client.delete("/personas/Hana", headers=as_admin()).status_code == 409
 
 
 def test_checkin_saves_conversation_turns(
     client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _mock_llm(monkeypatch, "오늘 수고했어요!")
-    client.post("/personas", json=_persona_payload())
-    headers = {"X-User-Id": str(user_id)}
+    client.post("/personas", json=_persona_payload(), headers=as_admin())
+    headers = as_user(user_id)
     client.put("/users/me/persona", json={"persona_name": "Hana"}, headers=headers)
 
     first = client.post(
-        "/daily-actual-logs/checkin", json={"user_id": user_id, "utterance": "오늘 좀 힘들었어"}
+        "/daily-actual-logs/checkin", json={"utterance": "오늘 좀 힘들었어"}, headers=as_user(user_id)
     ).json()
     conversation_id = first["conversation_id"]
     assert conversation_id is not None
 
     second = client.post(
         "/daily-actual-logs/checkin",
-        json={"user_id": user_id, "utterance": "내일은 잘할게", "conversation_id": conversation_id},
+        json={"utterance": "내일은 잘할게", "conversation_id": conversation_id}, headers=as_user(user_id),
     ).json()
     assert second["conversation_id"] == conversation_id
 
@@ -166,14 +167,14 @@ def test_checkin_saves_conversation_turns(
 
     listed = client.get("/users/me/persona-conversations?context_type=daily_checkin", headers=headers).json()
     assert [c["id"] for c in listed] == [conversation_id]
-    assert client.delete("/personas/Hana").status_code == 409
+    assert client.delete("/personas/Hana", headers=as_admin()).status_code == 409
 
 
 def test_checkin_without_persona_is_not_saved(
     client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _mock_llm(monkeypatch, "좋아요")
-    body = client.post("/daily-actual-logs/checkin", json={"user_id": user_id, "utterance": "안녕"}).json()
+    body = client.post("/daily-actual-logs/checkin", json={"utterance": "안녕"}, headers=as_user(user_id)).json()
 
     assert body["conversation_id"] is None
     with Session(engine) as session:
@@ -184,7 +185,7 @@ def test_checkin_with_foreign_conversation_skips_llm(
     client: TestClient, engine, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls = _mock_llm(monkeypatch, "좋아요")
-    client.post("/personas", json=_persona_payload())
+    client.post("/personas", json=_persona_payload(), headers=as_admin())
     with Session(engine) as session:
         other = User(name="Other", preferred_language="ko", selected_persona_id="Hana")
         session.add(other)
@@ -198,10 +199,23 @@ def test_checkin_with_foreign_conversation_skips_llm(
 
     response = client.post(
         "/daily-actual-logs/checkin",
-        json={"user_id": user_id, "utterance": "안녕", "conversation_id": conversation_id},
+        json={"utterance": "안녕", "conversation_id": conversation_id}, headers=as_user(user_id),
     )
     assert response.status_code == 404
     assert calls == []
     assert client.get(
-        f"/users/me/persona-conversations/{conversation_id}", headers={"X-User-Id": str(user_id)}
+        f"/users/me/persona-conversations/{conversation_id}", headers=as_user(user_id)
     ).status_code == 404
+
+
+def test_only_admins_manage_personas_but_everyone_can_list_and_pick(client: TestClient, user_id: int) -> None:
+    me = as_user(user_id)
+    assert client.post("/personas", json=_persona_payload(), headers=me).status_code == 403
+    assert client.post("/personas", json=_persona_payload(), headers=as_admin()).status_code == 201
+
+    assert client.put("/personas/Hana", json={"backstory": {"ko": "x", "en": "x"}}, headers=me).status_code == 403
+    assert client.delete("/personas/Hana", headers=me).status_code == 403
+    assert [p["name"] for p in client.get("/personas", headers=me).json()] == ["Hana"]
+    assert client.get("/personas/Hana", headers=me).status_code == 200
+    assert client.put("/users/me/persona", json={"persona_name": "Hana"}, headers=me).status_code == 200
+    assert client.get("/personas/Hana", headers=me).json()["backstory"] is None

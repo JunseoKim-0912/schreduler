@@ -100,6 +100,20 @@ def active_proposal(db: Session, session: AssistantSession, now: datetime | None
     return proposal
 
 
+def visible_proposal(db: Session, session: AssistantSession, now: datetime | None = None) -> PendingProposal | None:
+    """The pending proposal still worth showing, for read-only endpoints: unlike active_proposal it doesn't mark an
+    expired one (the next chat turn or button press does), so a GET never writes."""
+    proposal = db.execute(
+        select(PendingProposal)
+        .where(PendingProposal.session_id == session.id, PendingProposal.status == "pending")
+        .order_by(PendingProposal.id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if proposal is None or proposal.expires_at <= _wall(now):
+        return None
+    return proposal
+
+
 def proposal_view(proposal: PendingProposal) -> dict[str, Any]:
     return {
         "token": proposal.token,

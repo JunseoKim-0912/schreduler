@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.db import get_db
 from app.main import app
 from app.models import Base, Event, EventInstance, EventInstanceStatus, Importance, PointsLedger, User
+from tests.auth_helpers import as_user
 
 TODAY = date(2026, 9, 24)  # 목요일 -> 이번 주는 9/21(월)부터
 NOW = "2026-09-24 15:00:00"
@@ -71,7 +72,7 @@ def _instance(engine, user_id: int, day: date, status: EventInstanceStatus, impo
 
 
 def _summary(client: TestClient, user_id: int) -> dict:
-    response = client.get("/points/summary", headers={"X-User-Id": str(user_id)})
+    response = client.get("/points/summary", headers=as_user(user_id))
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -166,6 +167,6 @@ def test_summary_is_scoped_to_current_user(client: TestClient, engine, user_id: 
     assert _summary(client, other_id)["total_points"] == 77
 
 
-def test_summary_requires_user_header(client: TestClient) -> None:
+def test_summary_requires_sign_in(client: TestClient, user_id: int) -> None:
     assert client.get("/points/summary").status_code == 401
-    assert client.get("/points/summary", headers={"X-User-Id": "999"}).status_code == 404
+    assert client.get("/points/summary", headers={"X-User-Id": str(user_id)}).status_code == 401

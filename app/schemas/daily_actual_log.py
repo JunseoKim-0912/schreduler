@@ -13,7 +13,6 @@ class DailyActualLogCreate(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "user_id": 1,
                     "date": "2026-09-24",
                     "summary_text": "스터디는 못 했지만 운동은 했다",
                     "actual_events": [
@@ -28,7 +27,6 @@ class DailyActualLogCreate(BaseModel):
         },
     )
 
-    user_id: int
     date: dt_date
     summary_text: NonEmptyStr
     actual_events: list[Any] = Field(default_factory=list)

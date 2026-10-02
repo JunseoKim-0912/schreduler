@@ -5,7 +5,7 @@ import { createUsageMeter, refreshUsage } from "./usage.js";
 
 // 페르소나 대화 탭
 // - 목록: GET /personas, 현재 선택: GET /users/me/persona, 선택: PUT /users/me/persona (X-User-Id 헤더)
-// - 대화: POST /daily-actual-logs/checkin (저녁 체크인). 본문의 user_id로 사용자를 구분하고,
+// - 대화: POST /daily-actual-logs/checkin (저녁 체크인). 로그인한 사용자의 대화이고,
 //   응답의 conversation_id를 다음 요청에 보내면 같은 대화로 이어진다. 선택한 페르소나 말투로 답한다.
 // - 탭에 들어오거나 페르소나를 바꾸면 GET /personas/{name}/conversations/current로 그 페르소나의 오늘 대화를
 //   불러와 이어 보여준다 (A→B→A로 돌아와도, 새로고침해도 유지). [새 대화]는 POST /personas/{name}/conversations.
@@ -130,7 +130,7 @@ export function initPersonasPanel() {
     sendButton.disabled = true;
     setStatus(chatStatus, t("checkin.waiting"));
     try {
-      const body = { user_id: Number(userId), utterance };
+      const body = { utterance };
       if (conversationId) body.conversation_id = conversationId;
       const result = await apiFetch("/daily-actual-logs/checkin", { method: "POST", body, showError: (error) => error.status !== 429 });
       conversationId = result.conversation_id;

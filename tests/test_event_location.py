@@ -13,6 +13,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, Event, EventInstance, ImportantDateRange, Location, User
 from app.models.enums import EventInstanceStatus
+from tests.auth_helpers import as_user, sign_in
 
 PENDING, DONE, CANCELLED = EventInstanceStatus.PENDING, EventInstanceStatus.DONE, EventInstanceStatus.CANCELLED
 
@@ -58,6 +59,7 @@ def ids(engine, client) -> dict[str, int]:
         session.add_all([period, bahen, myhal])
         session.commit()
         values = {"user": user.id, "period": period.id, "bahen": bahen.id, "myhal": myhal.id}
+    sign_in(client, values["user"])
     values["lecture"] = _lecture(client, values, "MO")
     return values
 
@@ -66,9 +68,9 @@ def _lecture(client: TestClient, ids: dict[str, int], byday: str, title: str = "
     response = client.post(
         "/events",
         json={
-            "user_id": ids["user"], "title": title, "start_time": "2026-09-14T11:00:00", "end_time": "2026-09-14T12:00:00",
+            "title": title, "start_time": "2026-09-14T11:00:00", "end_time": "2026-09-14T12:00:00",
             "is_recurring": True, "recurrence_rule": f"FREQ=WEEKLY;BYDAY={byday}", "date_range_id": ids["period"],
-        },
+        }, headers=as_user(ids["user"]),
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
@@ -102,7 +104,7 @@ def test_put_events_location_creates_and_detaches_travel_child(client, engine, i
 def test_calendar_shows_location(client, engine, ids):
     client.put(f"/events/{ids['lecture']}", json={"location_id": ids["bahen"]})
 
-    items = client.get("/event-instances", params={"start": "2026-09-28", "end": "2026-09-28"}, headers={"X-User-Id": str(ids["user"])}).json()
+    items = client.get("/event-instances", params={"start": "2026-09-28", "end": "2026-09-28"}, headers=as_user(ids["user"])).json()
 
     lecture = next(i for i in items if i["event_id"] == ids["lecture"])
     assert lecture["location_name"] == "Bahen"

@@ -3,10 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.auth import get_current_user
 from app.core.db import get_db
 from app.core.openapi import CURRENT_USER, LLM_ERRORS, NOT_FOUND
 from app.core.i18n import get_response_language
 from app.i18n import Language, non_compliance_category_label
+from app.models.user import User
 from app.schemas.compliance_report import (
     ComplianceReportCreate,
     ComplianceReportRead,
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/compliance-reports", tags=["compliance-reports"])
 
 @router.post("", response_model=ComplianceReportRead, status_code=status.HTTP_201_CREATED, summary="미준수 사유 기록", responses={**NOT_FOUND, **LLM_ERRORS})
 def create_compliance_report(
-    data: ComplianceReportCreate, db: Session = Depends(get_db)
+    data: ComplianceReportCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> ComplianceReportRead:
     """FR-6: 미준수 사유를 기록한다.
 
@@ -29,7 +31,7 @@ def create_compliance_report(
     reason_text를 채웠다면 LLM으로 공감 피드백을 생성해 함께 반환한다
     (llm_triggered=True).
     """
-    report, feedback = compliance_report_service.create_compliance_report(db, data)
+    report, feedback = compliance_report_service.create_compliance_report(db, user, data)
 
     return ComplianceReportRead(
         id=report.id,
@@ -58,8 +60,8 @@ def list_non_compliance_categories(
 @router.get("/stats", response_model=ComplianceReportStatsResponse, summary="미준수 사유 통계")
 def get_compliance_report_stats(
     days: int = Query(default=30, gt=0, description="최근 며칠간을 집계할지"),
-    user_id: int | None = Query(default=None, description="이 사용자의 리포트만 집계 (라벨도 이 사용자의 언어로)"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ComplianceReportStatsResponse:
-    """최근 days일(기본 30일)간 reason_category별 ComplianceReport 분포를 반환한다."""
-    return compliance_report_service.get_compliance_report_stats(db, days=days, user_id=user_id)
+    """최근 days일(기본 30일)간 내 일정의 reason_category별 ComplianceReport 분포 (라벨은 내 언어)."""
+    return compliance_report_service.get_compliance_report_stats(db, user, days=days)

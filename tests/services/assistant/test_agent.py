@@ -26,7 +26,7 @@ from app.models import (
     PendingProposal,
     User,
 )
-from app.schemas.event import EventCreate
+from app.schemas.event import NewEvent
 from app.services import event_service
 from app.services.assistant import agent, drafts
 from app.services.assistant import execution as execution_module
@@ -63,7 +63,7 @@ def lecture_period(db: Session, user: User) -> ImportantDateRange:
 def _weekly(db: Session, user: User, date_range: ImportantDateRange, title: str, days: str, start: datetime, hours: int = 1) -> Event:
     return event_service.create_event(
         db,
-        EventCreate(
+        NewEvent(
             user_id=user.id,
             title=title,
             start_time=start,

@@ -13,6 +13,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import ActionHistory, Base, Event, EventInstance, User
 from app.models.enums import EventInstanceStatus
+from tests.auth_helpers import as_user
 
 
 @pytest.fixture(autouse=True)
@@ -58,18 +59,17 @@ def user_id(engine) -> int:
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def _weekly(client: TestClient, user_id: int, title: str = "물리 퀴즈", byday: str = "SA") -> int:
     date_range = client.post(
         "/date-ranges",
-        json={"user_id": user_id, "name": "가을학기", "start_date": "2026-09-01", "end_date": "2026-10-31"},
+        json={"name": "가을학기", "start_date": "2026-09-01", "end_date": "2026-10-31"}, headers=as_user(user_id),
     ).json()["id"]
     response = client.post(
         "/events",
         json={
-            "user_id": user_id,
             "title": title,
             "start_time": "2026-09-05T17:00:00",
             "end_time": "2026-09-05T18:30:00",
@@ -77,14 +77,14 @@ def _weekly(client: TestClient, user_id: int, title: str = "물리 퀴즈", byda
             "is_recurring": True,
             "recurrence_rule": f"FREQ=WEEKLY;BYDAY={byday}",
             "date_range_id": date_range,
-        },
+        }, headers=as_user(user_id),
     )
     assert response.status_code == 201
     return response.json()["id"]
 
 
 def _one_off(client: TestClient, user_id: int, title: str, start: str, end: str) -> int:
-    response = client.post("/events", json={"user_id": user_id, "title": title, "start_time": start, "end_time": end})
+    response = client.post("/events", json={"title": title, "start_time": start, "end_time": end}, headers=as_user(user_id))
     assert response.status_code == 201
     return response.json()["id"]
 

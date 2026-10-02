@@ -37,6 +37,7 @@ def _should_trigger_llm(data: ComplianceReportCreate) -> bool:
 
 def create_compliance_report(
     db: Session,
+    user: User,
     data: ComplianceReportCreate,
     *,
     http_client: httpx.Client | None = None,
@@ -45,14 +46,13 @@ def create_compliance_report(
     함께 반환한다 (피드백 자체는 DB에 저장하지 않는다).
     """
     event_instance = db.get(EventInstance, data.event_instance_id)
-    if event_instance is None:
+    if event_instance is None or event_instance.event.user_id != user.id:
         raise NotFoundError(f"event_instance_id {data.event_instance_id} does not exist")
     if event_instance.status == EventInstanceStatus.CANCELLED:
         raise ConflictError(f"event_instance_id {data.event_instance_id} is cancelled")
 
     llm_triggered = _should_trigger_llm(data)
 
-    user = event_instance.event.user
     with llm_usage.usage_scope(db, user.id, "compliance"):
         feedback: str | None = None
         if llm_triggered:
@@ -78,17 +78,10 @@ def create_compliance_report(
     return report, feedback
 
 
-def get_compliance_report_stats(
-    db: Session,
-    *,
-    days: int = 30,
-    user_id: int | None = None,
-) -> ComplianceReportStatsResponse:
-    """최근 days일간 ComplianceReport의 reason_category별 분포를 집계한다.
-
-    user_id를 주면 그 사용자 소유 이벤트에 대한 리포트만 집계한다 (event_instance
-    -> event 조인). 한 건도 없는 카테고리도 count=0으로 항상 포함해서, 클라이언트가
-    "이 카테고리는 응답에 아예 없음"을 따로 처리할 필요가 없게 한다.
+def get_compliance_report_stats(db: Session, user: User, *, days: int = 30) -> ComplianceReportStatsResponse:
+    """최근 days일간 이 사용자 일정의 ComplianceReport를 reason_category별로 집계한다 (event_instance -> event 조인).
+    한 건도 없는 카테고리도 count=0으로 항상 포함해서, 클라이언트가 "이 카테고리는 응답에 아예 없음"을 따로 처리할
+    필요가 없게 한다. 라벨은 이 사용자의 언어다.
     """
     until = utc_now_naive()
     since = until - timedelta(days=days)
@@ -97,19 +90,18 @@ def get_compliance_report_stats(
         ComplianceReport.created_at >= since,
         ComplianceReport.created_at <= until,
     )
-    if user_id is not None:
-        stmt = (
-            stmt.join(EventInstance, ComplianceReport.event_instance_id == EventInstance.id)
-            .join(Event, EventInstance.event_id == Event.id)
-            .where(Event.user_id == user_id)
-        )
+    stmt = (
+        stmt.join(EventInstance, ComplianceReport.event_instance_id == EventInstance.id)
+        .join(Event, EventInstance.event_id == Event.id)
+        .where(Event.user_id == user.id)
+    )
     stmt = stmt.group_by(ComplianceReport.reason_category)
 
     counts: dict[NonComplianceCategory, int] = dict.fromkeys(NonComplianceCategory, 0)
     for category, count in db.execute(stmt).all():
         counts[category] = count
 
-    language = _stats_language(db, user_id)
+    language = user.preferred_language
     by_category = [
         ComplianceReportCategoryStat(
             reason_category=category,
@@ -125,13 +117,6 @@ def get_compliance_report_stats(
         by_category=by_category,
     )
 
-
-def _stats_language(db: Session, user_id: int | None) -> str | None:
-    """사용자 지정 통계는 그 사용자의 언어로, 전체 통계는 기본 언어(ko)로 라벨을 붙인다."""
-    if user_id is None:
-        return None
-    user = db.get(User, user_id)
-    return user.preferred_language if user else None
 
 
 def list_non_compliance_categories(language: str) -> list[NonComplianceCategoryRead]:

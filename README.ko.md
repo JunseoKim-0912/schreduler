@@ -44,7 +44,6 @@ pip install -r requirements.txt
 cp .env.example .env              # 값 채우기 (아래 "환경변수" 참고). 최소한 LLM_API_KEY가 있어야 LLM 기능이 동작한다
 
 alembic upgrade head               # DB 스키마 생성/최신화 (기본: ./schreduler.db)
-python -m app.scripts.seed         # 테스트 사용자 생성 (생성된 id가 출력된다)
 python -m app.scripts.seed_personas  # 기본 페르소나 넣기 (app/scripts/personas_seed_data.json)
 
 uvicorn app.main:app --reload
@@ -60,7 +59,8 @@ uvicorn app.main:app --reload
 
 1. 위 순서대로 `uvicorn app.main:app --reload`로 서버를 실행합니다.
 2. 브라우저에서 http://localhost:8000/app/ 에 접속합니다.
-3. 상단 **사용자 ID**에 `python -m app.scripts.seed`가 출력한 id를 입력합니다 (브라우저에 저장됨).
+3. 회원가입 화면에서 이메일·비밀번호와 `.env`의 `INVITE_CODE`를 넣어 가입합니다 (로컬에서는 `SIGNUP_MODE=open`으로 둬도 됩니다).
+   기존 사용자 1번을 계속 쓰려면 `python -m app.scripts.create_admin --email you@example.com`으로 이메일·비밀번호를 붙입니다.
 
 이벤트(일정 어시스턴트)·할 일·포인트·페르소나 대화 탭을 쓸 수 있습니다. 일정 어시스턴트와 페르소나 대화는
 `.env`의 `LLM_API_KEY`가 있어야 동작합니다. 프론트엔드 JS 테스트는 `node --test tests/frontend/*.test.mjs`
@@ -90,6 +90,10 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up --build  
 | `LLM_DAILY_BUDGET_TOTAL_USD` | `5.00` | 모든 사용자와 스크립트를 합친 하루 한도 |
 | `LLM_DAILY_BUDGET_ADMIN_USD` | (없음) | `is_admin` 사용자의 한도. 없으면 관리자도 사용자 한도를 쓴다 |
 | `APP_TIMEZONE` | `America/Toronto` | 날짜·시각 해석 기준 시간대 (IANA 이름) |
+| `SIGNUP_MODE` | `invite` | `closed`(가입 불가) / `invite`(`INVITE_CODE` 필요) / `open` |
+| `INVITE_CODE` | (없음) | `SIGNUP_MODE=invite`일 때 가입에 필요한 코드. 없으면 아무도 가입할 수 없다 |
+| `SESSION_COOKIE_SECURE` | `false` | 세션 쿠키를 HTTPS로만 보낸다. 배포(HTTPS)에서는 켠다 |
+| `ALLOWED_ORIGINS` | (같은 호스트) | POST/PUT/DELETE를 보낼 수 있는 출처, 쉼표로 구분 (예: `https://schreduler.example.com`). 비우면 요청의 호스트와 같은 출처만 |
 | `FIREBASE_CREDENTIALS_PATH` | (없음) | FCM 서비스 계정 JSON 경로. 없으면 푸시는 로그만 남기고 건너뛴다 |
 | `TELEGRAM_BOT_TOKEN` | (없음) | 에스컬레이션용 텔레그램 봇 토큰. 없으면 로그만 남긴다 |
 | `LOG_LEVEL` | `INFO` | 앱 로그 레벨 |
@@ -130,7 +134,9 @@ docs/                    # 기획서, API 안내, Postman 컬렉션
 
 | 명령 | 설명 |
 |---|---|
-| `python -m app.scripts.seed` | 테스트 사용자 생성 |
+| `python -m app.scripts.create_admin --email you@example.com` | 기존 사용자 1번에 이메일·비밀번호를 붙이고 관리자로 만든다 (`--user-id N`으로 다른 사용자). 비밀번호는 명령어 인자가 아니라 터미널에서 입력한다 |
+| `python -m app.scripts.create_admin --email you@example.com --reset` | 그 계정의 비밀번호를 새로 정하고 모든 기기에서 로그아웃시킨다 |
+| `python -m app.scripts.seed` | 로그인 없는 테스트 사용자 생성 (로그인하려면 `create_admin --user-id <id>`) |
 | `python -m app.scripts.seed_personas` | JSON 파일의 페르소나를 DB에 upsert |
 | `python -m app.scripts.export_postman` | OpenAPI 스펙으로 Postman 컬렉션 재생성 (API 변경 후 실행) |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | 프롬프트 캐싱 전후 입력 토큰 비교 (실제 LLM API 호출, 비용 발생) |
@@ -139,8 +145,8 @@ docs/                    # 기획서, API 안내, Postman 컬렉션
 
 ## 현재 상태와 제약
 
-개발 중인 MVP입니다. 정식 인증 대신 `X-User-Id` 헤더를 쓰고, 사용자 생성·관리와 FCM 디바이스 토큰 등록 API는 아직
-없습니다(사용자는 `seed` 스크립트로 만듭니다). 시간대는 서버 설정 하나(`APP_TIMEZONE`)입니다. 자세한 목록은 [`docs/api_overview.md`의 "알려진 제약"](docs/api_overview.md#7-알려진-제약-클라이언트-설계-시-주의)을 참고하세요.
+개발 중인 MVP입니다. 로그인은 이메일·비밀번호(서버 세션, HttpOnly 쿠키 30일)이고, 이메일로 비밀번호를 재설정하는 기능과
+FCM 디바이스 토큰 등록 API는 아직 없습니다(비밀번호 재설정은 `create_admin --reset`). 시간대는 서버 설정 하나(`APP_TIMEZONE`)입니다. 자세한 목록은 [`docs/api_overview.md`의 "알려진 제약"](docs/api_overview.md#7-알려진-제약-클라이언트-설계-시-주의)을 참고하세요.
 
 ## 라이선스
 

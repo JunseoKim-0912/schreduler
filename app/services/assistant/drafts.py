@@ -18,7 +18,7 @@ from app.i18n import render_message
 from app.models.enums import EventInstanceStatus, EventType, Importance
 from app.models.event import Event
 from app.models.event_instance import EventInstance
-from app.schemas.event import EventCreate
+from app.schemas.event import NewEvent
 from app.services import date_range_command_service as ranges
 from app.services import draft_rules as rules
 from app.services.assistant.context import Draft, DraftKind, TurnContext
@@ -363,7 +363,7 @@ def propose_create_event(ctx: TurnContext, args: dict[str, Any]) -> ToolResult:
     }
     try:
         # 새 기간은 아직 id가 없으므로 검증할 때만 자리표시 값을 넣는다.
-        EventCreate(**{**payload["event"], "date_range_id": payload["event"]["date_range_id"] or (0 if recurrence else None)})
+        NewEvent(**{**payload["event"], "date_range_id": payload["event"]["date_range_id"] or (0 if recurrence else None)})
     except (ValidationError, InvalidInputError) as exc:
         problems.error("invalid_event", str(exc))
         return _failed(problems, inferred)

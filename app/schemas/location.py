@@ -10,7 +10,6 @@ class LocationCreate(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "user_id": 1,
                     "name": "학교",
                     "default_travel_minutes": 40
                 }
@@ -18,7 +17,6 @@ class LocationCreate(BaseModel):
         },
     )
 
-    user_id: int
     name: NonEmptyStr
     default_travel_minutes: int = Field(gt=0)
 

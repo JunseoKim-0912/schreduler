@@ -8,9 +8,10 @@ APP_DESCRIPTION = """
 **Schreduler** — 계획을 "기록"이 아니라 "지키게" 만드는 엄격한 스케쥴 관리 백엔드.
 
 ### 인증
-정식 인증은 아직 없다. `/users/me/*`, `/tasks`, `/event-instances`, `/actions`, `/points/summary`,
-`/compliance-reports/categories`, `/assistant/*`, `/usage/today`는 **`X-User-Id` 헤더**의 사용자를 현재 사용자로 본다.
-그 밖의 엔드포인트는 요청 본문/쿼리의 `user_id`를 쓴다.
+이메일·비밀번호로 `POST /auth/login`(또는 `/auth/signup`)하면 HttpOnly 세션 쿠키(30일)가 설정된다. `/health`와 `/auth/*`를
+뺀 모든 엔드포인트는 이 쿠키의 사용자로 동작하고, 로그인하지 않았으면 `401`이다. 다른 사용자의 데이터는 `404`다.
+요청 본문·쿼리에 `user_id`를 보내면 `422`로 거절한다(예전 클라이언트용 필드). 상태를 바꾸는 요청(POST/PUT/DELETE)의
+`Origin`(없으면 `Referer`)이 다른 사이트면 `403`이다.
 
 ### 다국어 (FR-11)
 라벨·알림·LLM 응답은 사용자의 `preferred_language`(`ko`/`en`)를 따른다.
@@ -23,6 +24,7 @@ APP_DESCRIPTION = """
 """
 
 TAGS_METADATA: list[dict[str, Any]] = [
+    {"name": "auth", "description": "회원가입·로그인·로그아웃. 가입은 `SIGNUP_MODE`(closed / invite / open)로 제어한다."},
     {
         "name": "events",
         "description": "일정 CRUD (FR-1). `scheduled`(시작~종료)와 `deadline`(마감만) 두 종류. "
@@ -44,7 +46,7 @@ TAGS_METADATA: list[dict[str, Any]] = [
     {"name": "sleep-logs", "description": "실제 취침·기상 기록 (FR-7)."},
     {"name": "daily-actual-logs", "description": "하루 실제 기록과 저녁 9시 체크인 대화 (FR-8)."},
     {"name": "personas", "description": "대화 캐릭터(페르소나) 관리 (FR-9). 코드 수정 없이 추가·수정할 수 있다."},
-    {"name": "users", "description": "현재 사용자(`X-User-Id`)의 페르소나 선택과 대화 기록."},
+    {"name": "users", "description": "로그인한 사용자의 언어·페르소나 선택과 대화 기록."},
     {"name": "points", "description": "규칙성 포인트와 연속 완료(streak) 보너스 (FR-10)."},
     {
         "name": "actions",
@@ -60,8 +62,8 @@ TAGS_METADATA: list[dict[str, Any]] = [
 NOT_FOUND: dict[int | str, dict[str, Any]] = {404: {"description": "대상(또는 참조한 user/date_range 등)을 찾을 수 없음"}}
 CONFLICT: dict[int | str, dict[str, Any]] = {409: {"description": "이미 존재하거나 다른 데이터가 참조 중이라 처리할 수 없음"}}
 CURRENT_USER: dict[int | str, dict[str, Any]] = {
-    401: {"description": "`X-User-Id` 헤더가 없음"},
-    404: {"description": "`X-User-Id`의 사용자(또는 대상)를 찾을 수 없음"},
+    401: {"description": "로그인하지 않았거나 세션이 만료됨"},
+    404: {"description": "대상을 찾을 수 없음 (다른 사용자의 것도 404)"},
 }
 EXPIRED: dict[int | str, dict[str, Any]] = {410: {"description": "확인 토큰이 만료됨 (발급 후 10분)"}}
 LLM_ERRORS: dict[int | str, dict[str, Any]] = {

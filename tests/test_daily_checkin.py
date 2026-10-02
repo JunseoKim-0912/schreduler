@@ -24,6 +24,7 @@ from app.models import (
     User,
 )
 from app.services.context_builder import build_daily_checkin_summary
+from tests.auth_helpers import as_user, sign_in
 
 
 @pytest.fixture
@@ -54,11 +55,12 @@ def client(engine):
 
 
 @pytest.fixture
-def user_id(engine) -> int:
+def user_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
         session.commit()
+        sign_in(client, user.id)
         return user.id
 
 
@@ -71,11 +73,10 @@ def test_create_and_get_sleep_log(client: TestClient, user_id: int) -> None:
     response = client.post(
         "/sleep-logs",
         json={
-            "user_id": user_id,
             "date": "2026-09-17",
             "actual_bedtime": "2026-09-16T23:30:00",
             "actual_wake_time": "2026-09-17T07:00:00",
-        },
+        }, headers=as_user(user_id),
     )
     assert response.status_code == 201
     created = response.json()
@@ -91,11 +92,10 @@ def test_update_sleep_log_wake_time(client: TestClient, user_id: int) -> None:
     created = client.post(
         "/sleep-logs",
         json={
-            "user_id": user_id,
             "date": "2026-09-17",
             "actual_bedtime": "2026-09-16T23:30:00",
             "actual_wake_time": "2026-09-17T07:00:00",
-        },
+        }, headers=as_user(user_id),
     ).json()
 
     response = client.put(
@@ -110,11 +110,10 @@ def test_sleep_log_rejects_wake_time_before_bedtime(client: TestClient, user_id:
     response = client.post(
         "/sleep-logs",
         json={
-            "user_id": user_id,
             "date": "2026-09-17",
             "actual_bedtime": "2026-09-17T07:00:00",
             "actual_wake_time": "2026-09-16T23:30:00",
-        },
+        }, headers=as_user(user_id),
     )
 
     assert response.status_code == 422
@@ -129,11 +128,10 @@ def test_create_and_get_daily_actual_log(client: TestClient, user_id: int) -> No
     response = client.post(
         "/daily-actual-logs",
         json={
-            "user_id": user_id,
             "date": "2026-09-17",
             "summary_text": "오늘 계획한 3개 중 2개 완료.",
             "actual_events": [{"title": "아침 운동", "status": "done"}],
-        },
+        }, headers=as_user(user_id),
     )
     assert response.status_code == 201
     created = response.json()
@@ -148,11 +146,10 @@ def test_update_daily_actual_log_summary(client: TestClient, user_id: int) -> No
     created = client.post(
         "/daily-actual-logs",
         json={
-            "user_id": user_id,
             "date": "2026-09-17",
             "summary_text": "초안",
             "actual_events": [],
-        },
+        }, headers=as_user(user_id),
     ).json()
 
     response = client.put(

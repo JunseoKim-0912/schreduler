@@ -5,13 +5,16 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.core.auth import get_current_user
+from app.core.auth import SESSION_COOKIE, get_current_user
 from app.core.db import get_db
+from app.core.exceptions import register_exception_handlers
 from app.core.i18n import get_response_language
 from app.i18n import Language
 from app.models import Base, User
+from app.services import auth_service
 
 test_app = FastAPI()
+register_exception_handlers(test_app)
 
 
 @test_app.get("/lang")
@@ -51,6 +54,13 @@ def client(engine):
     test_app.dependency_overrides.clear()
 
 
+def _signed_in(engine, user_id: int) -> dict[str, str]:
+    with Session(engine) as session:
+        token = auth_service.start_session(session, session.get(User, user_id))
+        session.commit()
+    return {"Cookie": f"{SESSION_COOKIE}={token}"}
+
+
 def _add_user(engine, language: str) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language=language)
@@ -63,7 +73,7 @@ def _add_user(engine, language: str) -> int:
 def test_language_follows_preferred_language(client: TestClient, engine, language: str) -> None:
     user_id = _add_user(engine, language)
 
-    response = client.get("/lang", headers={"X-User-Id": str(user_id)})
+    response = client.get("/lang", headers=_signed_in(engine, user_id))
 
     assert response.json() == {"language": language}
 
@@ -74,11 +84,12 @@ def test_language_changes_when_user_updates_preference(client: TestClient, engin
         session.get(User, user_id).preferred_language = "en"
         session.commit()
 
-    assert client.get("/lang", headers={"X-User-Id": str(user_id)}).json() == {"language": "en"}
+    assert client.get("/lang", headers=_signed_in(engine, user_id)).json() == {"language": "en"}
 
 
 def test_user_is_loaded_once_when_combined_with_get_current_user(client: TestClient, engine) -> None:
     user_id = _add_user(engine, "en")
+    headers = _signed_in(engine, user_id)
     user_selects: list[str] = []
 
     def count_user_selects(conn, cursor, statement, *args) -> None:
@@ -87,7 +98,7 @@ def test_user_is_loaded_once_when_combined_with_get_current_user(client: TestCli
 
     event.listen(engine, "before_cursor_execute", count_user_selects)
     try:
-        response = client.get("/lang-and-user", headers={"X-User-Id": str(user_id)})
+        response = client.get("/lang-and-user", headers=headers)
     finally:
         event.remove(engine, "before_cursor_execute", count_user_selects)
 
@@ -95,6 +106,7 @@ def test_user_is_loaded_once_when_combined_with_get_current_user(client: TestCli
     assert len(user_selects) == 1
 
 
-@pytest.mark.parametrize(("headers", "status_code"), [({}, 401), ({"X-User-Id": "999"}, 404)])
-def test_requires_current_user(client: TestClient, headers: dict, status_code: int) -> None:
-    assert client.get("/lang", headers=headers).status_code == status_code
+@pytest.mark.parametrize("headers", [{}, {"X-User-Id": "1"}, {"Cookie": f"{SESSION_COOKIE}=forged"}])
+def test_requires_a_session(client: TestClient, engine, headers: dict) -> None:
+    _add_user(engine, "ko")
+    assert client.get("/lang", headers=headers).status_code == 401

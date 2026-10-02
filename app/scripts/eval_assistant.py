@@ -44,7 +44,7 @@ from app.models import (
     User,
 )
 from app.models.enums import EventType
-from app.schemas.event import EventCreate
+from app.schemas.event import NewEvent
 from app.services import event_service
 from app.services.assistant import agent
 from app.services.llm_client import LLMClientError, ResponsesClient, ResponsesResult, resolve_reasoning_effort
@@ -90,7 +90,7 @@ def seed_database(db: Session, seed: dict[str, Any], language: str) -> User:
             deadline = spec.get("type") == "deadline"
             event_service.create_event(
                 db,
-                EventCreate(
+                NewEvent(
                     user_id=user.id,
                     title=spec["title"],
                     event_type=EventType.DEADLINE if deadline else EventType.SCHEDULED,
@@ -104,7 +104,7 @@ def seed_database(db: Session, seed: dict[str, Any], language: str) -> User:
             continue
         event_service.create_event(
             db,
-            EventCreate(
+            NewEvent(
                 user_id=user.id,
                 title=spec["title"],
                 start_time=_local(spec["start"]),

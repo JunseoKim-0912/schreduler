@@ -1,12 +1,10 @@
 // 모든 API 호출이 거치는 공통 레이어. DOM에 의존하지 않아 Node에서도 테스트할 수 있다.
 // 화면에 에러를 띄우는 일은 onApiError로 등록한 핸들러(app.js)가 맡는다.
 
-import { t } from "./i18n.js";
+import { getLang, t } from "./i18n.js";
 
 // 같은 서버(FastAPI)가 /app에서 이 파일을 서빙하므로 API는 같은 origin이다 — CORS 설정이 필요 없다.
 export const API_BASE = "";
-
-const USER_ID_KEY = "schreduler.userId";
 
 // LLM을 호출해 422(응답 형식 오류) / 429(오늘 사용 한도) / 500(키 미설정) / 502(호출 실패)가 올 수 있는 엔드포인트
 export const LLM_ENDPOINTS = [
@@ -26,24 +24,32 @@ export class ApiError extends Error {
   }
 }
 
-// localStorage는 사생활 보호 모드 등에서 막힐 수 있으므로 실패해도 앱이 동작하게 한다.
-export function getUserId() {
-  try {
-    return globalThis.localStorage?.getItem(USER_ID_KEY) ?? "";
-  } catch {
-    return "";
-  }
+// 로그인한 계정 (GET /auth/me, POST /auth/login·signup의 응답). 세션 자체는 HttpOnly 쿠키라 스크립트가 보지 못하고,
+// 같은 origin 요청에 브라우저가 알아서 싣는다. 여기에는 화면에 필요한 정보만 메모리에 둔다.
+let account = null;
+
+export function getAccount() {
+  return account;
 }
 
-export function setUserId(value) {
-  try {
-    if (value) globalThis.localStorage?.setItem(USER_ID_KEY, value);
-    else globalThis.localStorage?.removeItem(USER_ID_KEY);
-    return true;
-  } catch {
-    return false;
-  }
+export function setAccount(value) {
+  account = value ?? null;
 }
+
+// 패널들이 "로그인했는지"와 "사용자가 바뀌었는지"를 볼 때 쓴다. 로그인하지 않았으면 "".
+export function getUserId() {
+  return account ? String(account.id) : "";
+}
+
+// 로그인이 필요한 요청이 401을 받으면(세션 만료·로그아웃) 불린다. app.js가 로그인 화면으로 보낸다.
+const unauthorizedHandlers = new Set();
+
+export function onUnauthorized(handler) {
+  unauthorizedHandlers.add(handler);
+  return () => unauthorizedHandlers.delete(handler);
+}
+
+const isAuthPath = (path) => path.split("?")[0].startsWith("/auth/");
 
 const errorHandlers = new Set();
 
@@ -79,10 +85,11 @@ export function describeError({ status, detail, method = "GET", path = "" }) {
   const llm = isLlmEndpoint(method, path);
 
   if (status === 0) return t("api.offline");
-  if (status === 401) return t("api.needUser");
+  const serverMessage = typeof detail === "string" && detail ? detail : "";
+  // /auth/login의 401은 "이메일 또는 비밀번호가 틀렸어요" — 서버 문구를 그대로 보여준다.
+  if (status === 401) return isAuthPath(path) && serverMessage ? serverMessage : t("api.needUser");
   if (status === 422 && Array.isArray(detail)) return `${t("api.checkInput")}\n${formatValidationErrors(detail)}`;
 
-  const serverMessage = typeof detail === "string" && detail ? detail : "";
   if (llm) {
     // 429: today's AI usage limit. The server's message says which limit and when it reopens.
     if (status === 429) return serverMessage || t("api.llm429");
@@ -110,7 +117,7 @@ async function readBody(response) {
 
 /**
  * 모든 API 호출의 공통 진입점.
- * - X-User-Id(저장된 사용자 ID)와 Content-Type: application/json을 자동으로 붙인다.
+ * - Content-Type: application/json과 Accept-Language(화면 언어)를 붙인다. 로그인 세션은 쿠키라 따로 붙이지 않는다.
  * - body에 객체를 넘기면 JSON 문자열로 바꾼다.
  * - 2xx면 파싱한 JSON(204면 null)을 돌려주고, 실패하면 ApiError를 던지면서 등록된 에러 핸들러에 알린다.
  *   화면에 띄우지 않고 직접 처리하려면 { showError: false }. 함수를 넘기면 그 함수가 true를 돌려준 에러만 알린다
@@ -121,8 +128,7 @@ export async function apiFetch(path, { method = "GET", body, headers, showError 
   const requestHeaders = new Headers(headers);
   requestHeaders.set("Content-Type", "application/json");
   requestHeaders.set("Accept", "application/json");
-  const userId = getUserId();
-  if (userId) requestHeaders.set("X-User-Id", userId);
+  requestHeaders.set("Accept-Language", getLang());
 
   const fail = (error) => {
     if (typeof showError === "function" ? showError(error) : showError) report(error);
@@ -147,7 +153,12 @@ export async function apiFetch(path, { method = "GET", body, headers, showError 
   if (!response.ok) {
     const detail = data && typeof data === "object" && "detail" in data ? data.detail : data;
     const message = describeError({ status: response.status, detail, method, path });
-    throw fail(new ApiError(message, { status: response.status, detail, method, path }));
+    const error = new ApiError(message, { status: response.status, detail, method, path });
+    if (response.status === 401 && !isAuthPath(path)) {
+      for (const handler of unauthorizedHandlers) handler(error);
+      throw error;
+    }
+    throw fail(error);
   }
   return data;
 }

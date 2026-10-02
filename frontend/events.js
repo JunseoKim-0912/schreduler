@@ -175,7 +175,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     async function showDeleteConfirm() {
       let users = [];
       if (range.event_count > 0) {
-        const events = await apiFetch(`/events?user_id=${encodeURIComponent(getUserId())}`);
+        const events = await apiFetch("/events");
         users = events.filter((e) => e.date_range_id === range.id && e.parent_event_id === null).map((e) => e.title);
       }
       const cancel = rangeButton(t("common.cancel"));
@@ -215,7 +215,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     }
     rangesRefreshButton.disabled = true;
     try {
-      const ranges = await apiFetch(`/date-ranges?user_id=${encodeURIComponent(userId)}`);
+      const ranges = await apiFetch("/date-ranges");
       rangeList.replaceChildren(...ranges.map(renderRange));
       if (!ranges.length) setRangesStatus(t("ranges.empty"));
       else if (rangesStatus.textContent === t("ranges.empty")) setRangesStatus("");
@@ -316,7 +316,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     }
     locationsRefreshButton.disabled = true;
     try {
-      const locations = await apiFetch(`/locations?user_id=${encodeURIComponent(userId)}`);
+      const locations = await apiFetch("/locations");
       locationList.replaceChildren(...locations.map(renderLocation));
       if (!locations.length) setLocationsStatus(t("locations.empty"));
       else if (locationsStatus.textContent === t("locations.empty")) setLocationsStatus("");
@@ -357,7 +357,7 @@ export function initEventsPanel({ onDataChanged = async () => {} } = {}) {
     refreshButton.disabled = true;
     setStatus(listStatus, t("common.loading"));
     try {
-      const events = await apiFetch(`/events?user_id=${encodeURIComponent(userId)}`);
+      const events = await apiFetch("/events");
       list.replaceChildren(...sortEvents(events).map(renderEvent));
       setStatus(listStatus, events.length ? "" : t("events.empty"));
     } catch {

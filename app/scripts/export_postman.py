@@ -18,11 +18,11 @@ DEFAULT_OUTPUT = Path("docs/postman/Schreduler.postman_collection.json")
 POSTMAN_SCHEMA = "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 COLLECTION_VARIABLES = [
     {"key": "baseUrl", "value": "http://localhost:8000", "description": "API 서버 주소"},
-    {"key": "userId", "value": "1", "description": "X-User-Id 헤더와 요청 본문의 user_id에 쓰는 사용자 id"},
+    {"key": "email", "value": "june@example.com", "description": "POST /auth/login에 쓰는 이메일"},
+    {"key": "password", "value": "", "description": "POST /auth/login에 쓰는 비밀번호 (컬렉션에 저장하지 말고 Current value에만)"},
 ]
 # 경로 변수 기본값. 없으면 "1".
 PATH_VARIABLE_DEFAULTS = {"name": "Hana"}
-USER_HEADER = "x-user-id"
 
 
 def _resolve_schema(spec: dict[str, Any], schema: dict[str, Any]) -> dict[str, Any]:
@@ -45,10 +45,11 @@ def _request_examples(spec: dict[str, Any], operation: dict[str, Any]) -> list[A
     ]
 
 
-def _raw_body(example: Any) -> str:
-    raw = json.dumps(example, ensure_ascii=False, indent=2)
-    # 컬렉션 변수로 바꿔 두면 userId만 바꿔서 여러 사용자로 호출해 볼 수 있다 (Postman은 raw 본문의 {{var}}를 치환한다).
-    return re.sub(r'"user_id": 1\b', '"user_id": {{userId}}', raw)
+def _raw_body(path: str, example: Any) -> str:
+    if path == "/auth/login":
+        # Postman은 raw 본문의 {{var}}를 치환한다. 로그인하면 세션 쿠키가 Postman 쿠키 저장소에 남아 다른 요청에 실린다.
+        example = {"email": "{{email}}", "password": "{{password}}"}
+    return json.dumps(example, ensure_ascii=False, indent=2)
 
 
 def _url(path: str, operation: dict[str, Any]) -> dict[str, Any]:
@@ -60,7 +61,7 @@ def _url(path: str, operation: dict[str, Any]) -> dict[str, Any]:
         if param["in"] != "query":
             continue
         schema = param.get("schema", {})
-        value = "{{userId}}" if param["name"] == "user_id" else str(schema.get("default", ""))
+        value = str(schema.get("default", ""))
         query.append(
             {
                 "key": param["name"],
@@ -98,12 +99,9 @@ def _description(operation: dict[str, Any]) -> str:
 
 
 def _items(spec: dict[str, Any], path: str, method: str, operation: dict[str, Any]) -> list[dict[str, Any]]:
-    headers = []
-    if any(p["in"] == "header" and p["name"].lower() == USER_HEADER for p in operation.get("parameters", [])):
-        headers.append({"key": "X-User-Id", "value": "{{userId}}"})
-
+    headers: list[dict[str, str]] = []
     examples = _request_examples(spec, operation)
-    bodies = [_raw_body(example) for example in examples] or [None]
+    bodies = [_raw_body(path, example) for example in examples] or [None]
 
     items = []
     for index, raw in enumerate(bodies):

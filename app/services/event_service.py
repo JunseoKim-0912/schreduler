@@ -16,8 +16,8 @@ from app.models.event_instance import EventInstance
 from app.models.important_date_range import ImportantDateRange
 from app.models.location import Location
 from app.models.user import User
-from app.schemas.event import EventCreate, EventUpdate, validate_event_times, validate_recurrence
-from app.services.common import require
+from app.schemas.event import EventUpdate, NewEvent, validate_event_times, validate_recurrence
+from app.services.common import require, require_owned
 from app.services.notification import sync_notifications
 from app.services.recurrence import create_single_instance, follow_single_instance, generate_event_instances
 
@@ -26,22 +26,21 @@ from app.services.recurrence import create_single_instance, follow_single_instan
 # 한 트랜잭션으로 묶을 수 있게 하기 위해서다. 같은 이름의 create/update/delete_event는 이를 감싸 커밋한다.
 
 
-def _ensure_references_exist(db: Session, data: EventCreate | EventUpdate) -> None:
-    user_id = getattr(data, "user_id", None)
-    if user_id is not None:
-        require(db, User, user_id, "user_id")
+def _ensure_references_exist(db: Session, data: NewEvent | EventUpdate, user_id: int) -> None:
+    """Referenced ranges, locations and parent events must exist and belong to the event's owner."""
     if data.date_range_id is not None:
-        require(db, ImportantDateRange, data.date_range_id, "date_range_id")
+        require_owned(db, ImportantDateRange, data.date_range_id, user_id, "date_range_id")
     if data.parent_event_id is not None:
-        require(db, Event, data.parent_event_id, "parent_event_id")
+        require_owned(db, Event, data.parent_event_id, user_id, "parent_event_id")
     if data.location_id is not None:
-        require(db, Location, data.location_id, "location_id")
+        require_owned(db, Location, data.location_id, user_id, "location_id")
 
 
-def build_event(db: Session, data: EventCreate, instances_from: date | None = None) -> Event:
+def build_event(db: Session, data: NewEvent, instances_from: date | None = None) -> Event:
     """이벤트와 반복 인스턴스, 이동시간 하위 일정을 만든다 (커밋하지 않음). instances_from이 있으면 반복 회차는
     그 날짜부터 만든다 (자연어 경로: 오늘부터)."""
-    _ensure_references_exist(db, data)
+    require(db, User, data.user_id, "user_id")
+    _ensure_references_exist(db, data, data.user_id)
     event = Event(**data.model_dump())
     db.add(event)
     db.flush()
@@ -58,7 +57,7 @@ def build_event(db: Session, data: EventCreate, instances_from: date | None = No
     return event
 
 
-def create_event(db: Session, data: EventCreate) -> Event:
+def create_event(db: Session, data: NewEvent) -> Event:
     """이벤트와 반복 인스턴스, 이동시간 하위 일정을 한 트랜잭션으로 만든다 — 중간에 실패하면 아무것도 남지 않는다."""
     event = build_event(db, data)
     db.commit()
@@ -67,15 +66,12 @@ def create_event(db: Session, data: EventCreate) -> Event:
     return event
 
 
-def get_event(db: Session, event_id: int) -> Event | None:
-    return db.get(Event, event_id)
+def get_event(db: Session, user: User, event_id: int) -> Event:
+    return require_owned(db, Event, event_id, user.id, "event")
 
 
-def list_events(db: Session, user_id: int | None = None) -> list[Event]:
-    stmt = select(Event)
-    if user_id is not None:
-        stmt = stmt.where(Event.user_id == user_id)
-    return list(db.execute(stmt).scalars().all())
+def list_events(db: Session, user: User) -> list[Event]:
+    return list(db.execute(select(Event).where(Event.user_id == user.id)).scalars().all())
 
 
 @dataclass
@@ -163,12 +159,8 @@ def apply_event_update(db: Session, event: Event, changes: dict[str, Any]) -> No
         set_event_location(db, event, db.get(Location, location_id) if location_id is not None else None)
 
 
-def update_event(db: Session, event_id: int, data: EventUpdate) -> Event | None:
-    event = db.get(Event, event_id)
-    if event is None:
-        return None
-
-    _ensure_references_exist(db, data)
+def update_event(db: Session, event: Event, data: EventUpdate) -> Event:
+    _ensure_references_exist(db, data, event.user_id)
     apply_event_update(db, event, data.model_dump(exclude_unset=True))
     db.commit()
     db.refresh(event)

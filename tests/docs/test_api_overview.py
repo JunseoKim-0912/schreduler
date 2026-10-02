@@ -6,11 +6,12 @@ from app.main import app
 DOC = Path("docs/api_overview.md").read_text(encoding="utf-8")
 # 엔드포인트 목록 표의 첫 칸: | `GET /events/{event_id}` ...
 TABLE_ENDPOINT = re.compile(r"^\| `(GET|POST|PUT|DELETE) (/[^`]*)`", re.M)
-USER_HEADER_ENDPOINTS = {
+# Endpoints that need a signed-in session (the session cookie shows up as "security" in the spec).
+SIGNED_IN_ENDPOINTS = {
     (method.upper(), path)
     for path, ops in app.openapi()["paths"].items()
     for method, op in ops.items()
-    if any(p["name"] == "x-user-id" for p in op.get("parameters", []))
+    if op.get("security")
 }
 
 
@@ -27,25 +28,30 @@ def test_endpoint_tables_match_the_api_exactly() -> None:
 
 
 def _unmarked_header_endpoints(doc: str) -> list[tuple[str, str]]:
-    """X-User-Id가 필요한데 행에도, 소속 섹션 제목에도 🔑가 없는 엔드포인트."""
+    """로그인이 필요한데 행에도, 소속 섹션 제목에도 🔑가 없는 엔드포인트."""
     unmarked = []
     for section in doc.split("\n### ")[1:]:
         heading, _, body = section.partition("\n")
         for row in body.splitlines():
             match = TABLE_ENDPOINT.match(row)
-            if match and match.groups() in USER_HEADER_ENDPOINTS and "🔑" not in heading + row:
+            if match and match.groups() in SIGNED_IN_ENDPOINTS and "🔑" not in heading + row:
                 unmarked.append(match.groups())
     return unmarked
 
 
-def test_header_auth_endpoints_are_marked() -> None:
+def test_signed_in_endpoints_are_marked() -> None:
     assert _unmarked_header_endpoints(DOC) == []
 
 
-def test_header_mark_check_catches_a_missing_mark() -> None:
-    broken = DOC.replace("| `GET /compliance-reports/categories` 🔑", "| `GET /compliance-reports/categories`")
+def test_only_health_and_auth_are_open() -> None:
+    open_endpoints = _spec_endpoints() - SIGNED_IN_ENDPOINTS
+    assert open_endpoints == {("GET", "/health"), ("POST", "/auth/signup"), ("POST", "/auth/login")}
 
-    assert _unmarked_header_endpoints(broken) == [("GET", "/compliance-reports/categories")]
+
+def test_mark_check_catches_a_missing_mark() -> None:
+    broken = DOC.replace("### points — 포인트 🔑", "### points — 포인트")
+
+    assert _unmarked_header_endpoints(broken) == [("GET", "/points/summary")]
 
 
 def test_llm_endpoints_are_marked() -> None:

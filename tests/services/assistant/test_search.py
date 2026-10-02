@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Event, ImportantDateRange, User
-from app.schemas.event import EventCreate
+from app.schemas.event import NewEvent
 from app.services import event_service
 from app.services.assistant import agent
 from app.services.assistant.context import TurnContext
@@ -38,7 +38,7 @@ def _event(db: Session, user: User, title: str, rule: str | None = None, range_i
     start = datetime(2026, 9, 14, 11)
     return event_service.create_event(
         db,
-        EventCreate(user_id=user.id, title=title, start_time=start, end_time=start + timedelta(hours=1), is_recurring=rule is not None,
+        NewEvent(user_id=user.id, title=title, start_time=start, end_time=start + timedelta(hours=1), is_recurring=rule is not None,
                     recurrence_rule=rule, date_range_id=range_id),
     )
 

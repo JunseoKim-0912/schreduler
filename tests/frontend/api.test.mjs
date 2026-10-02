@@ -2,24 +2,11 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, test } from "node:test";
 
-import { ApiError, apiFetch, describeError, getUserId, isLlmEndpoint, onApiError, setUserId } from "../../frontend/api.js";
+import { ApiError, apiFetch, describeError, getUserId, isLlmEndpoint, onApiError, onUnauthorized, setAccount } from "../../frontend/api.js";
 import { setLang } from "../../frontend/i18n.js";
 
 // 아래 기대값은 한국어 화면 기준이다. 영어 기본값은 i18n.test.mjs에서 본다.
 setLang("ko");
-
-class MemoryStorage {
-  #data = new Map();
-  getItem(key) {
-    return this.#data.has(key) ? this.#data.get(key) : null;
-  }
-  setItem(key, value) {
-    this.#data.set(key, String(value));
-  }
-  removeItem(key) {
-    this.#data.delete(key);
-  }
-}
 
 let requests;
 
@@ -39,35 +26,22 @@ function jsonResponse(status, body) {
 }
 
 beforeEach(() => {
-  globalThis.localStorage = new MemoryStorage();
+  setAccount(null);
 });
 
-describe("사용자 ID 저장", () => {
-  test("저장하고 다시 읽는다, 빈 값이면 지운다", () => {
+describe("로그인한 계정", () => {
+  test("계정이 있으면 getUserId가 그 id, 없으면 빈 문자열", () => {
     assert.equal(getUserId(), "");
-    setUserId("7");
+    setAccount({ id: 7, email: "june@example.com" });
     assert.equal(getUserId(), "7");
-    setUserId("");
+    setAccount(null);
     assert.equal(getUserId(), "");
-  });
-
-  test("localStorage가 막혀 있어도 예외 없이 동작한다", () => {
-    globalThis.localStorage = {
-      getItem() {
-        throw new Error("blocked");
-      },
-      setItem() {
-        throw new Error("blocked");
-      },
-    };
-    assert.equal(getUserId(), "");
-    assert.equal(setUserId("1"), false);
   });
 });
 
 describe("apiFetch 요청", () => {
-  test("X-User-Id와 Content-Type을 자동으로 붙이고 객체 body를 JSON으로 바꾼다", async () => {
-    setUserId("3");
+  test("Content-Type·Accept-Language를 붙이고 객체 body를 JSON으로 바꾼다 — 사용자 id는 보내지 않는다", async () => {
+    setAccount({ id: 3 });
     mockFetch(() => jsonResponse(201, { id: 1 }));
 
     const data = await apiFetch("/tasks", { method: "POST", body: { title: "과제" } });
@@ -76,17 +50,17 @@ describe("apiFetch 요청", () => {
     const { url, init } = requests[0];
     assert.equal(url, "/tasks");
     assert.equal(init.method, "POST");
-    assert.equal(init.headers.get("X-User-Id"), "3");
+    assert.equal(init.headers.has("X-User-Id"), false);
+    assert.equal(init.headers.get("Accept-Language"), "ko");
     assert.equal(init.headers.get("Content-Type"), "application/json");
     assert.equal(init.body, JSON.stringify({ title: "과제" }));
   });
 
-  test("사용자 ID가 없으면 X-User-Id를 붙이지 않는다", async () => {
+  test("본문이 없으면 body도 없다", async () => {
     mockFetch(() => jsonResponse(200, { status: "ok" }));
 
     await apiFetch("/health");
 
-    assert.equal(requests[0].init.headers.has("X-User-Id"), false);
     assert.equal(requests[0].init.body, undefined);
   });
 
@@ -172,7 +146,7 @@ describe("describeError 문구", () => {
   ];
 
   const cases = [
-    [{ status: 401 }, "사용자 ID를 먼저 입력해 주세요."],
+    [{ status: 401 }, "로그인이 끝났어요. 다시 로그인해 주세요."],
     [{ status: 422, detail: validation, method: "POST", path: "/events" }, "입력값을 확인해 주세요.\n• title: String should have at least 1 character\n• recurrence_rule: invalid recurrence_rule 'X'"],
     [{ status: 422, detail: validation, method: "POST", path: "/assistant/chat" }, "입력값을 확인해 주세요.\n• title: String should have at least 1 character\n• recurrence_rule: invalid recurrence_rule 'X'"],
     [{ status: 422, detail: "LLM 응답이 유효한 JSON이 아닙니다", method: "POST", path: "/assistant/chat" }, "AI가 요청을 제대로 이해하지 못했어요. 표현을 조금 바꿔서 다시 시도해 주세요."],
@@ -197,5 +171,35 @@ describe("describeError 문구", () => {
     assert.equal(isLlmEndpoint("GET", "/assistant/sessions/current"), false);
     assert.equal(isLlmEndpoint("GET", "/compliance-reports/stats?days=30"), false);
     assert.equal(isLlmEndpoint("GET", "/compliance-reports"), false);
+  });
+});
+
+
+describe("401 처리", () => {
+  test("로그인이 필요한 요청의 401은 배너 대신 onUnauthorized로 간다", async () => {
+    mockFetch(() => jsonResponse(401, { detail: "로그인이 필요해요." }));
+    const banners = [];
+    const signedOut = [];
+    const offBanner = onApiError((error) => banners.push(error));
+    const offAuth = onUnauthorized((error) => signedOut.push(error.status));
+
+    await assert.rejects(apiFetch("/tasks"), (error) => error.status === 401);
+    offBanner();
+    offAuth();
+
+    assert.deepEqual(signedOut, [401]);
+    assert.equal(banners.length, 0);
+  });
+
+  test("로그인 실패(/auth/login의 401)는 서버 문구를 그대로 보여주고 로그아웃 처리하지 않는다", async () => {
+    mockFetch(() => jsonResponse(401, { detail: "이메일 또는 비밀번호가 틀렸어요." }));
+    const signedOut = [];
+    const off = onUnauthorized(() => signedOut.push(true));
+
+    const error = await apiFetch("/auth/login", { method: "POST", body: {}, showError: false }).catch((e) => e);
+    off();
+
+    assert.equal(error.message, "이메일 또는 비밀번호가 틀렸어요.");
+    assert.deepEqual(signedOut, []);
   });
 });

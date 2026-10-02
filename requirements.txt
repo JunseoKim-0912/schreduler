@@ -14,3 +14,4 @@ httpx
 freezegun
 tzdata
 pyyaml
+argon2-cffi

@@ -13,7 +13,6 @@ class SleepLogCreate(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "user_id": 1,
                     "date": "2026-09-24",
                     "actual_bedtime": "2026-09-23T23:40:00",
                     "actual_wake_time": "2026-09-24T07:10:00"
@@ -22,7 +21,6 @@ class SleepLogCreate(BaseModel):
         },
     )
 
-    user_id: int
     date: dt_date
     actual_bedtime: datetime
     actual_wake_time: datetime

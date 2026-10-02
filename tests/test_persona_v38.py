@@ -18,6 +18,7 @@ from app.models import Base, Persona, User
 from app.scripts.seed_personas import load_personas, upsert_personas
 from app.services import input_filter
 from app.services import llm_client as llm_client_module
+from tests.auth_helpers import as_admin, as_user
 
 _REAL_HTTPX_CLIENT = httpx.Client
 
@@ -71,7 +72,7 @@ def personas(client: TestClient) -> None:
         }
         if fallback:
             body["fallback_lines"] = fallback
-        assert client.post("/personas", json=body).status_code == 201
+        assert client.post("/personas", json=body, headers=as_admin()).status_code == 201
 
 
 @pytest.fixture
@@ -88,7 +89,7 @@ def llm_requests(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def _select(client: TestClient, user_id: int, name: str) -> None:
@@ -96,10 +97,10 @@ def _select(client: TestClient, user_id: int, name: str) -> None:
 
 
 def _checkin(client: TestClient, user_id: int, utterance: str, conversation_id: int | None = None) -> dict:
-    body = {"user_id": user_id, "utterance": utterance}
+    body = {"utterance": utterance}
     if conversation_id:
         body["conversation_id"] = conversation_id
-    response = client.post("/daily-actual-logs/checkin", json=body)
+    response = client.post("/daily-actual-logs/checkin", json=body, headers=as_user(user_id))
     assert response.status_code == 200, response.text
     return response.json()
 

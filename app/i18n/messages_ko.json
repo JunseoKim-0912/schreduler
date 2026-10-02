@@ -60,5 +60,14 @@
   "assistant.budget_with_drafts": "오늘 AI 사용 한도에 도달해서 지금까지 만든 초안을 보여드려요. 확인해 주세요.",
   "assistant.budget_no_drafts": "오늘 AI 사용 한도에 도달해서 여기서 멈췄어요. 자정({city} 시간)에 다시 열려요.",
   "llm_budget.user_limit": "오늘 AI 사용 한도에 도달했어요. 자정({city} 시간)에 다시 열려요.",
-  "llm_budget.total_limit": "오늘 앱 전체의 AI 사용 한도에 도달했어요. 자정({city} 시간)에 다시 열려요."
+  "llm_budget.total_limit": "오늘 앱 전체의 AI 사용 한도에 도달했어요. 자정({city} 시간)에 다시 열려요.",
+  "auth.login_failed": "이메일 또는 비밀번호가 틀렸어요.",
+  "auth.too_many_attempts": "로그인 실패가 너무 많아요. {minutes}분 뒤에 다시 시도해 주세요.",
+  "auth.signup_closed": "지금은 회원가입을 받지 않아요.",
+  "auth.invite_invalid": "초대 코드가 맞지 않아요.",
+  "auth.email_taken": "이미 가입된 이메일이에요.",
+  "auth.not_signed_in": "로그인이 필요해요.",
+  "auth.admin_only": "관리자만 할 수 있어요.",
+  "auth.bad_origin": "다른 사이트에서 온 요청이라 거부했어요.",
+  "request.user_id_not_allowed": "user_id는 더 이상 받지 않아요. 로그인한 사용자 기준으로 처리돼요."
 }

@@ -12,7 +12,6 @@ class DateRangeCreate(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "user_id": 1,
                     "name": "2026 가을학기",
                     "start_date": "2026-09-01",
                     "end_date": "2026-12-20"
@@ -21,7 +20,6 @@ class DateRangeCreate(BaseModel):
         },
     )
 
-    user_id: int
     name: NonEmptyStr
     start_date: date
     end_date: date

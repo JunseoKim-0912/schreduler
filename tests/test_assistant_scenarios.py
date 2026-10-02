@@ -19,6 +19,7 @@ from app.models import Base, Event, EventInstance, ImportantDateRange, Location,
 from app.models.enums import EventInstanceStatus
 from app.services.assistant import agent
 from tests.assistant_flow import confirm, create, date_range, find, only_action, propose, run, undo, update
+from tests.auth_helpers import as_user, sign_in
 
 TODAY = date(2026, 9, 26)
 PENDING, DONE, MISSED, CANCELLED = (
@@ -57,13 +58,14 @@ def client(engine):
 
 
 @pytest.fixture
-def user_id(engine) -> int:
+def user_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
         session.flush()
         session.add(ImportantDateRange(user_id=user.id, name="2026-2학기", start_date=date(2026, 9, 1), end_date=date(2026, 12, 20)))
         session.commit()
+        sign_in(client, user.id)
         return user.id
 
 
@@ -98,15 +100,15 @@ def _weekly(client: TestClient, user_id: int, range_id: int, title: str = "물�
             end: str = "2026-09-07T11:00:00") -> int:
     response = client.post(
         "/events",
-        json={"user_id": user_id, "title": title, "start_time": start, "end_time": end, "is_recurring": True,
-              "recurrence_rule": f"FREQ=WEEKLY;BYDAY={byday}", "date_range_id": range_id},
+        json={"title": title, "start_time": start, "end_time": end, "is_recurring": True,
+              "recurrence_rule": f"FREQ=WEEKLY;BYDAY={byday}", "date_range_id": range_id}, headers=as_user(user_id),
     )
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
 
 def _range(client: TestClient, user_id: int, name: str = "Lecture End Date", start: str = "2026-09-01", end: str = "2026-10-31") -> int:
-    response = client.post("/date-ranges", json={"user_id": user_id, "name": name, "start_date": start, "end_date": end})
+    response = client.post("/date-ranges", json={"name": name, "start_date": start, "end_date": end}, headers=as_user(user_id))
     assert response.status_code == 201, response.text
     return response.json()["id"]
 
@@ -255,7 +257,7 @@ def test_ui_update_and_delete_are_recorded_and_list_has_usage(client, engine, us
     range_id = _range(client, user_id)
     _weekly(client, user_id, range_id)
 
-    listed = client.get("/date-ranges", params={"user_id": user_id}).json()
+    listed = client.get("/date-ranges", headers=as_user(user_id)).json()
     assert [(r["name"], r["event_count"]) for r in listed] == [("2026-2학기", 0), ("Lecture End Date", 1)]
 
     updated = client.put(f"/date-ranges/{range_id}", json={"end_date": "2026-12-10"})
@@ -264,7 +266,7 @@ def test_ui_update_and_delete_are_recorded_and_list_has_usage(client, engine, us
     assert client.delete(f"/date-ranges/{range_id}").status_code == 409, "사용 중이면 처리 방법(mode)이 필요하다"
     deleted = client.delete(f"/date-ranges/{range_id}", params={"mode": "range_only"})
     assert deleted.status_code == 204 and deleted.headers["X-Action-Id"]
-    actions = client.get("/actions", headers={"X-User-Id": str(user_id)}).json()
+    actions = client.get("/actions", headers=as_user(user_id)).json()
     assert [a["summary_text"] for a in actions[:2]] == [
         "반복 기간 'Lecture End Date' 삭제",
         "반복 기간 'Lecture End Date': 기간 9/1~10/31→9/1~12/10, 회차 6개 추가·0개 취소",

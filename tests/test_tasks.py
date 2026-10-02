@@ -19,6 +19,7 @@ from app.models import (
     ImportantDateRange,
     User,
 )
+from tests.auth_helpers import as_user, sign_in
 
 NOW = "2026-09-24 16:00:00"  # UTC로 고정 → 토론토(앱 시간대) 12:00
 
@@ -57,12 +58,14 @@ def _add_user(engine, name: str = "June") -> int:
 
 
 @pytest.fixture
-def user_id(engine) -> int:
-    return _add_user(engine)
+def user_id(engine, client) -> int:
+    user_id = _add_user(engine)
+    sign_in(client, user_id)
+    return user_id
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def _create_task(client: TestClient, user_id: int, **fields: object) -> dict:
@@ -179,7 +182,7 @@ def test_list_tasks_sorted_by_due_and_only_own_deadlines(client: TestClient, eng
     _create_task(client, other_id, title="남의 것", end_time="2026-09-21T09:00:00")
     client.post(
         "/events",
-        json={"user_id": user_id, "title": "일반 일정", "start_time": "2026-09-22T09:00:00", "end_time": "2026-09-22T10:00:00"},
+        json={"title": "일반 일정", "start_time": "2026-09-22T09:00:00", "end_time": "2026-09-22T10:00:00"}, headers=as_user(user_id),
     )
 
     tasks = client.get("/tasks", headers=_headers(user_id)).json()
@@ -246,7 +249,7 @@ def test_deadline_event_from_events_api_gets_instance(client: TestClient, user_i
     """/events로 만든 단발성 deadline도 /tasks와 똑같이 마감일에 회차가 하나 생긴다."""
     client.post(
         "/events",
-        json={"user_id": user_id, "title": "마감", "event_type": "deadline", "end_time": "2026-09-23T09:00:00"},
+        json={"title": "마감", "event_type": "deadline", "end_time": "2026-09-23T09:00:00"}, headers=as_user(user_id),
     )
 
     [listed] = client.get("/tasks", headers=_headers(user_id)).json()

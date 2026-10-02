@@ -18,7 +18,9 @@ def test_app_path_serves_index_html() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "User ID" in response.text  # 처음 화면은 영어 (i18n.js가 고른 언어로 바꾼다)
+    assert "Log in" in response.text  # 처음 화면은 영어 (i18n.js가 고른 언어로 바꾼다)
+    assert 'id="login-form"' in response.text and 'id="signup-invite"' in response.text
+    assert "user-id" not in response.text and "X-User-Id" not in response.text
 
 
 def test_app_without_trailing_slash_redirects_to_index() -> None:

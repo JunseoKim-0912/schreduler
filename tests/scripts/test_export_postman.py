@@ -33,7 +33,7 @@ def test_committed_collection_is_up_to_date() -> None:
 
 def test_collection_uses_postman_v21_format_and_variables() -> None:
     assert COLLECTION["info"]["schema"] == POSTMAN_SCHEMA
-    assert {v["key"] for v in COLLECTION["variable"]} == {"baseUrl", "userId"}
+    assert {v["key"] for v in COLLECTION["variable"]} == {"baseUrl", "email", "password"}
     for item in REQUESTS:
         request = item["request"]
         assert request["url"]["raw"].startswith("{{baseUrl}}/")
@@ -57,19 +57,18 @@ def test_every_operation_is_in_the_collection_under_its_tag() -> None:
     assert [folder["name"] for folder in COLLECTION["item"]] == [tag["name"] for tag in SPEC["tags"]]
 
 
-def test_user_header_only_where_the_api_reads_it() -> None:
-    needs_header = {
-        (method.upper(), path.replace("{", ":").replace("}", ""))
-        for path, ops in SPEC["paths"].items()
-        for method, op in ops.items()
-        if any(p["name"] == "x-user-id" for p in op.get("parameters", []))
-    }
-
+def test_no_request_carries_a_user_id() -> None:
+    """Sign-in is the session cookie Postman keeps after POST /auth/login; the old X-User-Id / user_id are gone."""
     for item in REQUESTS:
         request = item["request"]
-        key = (request["method"], "/" + "/".join(request["url"]["path"]))
-        has_header = {"key": "X-User-Id", "value": "{{userId}}"} in request["header"]
-        assert has_header == (key in needs_header), item["name"]
+        assert not any(h["key"].lower() == "x-user-id" for h in request["header"]), item["name"]
+        assert "user_id" not in request["url"]["raw"], item["name"]
+        assert '"user_id"' not in request.get("body", {}).get("raw", ""), item["name"]
+
+
+def test_login_request_uses_the_credential_variables() -> None:
+    [login] = [item for item in REQUESTS if item["request"]["url"]["path"] == ["auth", "login"]]
+    assert json.loads(login["request"]["body"]["raw"]) == {"email": "{{email}}", "password": "{{password}}"}
 
 
 @pytest.mark.parametrize("item", [i for i in REQUESTS if "body" in i["request"]], ids=lambda i: i["name"])
@@ -83,7 +82,7 @@ def test_example_bodies_pass_schema_validation(item: dict) -> None:
         if m.upper() == request["method"] and p.replace("{", ":").replace("}", "") == path
     )
     schema_name = operation["requestBody"]["content"]["application/json"]["schema"]["$ref"].rsplit("/", 1)[-1]
-    body = json.loads(request["body"]["raw"].replace("{{userId}}", "1"))
+    body = json.loads(request["body"]["raw"])
 
     _schema_classes()[schema_name].model_validate(body)
 

@@ -14,6 +14,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, Event, EventInstance, EventInstanceStatus, User
 from app.services import llm_client as llm_client_module
+from tests.auth_helpers import as_user, sign_in
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +50,7 @@ def client(engine):
 
 
 @pytest.fixture
-def event_instance_id(engine) -> int:
+def event_instance_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
@@ -69,6 +70,7 @@ def event_instance_id(engine) -> int:
         )
         session.add(instance)
         session.commit()
+        sign_in(client, user.id)
         return instance.id
 
 
@@ -182,7 +184,7 @@ def test_category_with_blank_reason_text_does_not_trigger_llm(
 
 
 def test_unknown_event_instance_returns_404(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, event_instance_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fail_if_llm_called(monkeypatch)
 
@@ -288,8 +290,9 @@ def test_stats_counts_recent_categories_and_zero_fills_the_rest(
         _make_report(session, instance.id, "overslept", now - timedelta(days=10))
         _make_report(session, instance.id, "fatigue", now - timedelta(days=1))
         _make_report(session, instance.id, "overslept", now - timedelta(days=40))  # 범위 밖
+        user_id = user.id
 
-    response = client.get("/compliance-reports/stats")
+    response = client.get("/compliance-reports/stats", headers=as_user(user_id))
 
     assert response.status_code == 200
     body = response.json()
@@ -321,14 +324,15 @@ def test_stats_respects_custom_days_window(
         session.flush()
         instance = _make_event_instance_for_user(session, user)
         _make_report(session, instance.id, "forgot", now - timedelta(days=10))
+        user_id = user.id
 
-    response = client.get("/compliance-reports/stats", params={"days": 1})
+    response = client.get("/compliance-reports/stats", params={"days": 1}, headers=as_user(user_id))
 
     assert response.status_code == 200
     assert response.json()["total"] == 0
 
 
-def test_stats_filters_by_user_id(
+def test_stats_only_count_my_reports(
     client: TestClient, engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fail_if_llm_called(monkeypatch)
@@ -346,7 +350,7 @@ def test_stats_filters_by_user_id(
         _make_report(session, instance2.id, "fatigue", now)
         user1_id = user1.id
 
-    response = client.get("/compliance-reports/stats", params={"user_id": user1_id})
+    response = client.get("/compliance-reports/stats", headers=as_user(user1_id))
 
     assert response.status_code == 200
     body = response.json()

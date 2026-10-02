@@ -14,10 +14,9 @@
       <div class="container header-row">
         <h1 class="brand">Schreduler</h1>
         <div class="header-controls">
-          <div class="user-id">
-            <label for="user-id" data-i18n="user.label">User ID</label>
-            <input id="user-id" type="text" inputmode="numeric" autocomplete="off" placeholder="e.g. 1" data-i18n-placeholder="user.placeholder" aria-describedby="user-id-help user-id-status" />
-            <span id="user-id-status" class="hint" role="status"></span>
+          <div id="account" class="account" hidden>
+            <span id="account-email" class="account-email"></span>
+            <button id="logout" type="button" class="button button-secondary button-small" data-i18n="auth.logout">Log out</button>
           </div>
           <div class="lang-switch" role="radiogroup" aria-label="Language" data-i18n-aria-label="lang.switch">
             <button type="button" role="radio" data-lang="en" aria-checked="true" lang="en">Eng</button>
@@ -25,9 +24,6 @@
           </div>
         </div>
       </div>
-      <p id="user-id-help" class="container hint" data-i18n="user.help">
-        The ID is sent as the X-User-Id header on every request and remembered in this browser.
-      </p>
     </header>
 
     <main class="container">
@@ -39,6 +35,33 @@
         <button id="error-close" type="button" class="button button-ghost" aria-label="Close the error message" data-i18n-aria-label="error.closeLabel" data-i18n="error.close">Close</button>
       </div>
 
+      <section id="auth-screen" class="auth-screen" hidden>
+        <form id="login-form" class="auth-form" novalidate>
+          <h2 data-i18n="auth.loginHeading">Log in</h2>
+          <label for="login-email" data-i18n="auth.email">Email</label>
+          <input id="login-email" type="email" autocomplete="username" required />
+          <label for="login-password" data-i18n="auth.password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" required />
+          <button id="login-submit" type="submit" class="button" data-i18n="auth.loginButton">Log in</button>
+          <p id="login-status" class="auth-status" role="status" hidden></p>
+          <p class="hint"><span data-i18n="auth.noAccount">No account yet?</span> <button id="show-signup" type="button" class="link-button" data-i18n="auth.toSignup">Sign up</button></p>
+        </form>
+        <form id="signup-form" class="auth-form" novalidate hidden>
+          <h2 data-i18n="auth.signupHeading">Create an account</h2>
+          <label for="signup-email" data-i18n="auth.email">Email</label>
+          <input id="signup-email" type="email" autocomplete="username" required />
+          <label for="signup-password" data-i18n="auth.password">Password</label>
+          <input id="signup-password" type="password" autocomplete="new-password" minlength="8" required aria-describedby="signup-password-hint" />
+          <p id="signup-password-hint" class="hint" data-i18n="auth.passwordHint">At least 8 characters.</p>
+          <label for="signup-invite" data-i18n="auth.inviteCode">Invite code</label>
+          <input id="signup-invite" type="text" autocomplete="off" />
+          <button id="signup-submit" type="submit" class="button" data-i18n="auth.signupButton">Sign up</button>
+          <p id="signup-status" class="auth-status" role="status" hidden></p>
+          <p class="hint"><span data-i18n="auth.haveAccount">Already have an account?</span> <button id="show-login" type="button" class="link-button" data-i18n="auth.toLogin">Log in</button></p>
+        </form>
+      </section>
+
+      <div id="app-content" hidden>
       <nav class="tabs" role="tablist" aria-label="Sections" data-i18n-aria-label="tabs.label">
         <button type="button" role="tab" id="tab-calendar" aria-controls="panel-calendar" data-tab="calendar" data-i18n="tab.calendar">Calendar</button>
         <button type="button" role="tab" id="tab-events" aria-controls="panel-events" data-tab="events" data-i18n="tab.events">Events</button>
@@ -190,6 +213,7 @@
         <p id="checkin-usage" class="usage-meter" role="status" hidden></p>
         <p id="checkin-status" class="hint" role="status" hidden></p>
       </section>
+      </div>
     </main>
 
     <footer class="container site-footer">

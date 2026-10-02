@@ -18,8 +18,8 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, PointsLedger, User
 from app.services.points import record_daily_points
+from tests.auth_helpers import sign_in
 
-HEADERS = {"X-User-Id": "1"}
 TODAY = "2026-09-24 12:00:00"  # 목요일 (이번 주는 9/21 월요일부터)
 
 
@@ -47,19 +47,19 @@ def client(engine) -> Iterator[TestClient]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
-    yield TestClient(app)
+    yield sign_in(TestClient(app), 1)
     app.dependency_overrides.clear()
 
 
 def _task(client: TestClient, due: str, importance: int = 5) -> int:
     body = client.post(
-        "/tasks", headers=HEADERS, json={"title": f"과제 {due}", "end_time": f"{due}T18:00:00", "importance": importance}
+        "/tasks", json={"title": f"과제 {due}", "end_time": f"{due}T18:00:00", "importance": importance}
     ).json()
     return body["event_instance_id"]
 
 
 def _complete(client: TestClient, instance_id: int) -> None:
-    assert client.put(f"/tasks/{instance_id}/complete", headers=HEADERS).status_code == 200
+    assert client.put(f"/tasks/{instance_id}/complete").status_code == 200
 
 
 def _run_midnight_job(engine, *days: date) -> None:
@@ -76,7 +76,7 @@ def _ledger(engine) -> dict[date, tuple[float, float]]:
 
 
 def _summary(client: TestClient) -> dict:
-    return client.get("/points/summary", headers=HEADERS).json()
+    return client.get("/points/summary").json()
 
 
 @freeze_time(TODAY)

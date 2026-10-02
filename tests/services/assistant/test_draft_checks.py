@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.models import Base, Event, ImportantDateRange, Location, PendingProposal, User
-from app.schemas.event import EventCreate
+from app.schemas.event import NewEvent
 from app.services import event_service
 from app.services.assistant import agent, prompt
 from tests.fake_responses import FakeResponsesClient, ScriptedCall, call, say
@@ -50,7 +50,7 @@ def quiz(db: Session, user: User) -> Event:
     start = datetime(2026, 9, 5, 17)
     return event_service.create_event(
         db,
-        EventCreate(user_id=user.id, title="물리 퀴즈", start_time=start, end_time=start + timedelta(hours=1), importance=4,
+        NewEvent(user_id=user.id, title="물리 퀴즈", start_time=start, end_time=start + timedelta(hours=1), importance=4,
                     is_recurring=True, recurrence_rule="FREQ=WEEKLY;BYDAY=SA", date_range_id=period.id),
     )
 

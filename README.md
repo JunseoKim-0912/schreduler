@@ -39,7 +39,6 @@ pip install -r requirements.txt
 cp .env.example .env                   # then fill in values; LLM_API_KEY is needed for the assistant and personas
 
 alembic upgrade head                   # create / migrate the database (default: ./schreduler.db)
-python -m app.scripts.seed             # create a test user — prints its id
 python -m app.scripts.seed_personas    # load the default personas (app/scripts/personas_seed_data.json)
 
 uvicorn app.main:app --reload
@@ -47,7 +46,7 @@ uvicorn app.main:app --reload
 
 Then open:
 
-- Web app: <http://localhost:8000/app/> — enter the user id printed by the seed script in **User ID** (top right)
+- Web app: <http://localhost:8000/app/> — sign up with the `INVITE_CODE` from your `.env` (or set `SIGNUP_MODE=open` locally)
 - Swagger UI: <http://localhost:8000/docs>
 - Health check: <http://localhost:8000/health>
 
@@ -77,6 +76,10 @@ Settings come from environment variables or a `.env` file. [`.env.example`](.env
 | `LLM_DAILY_BUDGET_TOTAL_USD` | `5.00` | Daily LLM spend cap for all users and scripts together |
 | `LLM_DAILY_BUDGET_ADMIN_USD` | *(none)* | Cap for users with `is_admin`; without it, admins get the per-user cap |
 | `APP_TIMEZONE` | `America/Toronto` | IANA time zone used for "today", weekdays and reminders |
+| `SIGNUP_MODE` | `invite` | `closed` (no sign-ups), `invite` (needs `INVITE_CODE`) or `open` |
+| `INVITE_CODE` | *(none)* | Code new users must enter when `SIGNUP_MODE=invite`. Without it nobody can sign up |
+| `SESSION_COOKIE_SECURE` | `false` | Send the session cookie only over HTTPS. Turn on in production |
+| `ALLOWED_ORIGINS` | *(same host)* | Comma-separated origins allowed to send POST/PUT/DELETE (e.g. `https://schreduler.example.com`). Empty: the request's own host |
 | `FIREBASE_CREDENTIALS_PATH` | *(none)* | Path to an FCM service-account JSON. Without it, push notifications are only logged |
 | `TELEGRAM_BOT_TOKEN` | *(none)* | Bot token for escalation messages. Without it, they are only logged |
 | `LOG_LEVEL` | `INFO` | Application log level |
@@ -108,6 +111,8 @@ Other scripts:
 | Command | Purpose |
 |---|---|
 | `python -m app.scripts.export_postman` | Regenerate the Postman collection from the OpenAPI spec (run after API changes) |
+| `python -m app.scripts.create_admin --email you@example.com` | Attach an email and password to existing user 1 and make it an admin (`--user-id N` for another user). The password is typed in the terminal, never passed as an argument |
+| `python -m app.scripts.create_admin --email you@example.com --reset` | Set a new password for that account and sign it out everywhere |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | Compare input tokens with and without prompt caching (real API calls) |
 | `python -m app.scripts.usage_report --days 7` | LLM cost table by day, user and feature (from `llm_usage_logs`) |
 
@@ -139,7 +144,7 @@ docs/                    # design docs, API overview, Postman collection
 
 ## Known limitations
 
-- **No real authentication yet.** Requests identify the user with an `X-User-Id` header; there is no sign-up or user-management API (use the seed script).
+- **Sign-in is email and password only.** Sessions are HttpOnly cookies kept on the server for 30 days. There is no password reset by email yet — an admin resets it with `create_admin --reset`.
 - **No device-token registration.** Without an FCM token endpoint, push notifications are logged rather than delivered.
 - **One time zone per server.** Everything follows `APP_TIMEZONE`; per-user time zones aren't supported yet.
 - **Reminder jobs live in memory.** They are re-registered from the database on startup, but a single worker is required.

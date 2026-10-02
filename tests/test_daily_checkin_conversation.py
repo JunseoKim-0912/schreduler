@@ -13,6 +13,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, ComplianceReport, Event, EventInstance, EventInstanceStatus, NonComplianceCategory, User
 from app.services import llm_client as llm_client_module
+from tests.auth_helpers import as_user
 
 _REAL_HTTPX_CLIENT = httpx.Client  # 몽키패치 전에 원본을 캡처 (안 하면 자기 자신을 재귀 호출함)
 
@@ -118,7 +119,7 @@ def test_checkin_message_includes_daily_summary_in_user_message(
 
     response = client.post(
         "/daily-actual-logs/checkin",
-        json={"user_id": user_id, "utterance": "오늘 하루 어땠는지 알려줘", "date": "2026-09-17"},
+        json={"utterance": "오늘 하루 어땠는지 알려줘", "date": "2026-09-17"}, headers=as_user(user_id),
     )
 
     assert response.status_code == 200
@@ -143,18 +144,18 @@ def test_checkin_message_defaults_to_today_when_date_omitted(
 
     response = client.post(
         "/daily-actual-logs/checkin",
-        json={"user_id": user_id, "utterance": "오늘 어땠어?"},
+        json={"utterance": "오늘 어땠어?"}, headers=as_user(user_id),
     )
 
     assert response.status_code == 200
     assert response.json()["summary"] == "오늘 계획한 0개 중 0개 완료."
 
 
-def test_checkin_message_with_unknown_user_returns_404(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+def test_checkin_message_without_sign_in_is_401_and_with_user_id_is_422(
+    client: TestClient, user_id: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        raise AssertionError("유저가 없으면 LLM을 호출하면 안 됨")
+        raise AssertionError("refused requests must not reach the LLM")
 
     monkeypatch.setattr(
         llm_client_module.httpx,
@@ -162,12 +163,14 @@ def test_checkin_message_with_unknown_user_returns_404(
         lambda *a, **kw: _REAL_HTTPX_CLIENT(transport=httpx.MockTransport(handler)),
     )
 
-    response = client.post(
-        "/daily-actual-logs/checkin",
-        json={"user_id": 999, "utterance": "오늘 어땠어?"},
+    anonymous = client.post("/daily-actual-logs/checkin", json={"utterance": "오늘 어땠어?"})
+    old_client = client.post(
+        "/daily-actual-logs/checkin", json={"user_id": user_id, "utterance": "오늘 어땠어?"}, headers=as_user(user_id)
     )
 
-    assert response.status_code == 404
+    assert anonymous.status_code == 401
+    assert old_client.status_code == 422
+    assert old_client.json()["detail"][0]["loc"] == ["body", "user_id"]
 
 
 def test_checkin_message_llm_failure_returns_502(
@@ -184,7 +187,7 @@ def test_checkin_message_llm_failure_returns_502(
 
     response = client.post(
         "/daily-actual-logs/checkin",
-        json={"user_id": user_id, "utterance": "오늘 어땠어?"},
+        json={"utterance": "오늘 어땠어?"}, headers=as_user(user_id),
     )
 
     assert response.status_code == 502

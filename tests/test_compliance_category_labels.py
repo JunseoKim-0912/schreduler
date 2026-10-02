@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.db import get_db
 from app.main import app
 from app.models import Base, ComplianceReport, Event, EventInstance, EventInstanceStatus, NonComplianceCategory, User
+from tests.auth_helpers import as_user
 
 
 @pytest.fixture
@@ -73,7 +74,7 @@ def test_categories_are_labelled_in_users_language(
 ) -> None:
     user_id, _ = _user_with_instance(engine, language)
 
-    body = client.get("/compliance-reports/categories", headers={"X-User-Id": str(user_id)}).json()
+    body = client.get("/compliance-reports/categories", headers=as_user(user_id)).json()
 
     assert [item["code"] for item in body] == [
         "overslept", "fatigue", "priority_shift", "schedule_conflict", "forgot", "transit_issue", "other"
@@ -90,10 +91,10 @@ def test_categories_require_user(client: TestClient) -> None:
 
 @pytest.mark.parametrize(("language", "label"), [("ko", "늦잠/기상 실패"), ("en", "Overslept")])
 def test_created_report_has_label_in_owner_language(client: TestClient, engine, language: str, label: str) -> None:
-    _, instance_id = _user_with_instance(engine, language)
+    user_id, instance_id = _user_with_instance(engine, language)
 
     body = client.post(
-        "/compliance-reports", json={"event_instance_id": instance_id, "reason_category": "overslept"}
+        "/compliance-reports", json={"event_instance_id": instance_id, "reason_category": "overslept"}, headers=as_user(user_id)
     ).json()
 
     assert body["reason_category"] == "overslept"  # 코드값은 언어와 무관하게 그대로
@@ -101,10 +102,10 @@ def test_created_report_has_label_in_owner_language(client: TestClient, engine, 
 
 
 def test_code_value_is_stored_unchanged(client: TestClient, engine) -> None:
-    _, instance_id = _user_with_instance(engine, "en")
+    user_id, instance_id = _user_with_instance(engine, "en")
 
     report_id = client.post(
-        "/compliance-reports", json={"event_instance_id": instance_id, "reason_category": "transit_issue"}
+        "/compliance-reports", json={"event_instance_id": instance_id, "reason_category": "transit_issue"}, headers=as_user(user_id)
     ).json()["id"]
 
     with Session(engine) as session:
@@ -114,21 +115,12 @@ def test_code_value_is_stored_unchanged(client: TestClient, engine) -> None:
 # --- GET /compliance-reports/stats 라벨 ---
 
 
-def test_stats_labels_follow_filtered_users_language(client: TestClient, engine) -> None:
+def test_stats_labels_follow_my_language(client: TestClient, engine) -> None:
     en_user_id, instance_id = _user_with_instance(engine, "en")
-    client.post("/compliance-reports", json={"event_instance_id": instance_id, "reason_category": "forgot"})
+    client.post("/compliance-reports", json={"event_instance_id": instance_id, "reason_category": "forgot"}, headers=as_user(en_user_id))
 
-    body = client.get("/compliance-reports/stats", params={"user_id": en_user_id}).json()
+    body = client.get("/compliance-reports/stats", headers=as_user(en_user_id)).json()
 
     stats = {item["reason_category"]: item for item in body["by_category"]}
     assert (stats["forgot"]["label"], stats["forgot"]["count"]) == ("Forgot", 1)
     assert stats["overslept"]["label"] == "Overslept"
-
-
-def test_stats_without_user_use_default_korean(client: TestClient, engine) -> None:
-    _user_with_instance(engine, "en")
-
-    body = client.get("/compliance-reports/stats").json()
-
-    labels = {item["reason_category"]: item["label"] for item in body["by_category"]}
-    assert labels["forgot"] == "깜빡함"

@@ -21,17 +21,27 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 | 부분 수정 | `PUT`은 **보낸 필드만** 바꾼다. 필드를 생략하면 그대로, `null`을 보내면 값을 지운다(지울 수 없는 필드에 `null`을 보내면 422) |
 | 문자열 | 이름·제목·발화는 앞뒤 공백이 제거되고, 빈 문자열은 422 |
 
-### 1.2 인증 — `X-User-Id` 헤더 (임시)
+### 1.2 인증 — 이메일·비밀번호 로그인 + 세션 쿠키
 
-정식 인증은 아직 없다. 엔드포인트마다 사용자를 지정하는 방식이 두 가지다.
+```
+POST /auth/signup {"email": "june@example.com", "password": "8자 이상", "invite_code": "..."}  → 201, 바로 로그인됨
+POST /auth/login  {"email": "june@example.com", "password": "..."}                             → 200 + Set-Cookie
+GET  /auth/me                                                                                   → 내 계정 (401이면 로그인 화면으로)
+POST /auth/logout                                                                               → 204, 서버 세션 삭제
+```
 
-| 방식 | 해당 엔드포인트 |
-|---|---|
-| **`X-User-Id: <user id>` 헤더** | `/users/me/*`, `/tasks*`, `/event-instances*`, `/points/summary`, `/compliance-reports/categories`, `/actions*`, `/assistant/*`, `/usage/today` |
-| 요청 본문/쿼리의 `user_id` | 그 밖의 전부 (`/events`, `/date-ranges`, `/locations`, `/sleep-logs`, `/daily-actual-logs` 등) |
-
-헤더가 없으면 `401`, 없는 사용자면 `404`. 정식 인증이 들어오면 헤더 방식이 토큰으로 바뀔 예정이므로,
-**HTTP 클라이언트 인터셉터에서 모든 요청에 `X-User-Id`를 붙여 두는 것**을 권장한다(필요 없는 곳에 붙어도 무해하다).
+- 로그인하면 서버가 `schreduler_session` 쿠키(HttpOnly, SameSite=Lax, 30일)를 준다. 이후 요청에 이 쿠키를 그대로 실어 보내면
+  된다 — 앱에서는 쿠키 저장소(cookie jar)를 쓰는 HTTP 클라이언트를 쓴다. 토큰을 따로 다룰 필요는 없다.
+- `/health`와 `/auth/signup`·`/auth/login`을 뺀 **모든 엔드포인트가 로그인 필요**다(아래 표의 🔑). 로그인하지 않았거나 세션이
+  만료되면 `401` → 로그인 화면으로.
+- 요청은 항상 로그인한 사용자로 처리된다. 다른 사용자의 리소스 id로 조회·수정·삭제·되돌리기를 하면 `404`다.
+- 예전 방식의 `X-User-Id` 헤더는 무시되고(로그인 안 했으면 `401`), 본문·쿼리에 `user_id`를 보내면 `422`로 거절한다.
+- 가입은 서버의 `SIGNUP_MODE`로 정한다: `closed`(가입 불가, `403`) / `invite`(초대 코드가 맞아야 함, 틀리면 `403`) / `open`.
+  이미 있는 이메일이면 `409`.
+- 로그인 실패는 이유와 상관없이 같은 `401` 문구다("이메일 또는 비밀번호가 틀렸어요"). 같은 이메일이나 IP로 10분 안에 10번
+  실패하면 그 뒤로는 `429`와 `retry_after_seconds`가 온다.
+- 상태를 바꾸는 요청(POST/PUT/DELETE)에 다른 사이트의 `Origin`(없으면 `Referer`)이 붙어 있으면 `403`이다. 앱처럼 두 헤더를
+  보내지 않는 클라이언트는 영향이 없다.
 
 ### 1.3 날짜·시간
 
@@ -59,8 +69,9 @@ Schreduler 백엔드의 REST API를 클라이언트 개발 관점에서 정리�
 
 | 상태 | 의미 | 클라이언트 처리 제안 |
 |---|---|---|
-| `401` | `X-User-Id` 헤더 없음 | 로그인(사용자 선택) 화면으로 |
-| `404` | 대상 없음, 또는 참조한 `user_id`/`date_range_id` 등이 없음 | 목록 새로고침 |
+| `401` | 로그인하지 않았거나 세션 만료, 또는 로그인 실패 | 로그인 화면으로 |
+| `403` | 권한 없음 (관리자 전용, 가입 닫힘·초대 코드 틀림, 다른 사이트에서 온 요청) | `detail`을 그대로 안내 |
+| `404` | 대상 없음(다른 사용자의 것 포함), 또는 참조한 `date_range_id`·`location_id` 등이 없음 | 목록 새로고침 |
 | `409` | 충돌 — 이미 존재하거나 다른 데이터가 쓰는 중이라 삭제 불가, 되돌리기 순서 위반 등 | `detail`을 그대로 안내 |
 | `429` | 오늘 AI(LLM) 사용 한도 도달 — LLM을 부르는 요청만 (아래) | `detail`을 그대로 안내하고 입력창을 막는다. `resets_at`이 지나면 다시 연다 |
 | `410` | 어시스턴트 제안 만료 (`POST /assistant/confirm`·`/cancel`, 제안 후 30분) | 요청을 다시 말하도록 안내 |
@@ -121,6 +132,7 @@ LLM을 부르기 직전마다 확인한다. LLM이 필요 없는 기능(일정·
 ### 3.1 앱 시작 · 페르소나 선택
 
 ```
+GET  /auth/me                       → 401이면 로그인/가입 화면 (1.2)
 GET  /personas                      → 선택 가능한 페르소나 목록 (display_name.ko/en 중 앱 언어로 표시)
 GET  /users/me/persona              → 현재 선택. selected_persona가 null이면 선택 화면으로
 PUT  /users/me/persona  {"persona_name": "Hana"}   → 선택 (null이면 해제)
@@ -190,16 +202,16 @@ POST /compliance-reports {"event_instance_id": 12, "reason_category": "other", "
 
 - 버튼만 누르면(`other`가 아니고 `reason_text` 없음) LLM을 부르지 않아 즉시 응답하고 `llm_feedback`은 `null`.
 - `other`를 고르거나 `reason_text`(최대 150자)를 쓰면 LLM이 페르소나 말투의 피드백을 `llm_feedback`에 담아 준다(수 초 소요).
-- 통계 화면: `GET /compliance-reports/stats?user_id=1&days=30` — 모든 카테고리가 `count: 0`까지 포함되어 온다.
+- 통계 화면: `GET /compliance-reports/stats?days=30` (내 일정만) — 모든 카테고리가 `count: 0`까지 포함되어 온다.
 
 ### 3.5 저녁 9시 체크인 대화
 
 서버가 매일 21시에 체크인 푸시를 보내도록 되어 있다(현재는 미발송 → 5, 7). 알림 또는 앱 진입점에서 챗 화면을 열고:
 
 ```
-POST /daily-actual-logs/checkin {"user_id": 1, "utterance": "오늘 좀 피곤했어"}
+POST /daily-actual-logs/checkin {"utterance": "오늘 좀 피곤했어"}
   ← {"reply": "…", "summary": "오늘 계획한 3개 중 2개 완료. …", "conversation_id": 7}
-POST /daily-actual-logs/checkin {"user_id": 1, "utterance": "내일은 잘할게", "conversation_id": 7}   // 같은 대화 이어가기
+POST /daily-actual-logs/checkin {"utterance": "내일은 잘할게", "conversation_id": 7}   // 같은 대화 이어가기
 ```
 
 - `conversation_id`를 저장해 두었다가 다음 턴에 보낸다. 빠지면 그 페르소나의 **오늘 대화**에 이어서 저장된다.
@@ -233,19 +245,30 @@ GET /points/summary
 
 ## 4. 엔드포인트 목록
 
-🔑 = `X-User-Id` 헤더 필요, 🤖 = LLM 호출(느릴 수 있음, `429`/`500`/`502` 가능)
+🔑 = 로그인 필요(세션 쿠키), 🤖 = LLM 호출(느릴 수 있음, `429`/`500`/`502` 가능)
 
-### events — 일정
+### auth — 회원가입 · 로그인
+
+| 메서드 · 경로 | 설명 | 요청 | 응답 |
+|---|---|---|---|
+| `POST /auth/signup` | 회원가입, 성공하면 바로 로그인 (1.2) | `{email, password, invite_code?}` | `201 MeRead` + 쿠키 |
+| `POST /auth/login` | 로그인 | `{email, password}` | `MeRead` + 쿠키 |
+| `POST /auth/logout` 🔑 | 로그아웃 (로그인 안 했어도 `204`) | | `204` |
+| `GET /auth/me` 🔑 | 내 계정 | | `MeRead` |
+
+`MeRead`: `id`, `email`, `is_admin`, `preferred_language`, `created_at`, `last_login_at`
+
+### events — 일정 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
 | `POST /events` | 이벤트 생성 | `EventCreate` | `201 EventRead` |
-| `GET /events` | 이벤트 목록 (`?user_id=`) | | `EventRead[]` |
+| `GET /events` | 이벤트 목록 | | `EventRead[]` |
 | `GET /events/{event_id}` | 이벤트 조회 | | `EventRead` |
 | `PUT /events/{event_id}` | 이벤트 수정 (부분) | `EventUpdate` | `EventRead` |
 | `DELETE /events/{event_id}` | 이벤트 삭제 (반복 회차·하위 일정 포함). 헤더 `X-Action-Id`로 되돌리기 id | | `204` |
 
-`EventCreate`: `user_id`, `title`, `event_type`(기본 `scheduled`), `start_time`(`deadline`이면 `null`), `end_time`,
+`EventCreate`: `title`, `event_type`(기본 `scheduled`), `start_time`(`deadline`이면 `null`), `end_time`,
 `importance?`, `is_recurring?`, `recurrence_rule?`, `date_range_id?`, `parent_event_id?`, `child_kind?`, `location_id?`
 
 > `scheduled` → `deadline`으로 바꿀 때는 `{"event_type": "deadline", "start_time": null}`을 함께 보낸다(하나만 보내면 422).
@@ -288,79 +311,79 @@ GET /points/summary
 
 `TaskRead`: `event_id`, `event_instance_id`, `title`, `importance`, `due_at`, `status`, `completed`, `overdue`, `is_recurring`, `recurrence_rule`, `date_range_id`
 
-### date-ranges — 중요 기간
+### date-ranges — 중요 기간 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `POST /date-ranges` | 중요 기간 등록. 헤더 `X-Action-Id`로 되돌리기 id | `{user_id, name, start_date, end_date}` | `201 DateRangeRead` |
-| `GET /date-ranges` | 목록 (`?user_id=`). `event_count`는 이 기간을 쓰는 일정 수 | | `DateRangeUsageRead[]` |
+| `POST /date-ranges` | 중요 기간 등록. 헤더 `X-Action-Id`로 되돌리기 id | `{name, start_date, end_date}` | `201 DateRangeRead` |
+| `GET /date-ranges` | 목록. `event_count`는 이 기간을 쓰는 일정 수 | | `DateRangeUsageRead[]` |
 | `GET /date-ranges/{date_range_id}` | 조회 | | `DateRangeRead` |
 | `PUT /date-ranges/{date_range_id}` | 수정 (부분). 쓰는 반복 일정의 회차를 다시 맞춤. 헤더 `X-Action-Id` | `{name?, start_date?, end_date?}` | `DateRangeRead` |
 | `DELETE /date-ranges/{date_range_id}` | 삭제 (`?mode=range_only\|with_events`, 사용 중인데 없으면 `409`). 헤더 `X-Action-Id` | | `204` |
 
-### locations — 장소
+### locations — 장소 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `POST /locations` | 장소 등록 | `{user_id, name, default_travel_minutes}` | `201 LocationRead` |
-| `GET /locations` | 목록 (`?user_id=`) | | `LocationRead[]` |
+| `POST /locations` | 장소 등록 | `{name, default_travel_minutes}` | `201 LocationRead` |
+| `GET /locations` | 목록 | | `LocationRead[]` |
 | `GET /locations/{location_id}` | 조회 | | `LocationRead` |
 | `PUT /locations/{location_id}` | 수정 (부분) | `{name?, default_travel_minutes?}` | `LocationRead` |
 | `DELETE /locations/{location_id}` | 삭제 (사용 중이면 `409`) | | `204` |
 
-### compliance-reports — 미준수 사유
+### compliance-reports — 미준수 사유 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
 | `POST /compliance-reports` 🤖* | 사유 기록 (3.4). *`other`/자유 텍스트일 때만 LLM | `{event_instance_id, reason_category, reason_text?}` | `201 ComplianceReportRead` |
 | `GET /compliance-reports/categories` 🔑 | 카테고리 버튼 목록 | | `[{code, label}]` |
-| `GET /compliance-reports/stats` | 카테고리별 통계 (`?days=30&user_id=`) | | `{since, until, total, by_category[{reason_category, label, count}]}` |
+| `GET /compliance-reports/stats` | 내 일정의 카테고리별 통계 (`?days=30`) | | `{since, until, total, by_category[{reason_category, label, count}]}` |
 
 `ComplianceReportRead`: `id`, `event_instance_id`, `reason_category`, `reason_category_label`, `reason_text`, `llm_triggered`, `created_at`, `llm_feedback`
 
-### sleep-logs — 수면 기록
+### sleep-logs — 수면 기록 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `POST /sleep-logs` | 수면 기록 생성 | `{user_id, date, actual_bedtime, actual_wake_time}` | `201 SleepLogRead` |
-| `GET /sleep-logs` | 목록 (`?user_id=`) | | `SleepLogRead[]` |
+| `POST /sleep-logs` | 수면 기록 생성 | `{date, actual_bedtime, actual_wake_time}` | `201 SleepLogRead` |
+| `GET /sleep-logs` | 목록 | | `SleepLogRead[]` |
 | `GET /sleep-logs/{sleep_log_id}` | 조회 | | `SleepLogRead` |
 | `PUT /sleep-logs/{sleep_log_id}` | 수정 (부분) | `{date?, actual_bedtime?, actual_wake_time?}` | `SleepLogRead` |
 | `DELETE /sleep-logs/{sleep_log_id}` | 삭제 | | `204` |
 
-### daily-actual-logs — 하루 실제 기록 · 저녁 체크인
+### daily-actual-logs — 하루 실제 기록 · 저녁 체크인 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `POST /daily-actual-logs` | 하루 실제 기록 생성 | `{user_id, date, summary_text, actual_events?}` | `201 DailyActualLogRead` |
-| `GET /daily-actual-logs` | 목록 (`?user_id=`) | | `DailyActualLogRead[]` |
-| `POST /daily-actual-logs/checkin` 🤖 | 저녁 체크인 대화 한 턴 (3.5) | `{user_id, utterance, date?, conversation_id?}` | `{reply, summary, conversation_id}` |
+| `POST /daily-actual-logs` | 하루 실제 기록 생성 | `{date, summary_text, actual_events?}` | `201 DailyActualLogRead` |
+| `GET /daily-actual-logs` | 목록 | | `DailyActualLogRead[]` |
+| `POST /daily-actual-logs/checkin` 🤖 | 저녁 체크인 대화 한 턴 (3.5) | `{utterance, date?, conversation_id?}` | `{reply, summary, conversation_id}` |
 | `GET /daily-actual-logs/{daily_log_id}` | 조회 | | `DailyActualLogRead` |
 | `PUT /daily-actual-logs/{daily_log_id}` | 수정 (부분) | `{date?, summary_text?, actual_events?}` | `DailyActualLogRead` |
 | `DELETE /daily-actual-logs/{daily_log_id}` | 삭제 | | `204` |
 
-### personas — 페르소나 (관리용)
+### personas — 페르소나 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
 | `GET /personas` | 페르소나 목록 | | `PersonaRead[]` |
-| `POST /personas` | 페르소나 생성 (같은 name이면 `409`) | `PersonaCreate` | `201 PersonaRead` |
+| `POST /personas` | 페르소나 생성, 관리자만 (같은 name이면 `409`, 관리자 아니면 `403`) | `PersonaCreate` | `201 PersonaRead` |
 | `GET /personas/{name}` | 조회 | | `PersonaRead` |
-| `PUT /personas/{name}` | 수정 (부분) | `PersonaUpdate` | `PersonaRead` |
-| `DELETE /personas/{name}` | 삭제 (선택한 사용자·대화가 있으면 `409`) | | `204` |
-| `GET /personas/{persona_id}/conversations/current` 🔑 | 이 페르소나와의 오늘 대화 (`?context=checkin`, 없으면 `null`) (3.5) | | `PersonaConversationRead \| null` |
-| `POST /personas/{persona_id}/conversations` 🔑 | [새 대화]: 오늘 새 대화 시작, 이전 대화는 남김 (`?context=checkin`) | | `201 PersonaConversationRead` |
+| `PUT /personas/{name}` | 수정 (부분), 관리자만 | `PersonaUpdate` | `PersonaRead` |
+| `DELETE /personas/{name}` | 삭제, 관리자만 (선택한 사용자·대화가 있으면 `409`) | | `204` |
+| `GET /personas/{persona_id}/conversations/current` | 이 페르소나와의 오늘 대화 (`?context=checkin`, 없으면 `null`) (3.5) | | `PersonaConversationRead \| null` |
+| `POST /personas/{persona_id}/conversations` | [새 대화]: 오늘 새 대화 시작, 이전 대화는 남김 (`?context=checkin`) | | `201 PersonaConversationRead` |
 
 `PersonaRead`: `name`, `display_name{ko,en}`, `description{ko,en}`, `example_lines{ko[],en[]}|null`, `backstory{ko,en}|null`,
 `fallback_lines{ko[],en[]}|null`(의미 없는 입력에 LLM 없이 답할 대사, 비어 있으면 기본 문구).
-일반 사용자 앱은 `GET`만 쓰면 된다. 생성·수정·삭제는 관리자 화면용이다.
+일반 사용자 앱은 `GET`만 쓰면 된다. 생성·수정·삭제는 관리자(`is_admin`)만 할 수 있다.
 
 ### users — 내 정보 🔑
 
 | 메서드 · 경로 | 설명 | 요청 | 응답 |
 |---|---|---|---|
-| `PUT /users/me/language` | 화면 언어 바꾸기 — 알림·경고·라벨·시간 표시 등 서버 고정 문구의 언어 | `{language: "en"|"ko"}` | `{user_id, language}` |
-| `GET /users/me/persona` | 내 페르소나 조회 | | `{user_id, selected_persona: PersonaRead|null}` |
+| `PUT /users/me/language` | 화면 언어 바꾸기 — 알림·경고·라벨·시간 표시 등 서버 고정 문구의 언어 | `{language: "en"|"ko"}` | `{language}` |
+| `GET /users/me/persona` | 내 페르소나 조회 | | `{selected_persona: PersonaRead|null}` |
 | `PUT /users/me/persona` | 내 페르소나 선택/해제 | `{persona_name: string|null}` | 위와 같음 |
 | `GET /users/me/persona-conversations` | 내 페르소나 대화 목록 (최신순, `?context_type=`) | | `PersonaConversationRead[]` |
 | `GET /users/me/persona-conversations/{conversation_id}` | 대화 하나 | | `PersonaConversationRead` |
@@ -417,8 +440,10 @@ GET /points/summary
 ## 6. 개발·테스트 팁
 
 - 서버 실행: `docker compose up --build` 또는 `uvicorn app.main:app --reload` (자세한 내용은 `docker-compose.yml`)
-- 테스트 사용자 만들기: `python -m app.scripts.seed` (생성된 사용자 id가 출력된다), 페르소나 넣기: `python -m app.scripts.seed_personas`
-- Postman 컬렉션의 `{{userId}}` 변수 하나만 바꾸면 헤더·본문의 사용자가 함께 바뀐다.
+- 계정 만들기: 서버를 `SIGNUP_MODE=open`(또는 `invite` + `INVITE_CODE`)으로 띄우고 `POST /auth/signup`. 기존 사용자에 이메일을
+  붙이고 관리자로 만들려면 `python -m app.scripts.create_admin --email you@example.com` (비밀번호는 터미널에서 입력).
+  페르소나 넣기: `python -m app.scripts.seed_personas`
+- Postman: 컬렉션 변수 `email`·`password`를 채우고 `auth / 로그인`을 먼저 보내면 세션 쿠키가 저장되어 다른 요청에 실린다.
 
 ---
 
@@ -428,9 +453,8 @@ GET /points/summary
 
 | 제약 | 영향 |
 |---|---|
-| 사용자 생성·조회·수정 API 없음 | 사용자는 스크립트로만 만든다. `preferred_language`를 앱에서 바꿀 수도 없다 |
+| 비밀번호 변경·재설정 API 없음 | 비밀번호를 잊으면 서버에서 `create_admin --reset`으로만 바꾼다. 이메일 인증도 아직 없다 |
 | FCM 디바이스 토큰 등록 API 없음 | 서버가 푸시를 보낼 대상 토큰이 없어, 현재 푸시는 실제로 발송되지 않고 서버 로그에만 남는다 |
 | 일정별 알림 job이 서버 메모리에만 있음 | 일정을 만들거나 바꿀 때 대기 중인 회차의 알림을 예약하고, 서버를 재시작하면 DB에서 다시 예약한다. 완료·취소한 회차와 이미 지난 시각은 예약하지 않는다 |
-| 정식 인증 없음 (`X-User-Id` 신뢰) | 개발용. 운영 전에 토큰 인증으로 바뀐다 |
 | 시간대가 서버 설정 하나 | "오늘/이번 주", 알림 시각, 자정 포인트 계산이 서버의 `APP_TIMEZONE`(기본 America/Toronto)을 따른다. 사용자별 시간대는 아직 없다 |
 | LLM이 실패하면 미준수 사유가 저장되지 않음 | `other`/자유 텍스트 사유 입력 중 `502`가 나면 사유도 저장되지 않았다. 재시도 또는 버튼만으로 다시 기록하도록 안내 |

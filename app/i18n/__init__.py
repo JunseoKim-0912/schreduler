@@ -53,6 +53,17 @@ _HANGUL = re.compile(r"[가-힣]")
 _LATIN_WORD = re.compile(r"[A-Za-z']+")
 
 
+def accept_language(header: str | None) -> Language:
+    """First supported language in an Accept-Language header ("ko-KR,ko;q=0.9,en" -> "ko"). For requests made before
+    sign-in, when there is no preferred_language yet. The web client sends its screen language here."""
+    for part in (header or "").split(","):
+        tag = part.split(";")[0].strip().lower()[:2]
+        for language in SUPPORTED_LANGUAGES:
+            if language == tag:
+                return language
+    return DEFAULT_LANGUAGE
+
+
 def reply_language(text: str | None, screen_language: str | None) -> Language:
     """대화 답변 언어: 사용자가 마지막에 입력한 말의 언어를 따른다. 판단하기 애매한 입력("ok", "좋아", 이름·과목 코드·
     숫자만 있는 입력)은 화면 언어(preferred_language)를 따른다. 카드·경고·알림 같은 고정 문구는 이 함수와 상관없이
@@ -169,6 +180,15 @@ MessageKey = Literal[
     "assistant.budget_no_drafts",
     "llm_budget.user_limit",
     "llm_budget.total_limit",
+    "auth.login_failed",
+    "auth.too_many_attempts",
+    "auth.signup_closed",
+    "auth.invite_invalid",
+    "auth.email_taken",
+    "auth.not_signed_in",
+    "auth.admin_only",
+    "auth.bad_origin",
+    "request.user_id_not_allowed",
 ]
 
 

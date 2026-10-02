@@ -12,6 +12,7 @@ from app.core.db import get_db
 from app.main import app
 from app.models import Base, User
 from app.services import llm_client as llm_client_module
+from tests.auth_helpers import as_admin, as_user
 
 _REAL_HTTPX_CLIENT = httpx.Client  # 몽키패치 전에 원본을 캡처 (안 하면 자기 자신을 재귀 호출함)
 
@@ -66,6 +67,7 @@ def personas(client: TestClient) -> None:
                 "display_name": {"ko": ko, "en": en},
                 "description": {"ko": f"{ko} 설명", "en": f"{en} description"},
             },
+            headers=as_admin(),
         )
         assert response.status_code == 201
 
@@ -88,7 +90,7 @@ def llm_requests(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def _select(client: TestClient, user_id: int, persona_name: str | None) -> httpx.Response:
@@ -96,10 +98,10 @@ def _select(client: TestClient, user_id: int, persona_name: str | None) -> httpx
 
 
 def _checkin(client: TestClient, user_id: int, utterance: str, conversation_id: int | None = None) -> dict:
-    body: dict[str, object] = {"user_id": user_id, "utterance": utterance}
+    body: dict[str, object] = {"utterance": utterance}
     if conversation_id is not None:
         body["conversation_id"] = conversation_id
-    response = client.post("/daily-actual-logs/checkin", json=body)
+    response = client.post("/daily-actual-logs/checkin", json=body, headers=as_user(user_id))
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -148,12 +150,13 @@ def test_selection_is_per_user(client: TestClient, engine, user_id: int) -> None
 
 
 @pytest.mark.parametrize(
-    ("headers", "status_code"),
-    [({}, 401), ({"X-User-Id": "999"}, 404), ({"X-User-Id": "abc"}, 422)],
+    "headers",
+    [{}, {"X-User-Id": "1"}, {"Cookie": "schreduler_session=not-a-real-token"}],
 )
-def test_select_requires_valid_user_header(client: TestClient, headers: dict, status_code: int) -> None:
+def test_select_requires_a_signed_in_session(client: TestClient, user_id: int, headers: dict) -> None:
+    """The old X-User-Id header means nothing now; only a live session cookie does."""
     response = client.put("/users/me/persona", json={"persona_name": None}, headers=headers)
-    assert response.status_code == status_code
+    assert response.status_code == 401
 
 
 def test_select_requires_persona_name_field(client: TestClient, user_id: int) -> None:
@@ -257,7 +260,7 @@ def test_unknown_conversation_id_is_rejected_before_llm(
     _select(client, user_id, "Hana")
 
     response = client.post(
-        "/daily-actual-logs/checkin", json={"user_id": user_id, "utterance": "안녕", "conversation_id": 999}
+        "/daily-actual-logs/checkin", json={"utterance": "안녕", "conversation_id": 999}, headers=as_user(user_id)
     )
 
     assert response.status_code == 404
@@ -278,7 +281,7 @@ def test_llm_failure_saves_no_conversation(
     )
     _select(client, user_id, "Hana")
 
-    response = client.post("/daily-actual-logs/checkin", json={"user_id": user_id, "utterance": "안녕"})
+    response = client.post("/daily-actual-logs/checkin", json={"utterance": "안녕"}, headers=as_user(user_id))
 
     assert response.status_code == 502
     assert client.get("/users/me/persona-conversations", headers=_headers(user_id)).json() == []

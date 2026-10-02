@@ -12,9 +12,10 @@ from app.core.db import get_db
 from app.core.scheduler import scheduler, shutdown_scheduler, start_scheduler
 from app.main import app
 from app.models import Base, Event, EventInstance, EventInstanceStatus, EventType, ImportantDateRange, User
-from app.schemas.event import EventCreate, EventUpdate, InvalidEventTimesError, validate_event_times
+from app.schemas.event import NewEvent, EventUpdate, InvalidEventTimesError, validate_event_times
 from app.services.notification import DEADLINE_REMINDER_OFFSET, schedule_event_instance_notifications
 from app.services.recurrence import generate_event_instances
+from tests.auth_helpers import as_user, sign_in
 
 
 @pytest.fixture
@@ -51,11 +52,12 @@ def client(engine):
 
 
 @pytest.fixture
-def user_id(engine) -> int:
+def user_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
         session.commit()
+        sign_in(client, user.id)
         return user.id
 
 
@@ -71,7 +73,6 @@ def running_scheduler():
 
 def _deadline_payload(user_id: int, **overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
-        "user_id": user_id,
         "title": "과제 제출",
         "event_type": "deadline",
         "end_time": "2026-09-25T23:59:00",
@@ -102,7 +103,7 @@ def test_create_deadline_without_start_time_succeeds(client: TestClient, user_id
 
 def test_deadline_schema_rejects_start_time() -> None:
     with pytest.raises(ValidationError, match="start_time = null"):
-        EventCreate(
+        NewEvent(
             user_id=1,
             title="과제",
             event_type=EventType.DEADLINE,
@@ -117,11 +118,10 @@ def test_update_to_deadline_requires_clearing_start_time(client: TestClient, use
     event_id = client.post(
         "/events",
         json={
-            "user_id": user_id,
             "title": "수업",
             "start_time": "2026-09-17T09:00:00",
             "end_time": "2026-09-17T10:00:00",
-        },
+        }, headers=as_user(user_id),
     ).json()["id"]
 
     response = client.put(f"/events/{event_id}", json={"event_type": "deadline"})
@@ -153,7 +153,7 @@ def test_db_check_constraint_blocks_deadline_with_start_time(session: Session, u
 def test_scheduled_is_the_default_type(client: TestClient, user_id: int) -> None:
     response = client.post(
         "/events",
-        json={"user_id": user_id, "title": "수업", "start_time": "2026-09-17T09:00:00", "end_time": "2026-09-17T10:00:00"},
+        json={"title": "수업", "start_time": "2026-09-17T09:00:00", "end_time": "2026-09-17T10:00:00"}, headers=as_user(user_id),
     )
 
     assert response.status_code == 201
@@ -170,7 +170,7 @@ def test_scheduled_is_the_default_type(client: TestClient, user_id: int) -> None
     ],
 )
 def test_scheduled_requires_both_times(client: TestClient, user_id: int, payload: dict) -> None:
-    response = client.post("/events", json={"user_id": user_id, "title": "수업", **payload})
+    response = client.post("/events", json={"title": "수업", **payload}, headers=as_user(user_id))
 
     assert response.status_code == 422
 
@@ -178,7 +178,7 @@ def test_scheduled_requires_both_times(client: TestClient, user_id: int, payload
 def test_scheduled_still_requires_end_after_start(client: TestClient, user_id: int) -> None:
     response = client.post(
         "/events",
-        json={"user_id": user_id, "title": "수업", "start_time": "2026-09-17T10:00:00", "end_time": "2026-09-17T09:00:00"},
+        json={"title": "수업", "start_time": "2026-09-17T10:00:00", "end_time": "2026-09-17T09:00:00"}, headers=as_user(user_id),
     )
 
     assert response.status_code == 422
@@ -187,7 +187,7 @@ def test_scheduled_still_requires_end_after_start(client: TestClient, user_id: i
 def test_update_cannot_clear_start_time_of_scheduled_event(client: TestClient, user_id: int) -> None:
     event_id = client.post(
         "/events",
-        json={"user_id": user_id, "title": "수업", "start_time": "2026-09-17T09:00:00", "end_time": "2026-09-17T10:00:00"},
+        json={"title": "수업", "start_time": "2026-09-17T09:00:00", "end_time": "2026-09-17T10:00:00"}, headers=as_user(user_id),
     ).json()["id"]
 
     assert client.put(f"/events/{event_id}", json={"start_time": None}).status_code == 422

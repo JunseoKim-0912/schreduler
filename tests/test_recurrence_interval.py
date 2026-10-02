@@ -14,6 +14,7 @@ from app.main import app
 from app.models import Base, Event, EventInstance, ImportantDateRange, Location, User
 from app.models.enums import EventInstanceStatus
 from app.services.recurrence import build_recurrence_rule
+from tests.auth_helpers import as_user, sign_in
 
 @pytest.fixture(autouse=True)
 def frozen_today():
@@ -45,7 +46,7 @@ def client(engine):
 
 
 @pytest.fixture
-def ids(engine) -> dict[str, int]:
+def ids(engine, client) -> dict[str, int]:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
@@ -53,6 +54,7 @@ def ids(engine) -> dict[str, int]:
         period = ImportantDateRange(user_id=user.id, name="Lecture period", start_date=date(2026, 9, 8), end_date=date(2026, 12, 8))
         session.add(period)
         session.commit()
+        sign_in(client, user.id)
         return {"user": user.id, "period": period.id}
 
 
@@ -70,9 +72,9 @@ def _dates(engine, event_id: int) -> list[date]:
 BIWEEKLY_FROM_922 = [date(2026, 9, 22), date(2026, 10, 6), date(2026, 10, 20), date(2026, 11, 3), date(2026, 11, 17), date(2026, 12, 1)]
 
 
-def _post_event(client: TestClient, user_id: int, range_id: int, **extra) -> int:
+def _post_event(client: TestClient, range_id: int, **extra) -> int:
     body = {
-        "user_id": user_id, "title": "ECE360 Lab", "start_time": "2026-09-22T09:00:00", "end_time": "2026-09-22T12:00:00",
+        "title": "ECE360 Lab", "start_time": "2026-09-22T09:00:00", "end_time": "2026-09-22T12:00:00",
         "is_recurring": True, "recurrence_rule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU", "date_range_id": range_id, **extra,
     }
     response = client.post("/events", json=body)
@@ -82,9 +84,9 @@ def _post_event(client: TestClient, user_id: int, range_id: int, **extra) -> int
 
 def test_extending_the_period_keeps_the_biweekly_rhythm(client, engine, ids):
     short = client.post(
-        "/date-ranges", json={"user_id": ids["user"], "name": "짧은 기간", "start_date": "2026-09-08", "end_date": "2026-10-25"}
+        "/date-ranges", json={"name": "짧은 기간", "start_date": "2026-09-08", "end_date": "2026-10-25"}, headers=as_user(ids["user"])
     ).json()["id"]
-    event_id = _post_event(client, ids["user"], short)
+    event_id = _post_event(client, short)
     assert _dates(engine, event_id) == BIWEEKLY_FROM_922[:3]
 
     client.put(f"/date-ranges/{short}", json={"start_date": "2026-09-01", "end_date": "2026-12-08"})
@@ -93,7 +95,7 @@ def test_extending_the_period_keeps_the_biweekly_rhythm(client, engine, ids):
 
 
 def test_extending_the_period_backwards_does_not_create_past_instances(client, engine, ids):
-    event_id = _post_event(client, ids["user"], ids["period"], start_time="2026-09-01T09:00:00", end_time="2026-09-01T12:00:00")
+    event_id = _post_event(client, ids["period"], start_time="2026-09-01T09:00:00", end_time="2026-09-01T12:00:00")
     before = _dates(engine, event_id)
     assert before[0] == date(2026, 9, 15), "POST /events는 기존대로 기간 안의 회차를 모두 만든다"
 
@@ -109,7 +111,7 @@ def test_travel_child_is_biweekly_too(client, engine, ids):
         session.commit()
         location_id = location.id
 
-    event_id = _post_event(client, ids["user"], ids["period"], location_id=location_id)
+    event_id = _post_event(client, ids["period"], location_id=location_id)
 
     with Session(engine) as session:
         child = session.execute(select(Event).where(Event.parent_event_id == event_id)).scalar_one()
@@ -122,7 +124,7 @@ def test_recurring_deadline_uses_the_same_rhythm(client, engine, ids):
         "/tasks",
         json={"title": "랩 리포트", "end_time": "2026-09-22T23:59:00", "recurrence_rule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
               "date_range_id": ids["period"]},
-        headers={"X-User-Id": str(ids["user"])},
+        headers=as_user(ids["user"]),
     ).json()
 
     assert _dates(engine, task["event_id"]) == BIWEEKLY_FROM_922
@@ -130,7 +132,7 @@ def test_recurring_deadline_uses_the_same_rhythm(client, engine, ids):
 
 def test_existing_weekly_event_keeps_its_instances(client, engine, ids):
     """예전 방식(기간 시작일 기준)으로 만들어진 매주 일정: 기간을 바꿔도 이미 있는 회차는 그대로 두고 매주로 이어진다."""
-    event_id = _post_event(client, ids["user"], ids["period"], recurrence_rule="FREQ=WEEKLY;BYDAY=TU")
+    event_id = _post_event(client, ids["period"], recurrence_rule="FREQ=WEEKLY;BYDAY=TU")
     with Session(engine) as session:
         for legacy in (date(2026, 9, 8), date(2026, 9, 15)):  # 예전 생성 방식이 만든 시작일 이전 회차
             session.add(EventInstance(event_id=event_id, date=legacy, status=EventInstanceStatus.PENDING))

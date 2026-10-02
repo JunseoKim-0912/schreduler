@@ -19,13 +19,14 @@ from app.core.clock import utc_now_naive
 from app.core.config import settings
 from app.core.db import get_db
 from app.main import app
-from app.models import AssistantMessage, AssistantTurnLog, Base, Event, EventInstance, EventInstanceStatus, LlmUsageLog, User
+from app.models import AssistantMessage, AssistantTurnLog, Base, Event, EventInstance, EventInstanceStatus, LlmUsageLog, Persona, User
 from app.scripts import usage_report
 from app.services import llm_client, llm_usage, notification
 from app.services.assistant import agent
 from app.services.llm_client import ResponsesClient, ResponsesUsage
 from app.services.llm_pricing import PRICES, UnknownModelPriceError, call_cost, price_for, validate_configured_models
 from tests.fake_responses import FakeResponsesClient, call, say
+from tests.auth_helpers import as_user
 
 ROOT = Path(__file__).resolve().parents[2]
 NOW_UTC = "2026-10-01 16:00:00"  # Toronto 12:00 (EDT)
@@ -106,7 +107,7 @@ def script(monkeypatch: pytest.MonkeyPatch):
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def _spend(engine, user_id: int | None, cost: float, when: datetime | None = None, feature: str = "assistant") -> None:
@@ -219,7 +220,7 @@ def test_checkin_call_is_logged(client, engine, users, monkeypatch) -> None:
              "completion_tokens_details": {"reasoning_tokens": 10}}
     _patch_chat_http(monkeypatch, "Good job today.", usage)
 
-    response = client.post("/daily-actual-logs/checkin", json={"user_id": me, "utterance": "I was tired today"})
+    response = client.post("/daily-actual-logs/checkin", json={"utterance": "I was tired today"}, headers=_headers(me))
 
     assert response.status_code == 200
     [row] = _rows(engine)
@@ -232,10 +233,11 @@ def test_compliance_feedback_call_is_logged_and_the_category_shortcut_is_not(cli
     usage = {"prompt_tokens": 500, "prompt_tokens_details": {"cached_tokens": 100}, "completion_tokens": 40}
     _patch_chat_http(monkeypatch, "That happens.", usage)
 
-    shortcut = client.post("/compliance-reports", json={"event_instance_id": _missed_instance(engine, me), "reason_category": "overslept"})
+    shortcut = client.post("/compliance-reports", json={"event_instance_id": _missed_instance(engine, me), "reason_category": "overslept"}, headers=_headers(me))
     with_text = client.post(
         "/compliance-reports",
         json={"event_instance_id": _missed_instance(engine, me), "reason_category": "other", "reason_text": "The bus never came"},
+        headers=_headers(me),
     )
 
     assert shortcut.status_code == with_text.status_code == 201
@@ -246,7 +248,7 @@ def test_compliance_feedback_call_is_logged_and_the_category_shortcut_is_not(cli
 def test_usage_without_a_usage_block_is_still_logged_as_a_call(client, engine, users, monkeypatch) -> None:
     me, _ = users
     _patch_chat_http(monkeypatch, "ok", usage=None)
-    client.post("/daily-actual-logs/checkin", json={"user_id": me, "utterance": "I was tired today"})
+    client.post("/daily-actual-logs/checkin", json={"utterance": "I was tired today"}, headers=_headers(me))
     [row] = _rows(engine)
     assert (row.feature, row.input_tokens, row.cost_usd) == ("checkin", 0, 0.0)
 
@@ -258,7 +260,7 @@ def test_a_billed_but_malformed_answer_is_logged_even_though_the_request_fails(c
         return httpx.Response(200, json={"choices": [], "usage": {"prompt_tokens": 300, "completion_tokens": 5}})
 
     monkeypatch.setattr(llm_client.httpx, "Client", lambda *a, **kw: _REAL_HTTPX_CLIENT(transport=httpx.MockTransport(handler)))
-    response = client.post("/daily-actual-logs/checkin", json={"user_id": me, "utterance": "I was tired today"})
+    response = client.post("/daily-actual-logs/checkin", json={"utterance": "I was tired today"}, headers=_headers(me))
 
     assert response.status_code == 422
     [row] = _rows(engine)
@@ -326,7 +328,7 @@ def test_total_limit_blocks_everyone(client, engine, users, monkeypatch) -> None
     _patch_chat_http(monkeypatch, "never sent")
 
     for user_id in (me, other):
-        response = client.post("/daily-actual-logs/checkin", json={"user_id": user_id, "utterance": "I was tired today"})
+        response = client.post("/daily-actual-logs/checkin", json={"utterance": "I was tired today"}, headers=as_user(user_id))
         assert response.status_code == 429
         assert response.json()["reason"] == "total_limit"
     assert client.post("/assistant/chat", json={"message": "hi"}, headers=_headers(other)).json()["detail"].startswith(
@@ -439,15 +441,16 @@ def test_llm_free_features_keep_working_at_the_limit(client, engine, users, scri
     assert client.put(f"/tasks/{task.json()['event_instance_id']}/complete", headers=_headers(me)).status_code == 200
     calendar = client.get("/event-instances", params={"start": "2026-10-01", "end": "2026-10-07"}, headers=_headers(me))
     assert calendar.status_code == 200
-    event = client.post("/events", json={"user_id": me, "title": "Lab", "start_time": "2026-10-05T09:00:00", "end_time": "2026-10-05T12:00:00"})
+    event = client.post("/events", json={"title": "Lab", "start_time": "2026-10-05T09:00:00", "end_time": "2026-10-05T12:00:00"}, headers=_headers(me))
     assert event.status_code == 201
 
-    shortcut = client.post("/compliance-reports", json={"event_instance_id": _missed_instance(engine, me), "reason_category": "overslept"})
+    shortcut = client.post("/compliance-reports", json={"event_instance_id": _missed_instance(engine, me), "reason_category": "overslept"}, headers=_headers(me))
     assert shortcut.status_code == 201
     assert shortcut.json()["llm_triggered"] is False
     with_text = client.post(
         "/compliance-reports",
         json={"event_instance_id": _missed_instance(engine, me), "reason_category": "other", "reason_text": "bus"},
+        headers=_headers(me),
     )
     assert with_text.status_code == 429
 
@@ -503,3 +506,65 @@ def test_usage_report_groups_by_day_user_and_feature(engine, users, monkeypatch,
     assert ["2026-09-29", str(me), "June", "assistant", "1", "0", "0", "0", "0.4000"] in lines
     assert "0.5000" not in out
     assert "Total over 7 day(s): 1.0600 USD" in out
+
+
+# --- signed-in user is the only identity ------------------------------------------------------------
+
+
+def test_usage_is_logged_for_the_session_user_whatever_the_request_claims(client, engine, users, script) -> None:
+    me, other = users
+    script(say("Hi"))
+
+    response = client.post("/assistant/chat", json={"message": "hello"}, headers={**_headers(me), "X-User-Id": str(other)})
+
+    assert response.status_code == 200
+    assert [row.user_id for row in _rows(engine)] == [me]
+
+
+def test_another_users_spend_never_counts_against_mine(client, engine, users, script) -> None:
+    me, other = users
+    _spend(engine, other, 0.95)
+
+    assert client.get("/usage/today", headers=_headers(me)).json()["spent_usd"] == 0
+    assert client.get("/usage/today", headers=_headers(other)).json()["spent_usd"] == 0.95
+    script(say("Hi"))
+    assert client.post("/assistant/chat", json={"message": "hi"}, headers=_headers(me)).status_code == 200
+
+
+def test_the_personal_limit_cannot_be_dodged_by_editing_the_request(client, engine, users, script, monkeypatch) -> None:
+    me, other = users
+    _spend(engine, me, 1.0)
+    fake = script(say("never"))
+    sent = _patch_chat_http(monkeypatch, "never")
+    with Session(engine) as session:
+        session.add(Persona(name="Hana", display_name={"ko": "하나", "en": "Hana"}, description={"ko": "설명", "en": "desc"}))
+        session.commit()
+    client.put("/users/me/persona", json={"persona_name": "Hana"}, headers=_headers(other))
+    others_conversation = client.post("/personas/Hana/conversations", headers=_headers(other)).json()["id"]
+    others_instance = _missed_instance(engine, other)
+
+    attempts = {
+        "other user's id in a header": client.post("/assistant/chat", json={"message": "hi"}, headers={**_headers(me), "X-User-Id": str(other)}),
+        "user_id in the body": client.post("/daily-actual-logs/checkin", json={"user_id": other, "utterance": "I was tired today"}, headers=_headers(me)),
+        "user_id in the query": client.post("/assistant/chat?user_id=" + str(other), json={"message": "hi"}, headers=_headers(me)),
+        "other user's conversation": client.post(
+            "/daily-actual-logs/checkin", json={"utterance": "I was tired today", "conversation_id": others_conversation}, headers=_headers(me)
+        ),
+        "other user's missed event": client.post(
+            "/compliance-reports", json={"event_instance_id": others_instance, "reason_category": "other", "reason_text": "bus"}, headers=_headers(me)
+        ),
+        "no session, other user's header": client.post("/assistant/chat", json={"message": "hi"}, headers={"X-User-Id": str(other)}),
+        "forged session cookie": client.post("/assistant/chat", json={"message": "hi"}, headers={"Cookie": "schreduler_session=guess"}),
+    }
+
+    assert {name: r.status_code for name, r in attempts.items()} == {
+        "other user's id in a header": 429,
+        "user_id in the body": 422,
+        "user_id in the query": 422,
+        "other user's conversation": 404,
+        "other user's missed event": 404,
+        "no session, other user's header": 401,
+        "forged session cookie": 401,
+    }
+    assert fake.requests == [] and sent == []
+    assert [row.user_id for row in _rows(engine)] == [me]  # only the seeded spend; nothing billed to anyone

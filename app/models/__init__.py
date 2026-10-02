@@ -1,5 +1,6 @@
 from app.models.action_history import ActionHistory
 from app.models.assistant import AssistantMessage, AssistantSession, AssistantTurnLog, PendingProposal
+from app.models.auth import LoginFailure, UserSession
 from app.models.base import Base
 from app.models.compliance_report import ComplianceReport
 from app.models.daily_actual_log import DailyActualLog
@@ -49,6 +50,7 @@ __all__ = [
     "ImportantDateRange",
     "Importance",
     "LlmUsageLog",
+    "LoginFailure",
     "Location",
     "NonComplianceCategory",
     "Persona",
@@ -57,4 +59,5 @@ __all__ = [
     "PointsLedger",
     "SleepLog",
     "User",
+    "UserSession",
 ]

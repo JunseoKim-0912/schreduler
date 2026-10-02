@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.db import get_db
 from app.main import app
 from app.models import Base, User
+from tests.auth_helpers import as_user, sign_in
 
 
 @pytest.fixture
@@ -37,17 +38,17 @@ def client(engine):
 
 
 @pytest.fixture
-def user_id(engine) -> int:
+def user_id(engine, client) -> int:
     with Session(engine) as session:
         user = User(name="June", preferred_language="ko")
         session.add(user)
         session.commit()
+        sign_in(client, user.id)
         return user.id
 
 
-def _payload(user_id: int, **overrides: object) -> dict[str, object]:
+def _payload(**overrides: object) -> dict[str, object]:
     payload = {
-        "user_id": user_id,
         "date": "2026-09-17",
         "summary_text": "오늘 계획한 6개 중 5개 완료",
         "actual_events": [{"title": "아침 운동", "status": "done"}],
@@ -57,7 +58,7 @@ def _payload(user_id: int, **overrides: object) -> dict[str, object]:
 
 
 def test_create_daily_actual_log_returns_201(client: TestClient, user_id: int) -> None:
-    response = client.post("/daily-actual-logs", json=_payload(user_id))
+    response = client.post("/daily-actual-logs", json=_payload())
 
     assert response.status_code == 201
     body = response.json()
@@ -71,7 +72,7 @@ def test_create_daily_actual_log_returns_201(client: TestClient, user_id: int) -
 def test_create_daily_actual_log_defaults_actual_events_to_empty_list(
     client: TestClient, user_id: int
 ) -> None:
-    payload = _payload(user_id)
+    payload = _payload()
     del payload["actual_events"]
 
     response = client.post("/daily-actual-logs", json=payload)
@@ -80,14 +81,14 @@ def test_create_daily_actual_log_defaults_actual_events_to_empty_list(
     assert response.json()["actual_events"] == []
 
 
-def test_create_daily_actual_log_with_unknown_user_returns_404(client: TestClient) -> None:
-    response = client.post("/daily-actual-logs", json=_payload(user_id=999))
+def test_create_daily_actual_log_with_user_id_in_body_returns_422(client: TestClient, user_id: int) -> None:
+    response = client.post("/daily-actual-logs", json={**_payload(), "user_id": 999})
 
-    assert response.status_code == 404
+    assert response.status_code == 422
 
 
 def test_get_daily_actual_log_returns_created_one(client: TestClient, user_id: int) -> None:
-    created = client.post("/daily-actual-logs", json=_payload(user_id)).json()
+    created = client.post("/daily-actual-logs", json=_payload()).json()
 
     response = client.get(f"/daily-actual-logs/{created['id']}")
 
@@ -95,7 +96,7 @@ def test_get_daily_actual_log_returns_created_one(client: TestClient, user_id: i
     assert response.json()["id"] == created["id"]
 
 
-def test_get_daily_actual_log_not_found_returns_404(client: TestClient) -> None:
+def test_get_daily_actual_log_not_found_returns_404(client: TestClient, user_id: int) -> None:
     response = client.get("/daily-actual-logs/999")
 
     assert response.status_code == 404
@@ -109,10 +110,10 @@ def test_list_daily_actual_logs_filters_by_user(client: TestClient, engine) -> N
         session.commit()
         user1_id, user2_id = user1.id, user2.id
 
-    client.post("/daily-actual-logs", json=_payload(user1_id))
-    client.post("/daily-actual-logs", json=_payload(user2_id, date="2026-09-18"))
+    client.post("/daily-actual-logs", json=_payload(), headers=as_user(user1_id))
+    client.post("/daily-actual-logs", json=_payload(date="2026-09-18"), headers=as_user(user2_id))
 
-    response = client.get("/daily-actual-logs", params={"user_id": user1_id})
+    response = client.get("/daily-actual-logs", headers=as_user(user1_id))
 
     assert response.status_code == 200
     body = response.json()
@@ -121,7 +122,7 @@ def test_list_daily_actual_logs_filters_by_user(client: TestClient, engine) -> N
 
 
 def test_update_daily_actual_log_applies_partial_changes(client: TestClient, user_id: int) -> None:
-    created = client.post("/daily-actual-logs", json=_payload(user_id)).json()
+    created = client.post("/daily-actual-logs", json=_payload()).json()
 
     response = client.put(
         f"/daily-actual-logs/{created['id']}", json={"summary_text": "수정된 요약"}
@@ -133,14 +134,14 @@ def test_update_daily_actual_log_applies_partial_changes(client: TestClient, use
     assert body["actual_events"] == created["actual_events"]  # 건드리지 않은 필드는 그대로
 
 
-def test_update_daily_actual_log_not_found_returns_404(client: TestClient) -> None:
+def test_update_daily_actual_log_not_found_returns_404(client: TestClient, user_id: int) -> None:
     response = client.put("/daily-actual-logs/999", json={"summary_text": "x"})
 
     assert response.status_code == 404
 
 
 def test_delete_daily_actual_log_removes_it(client: TestClient, user_id: int) -> None:
-    created = client.post("/daily-actual-logs", json=_payload(user_id)).json()
+    created = client.post("/daily-actual-logs", json=_payload()).json()
 
     delete_response = client.delete(f"/daily-actual-logs/{created['id']}")
     get_response = client.get(f"/daily-actual-logs/{created['id']}")
@@ -149,7 +150,7 @@ def test_delete_daily_actual_log_removes_it(client: TestClient, user_id: int) ->
     assert get_response.status_code == 404
 
 
-def test_delete_daily_actual_log_not_found_returns_404(client: TestClient) -> None:
+def test_delete_daily_actual_log_not_found_returns_404(client: TestClient, user_id: int) -> None:
     response = client.delete("/daily-actual-logs/999")
 
     assert response.status_code == 404

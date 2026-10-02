@@ -5,7 +5,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import get_current_user
+from app.core.auth import get_current_user, require_admin
 from app.core.clock import local_today
 from app.core.db import get_db
 from app.core.exceptions import NotFoundError
@@ -69,8 +69,11 @@ def start_conversation(
     return persona_conversation_service.start_conversation(db, user, persona_id, _CONTEXTS[context], local_today())
 
 
-@router.post("", response_model=PersonaRead, status_code=status.HTTP_201_CREATED, summary="페르소나 생성", responses=CONFLICT)
-def create_persona(data: PersonaCreate, db: Session = Depends(get_db)) -> Persona:
+ADMIN_ONLY: dict[int | str, dict[str, str]] = {403: {"description": "관리자(`is_admin`)만 가능"}}
+
+
+@router.post("", response_model=PersonaRead, status_code=status.HTTP_201_CREATED, summary="페르소나 생성 (관리자)", responses={**CONFLICT, **ADMIN_ONLY})
+def create_persona(data: PersonaCreate, _: User = Depends(require_admin), db: Session = Depends(get_db)) -> Persona:
     """코드 수정 없이 페르소나를 추가한다 (FR-9). `display_name`·`description`은 ko/en이 모두 필요하다."""
     return persona_service.create_persona(db, data)
 
@@ -90,8 +93,8 @@ def get_persona(name: str, db: Session = Depends(get_db)) -> Persona:
     return persona
 
 
-@router.put("/{name}", response_model=PersonaRead, summary="페르소나 수정", responses=NOT_FOUND)
-def update_persona(name: str, data: PersonaUpdate, db: Session = Depends(get_db)) -> Persona:
+@router.put("/{name}", response_model=PersonaRead, summary="페르소나 수정 (관리자)", responses={**NOT_FOUND, **ADMIN_ONLY})
+def update_persona(name: str, data: PersonaUpdate, _: User = Depends(require_admin), db: Session = Depends(get_db)) -> Persona:
     """보낸 필드만 수정한다. `display_name`·`description`은 null로 지울 수 없다."""
     persona = persona_service.update_persona(db, name, data)
     if persona is None:
@@ -99,8 +102,8 @@ def update_persona(name: str, data: PersonaUpdate, db: Session = Depends(get_db)
     return persona
 
 
-@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT, summary="페르소나 삭제", responses={**NOT_FOUND, **CONFLICT})
-def delete_persona(name: str, db: Session = Depends(get_db)) -> None:
+@router.delete("/{name}", status_code=status.HTTP_204_NO_CONTENT, summary="페르소나 삭제 (관리자)", responses={**NOT_FOUND, **CONFLICT, **ADMIN_ONLY})
+def delete_persona(name: str, _: User = Depends(require_admin), db: Session = Depends(get_db)) -> None:
     """선택한 사용자나 대화 기록이 있으면 409로 거부한다."""
     deleted = persona_service.delete_persona(db, name)
     if not deleted:

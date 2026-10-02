@@ -13,7 +13,7 @@ from app.models.enums import EventInstanceStatus, EventType
 from app.models.event import Event
 from app.models.event_instance import EventInstance
 from app.models.user import User
-from app.schemas.event import EventCreate
+from app.schemas.event import NewEvent
 from app.schemas.task import TaskCreate, TaskRead
 from app.services import event_service
 from app.services.event_instance_service import complete_event_instance
@@ -76,7 +76,7 @@ def list_tasks(db: Session, user_id: int, now: datetime | None = None) -> list[T
 def create_task(db: Session, user: User, data: TaskCreate, now: datetime | None = None) -> TaskRead:
     event = event_service.create_event(
         db,
-        EventCreate(
+        NewEvent(
             user_id=user.id,
             title=data.title,
             event_type=EventType.DEADLINE,

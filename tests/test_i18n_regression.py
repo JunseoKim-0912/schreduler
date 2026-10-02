@@ -26,14 +26,17 @@ from app.i18n import load_notification_templates
 from app.main import app
 from app.models import EngagementScope, Event, EventInstance, EventInstanceStatus, EventType, User
 from app.models.base import Base
+from app.schemas.persona import PersonaCreate
 from app.services import daily_checkin as daily_checkin_module
 from app.services import engagement_service
 from app.services.assistant import agent
 from app.services import llm_client as llm_client_module
 from app.services import notification as notification_module
+from app.services import persona_service
 from app.services import sleep_checkin as sleep_checkin_module
 from app.services.engagement_service import evaluate_escalation, get_or_create_engagement_state
 from tests.assistant_flow import confirm, create, propose
+from tests.auth_helpers import as_user
 
 LANGUAGES = ("ko", "en")
 HANGUL = re.compile(r"[가-힣]")
@@ -126,9 +129,9 @@ def llm_requests(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 @pytest.fixture
 def world(client: TestClient, engine) -> dict[str, int]:
     """사용자 1명 + 페르소나 선택 + 일반 일정 1개 + 마감 1개 + 에스컬레이션 상태를 준비한다."""
-    response = client.post(
-        "/personas",
-        json={
+    # Created directly: the persona API is admin-only, and an extra admin account would receive notifications too.
+    with Session(engine) as session:
+        persona_service.create_persona(session, PersonaCreate(**{
             "name": "Hana",
             "display_name": {"ko": "하나", "en": "Hana"},
             "description": {"ko": "상냥한 대학생", "en": "Kind college student"},
@@ -136,9 +139,7 @@ def world(client: TestClient, engine) -> dict[str, int]:
                 "ko": [{"situation": "칭찬", "line": "정말 잘했어요!"}],
                 "en": [{"situation": "praise", "line": "You did great!"}],
             },
-        },
-    )
-    assert response.status_code == 201
+        }))
 
     with Session(engine) as session:
         user = User(name="Alex", preferred_language="ko", telegram_opt_in=True, telegram_chat_id="1")
@@ -168,7 +169,7 @@ def world(client: TestClient, engine) -> dict[str, int]:
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"X-User-Id": str(user_id)}
+    return as_user(user_id)
 
 
 def _set_language(engine, user_id: int, language: str) -> None:
@@ -208,10 +209,11 @@ def _notifications(engine, world: dict[str, int], pushes: list, telegrams: list)
 
 def _persona_replies(client: TestClient, world: dict[str, int], llm_requests: list) -> tuple[list[str], list[dict]]:
     llm_requests.clear()
-    checkin = client.post("/daily-actual-logs/checkin", json={"user_id": world["user"], "utterance": "ok"})  # 애매한 입력 → 화면 언어로 답한다
+    checkin = client.post("/daily-actual-logs/checkin", json={"utterance": "ok"}, headers=as_user(world["user"]))  # 애매한 입력 → 화면 언어로 답한다
     feedback = client.post(
         "/compliance-reports",
         json={"event_instance_id": world["scheduled_instance"], "reason_category": "other", "reason_text": "ECE360"},
+        headers=as_user(world["user"]),
     )
     assert checkin.status_code == 200 and feedback.status_code == 201
     return [checkin.json()["reply"], feedback.json()["llm_feedback"]], list(llm_requests)
@@ -228,7 +230,7 @@ def _assistant_texts(client: TestClient, world: dict[str, int], monkeypatch: pyt
     done = confirm(client, world["user"], chat)
     # 되돌려서 다음 언어 차례에 같은 상태로 시작한다 (남겨 두면 "비슷한 일정이 이미 있어요" 경고가 붙는다)
     for action in done["executed"]:
-        client.post(f"/actions/{action['action_id']}/undo", headers={"X-User-Id": str(world["user"])})
+        client.post(f"/actions/{action['action_id']}/undo", headers=as_user(world["user"]))
     fake = agent.ResponsesClient()  # propose()가 바꿔 둔 가짜 클라이언트
     sent = json.dumps(fake.requests[0].input_items, ensure_ascii=False)
     return [w["message"] for w in card["warnings"]] + [done["reply"]], sent
@@ -243,7 +245,9 @@ def test_category_labels(client: TestClient, engine, world: dict[str, int], lang
 
     labels = _category_labels(client, world)
     created = client.post(
-        "/compliance-reports", json={"event_instance_id": world["scheduled_instance"], "reason_category": "overslept"}
+        "/compliance-reports",
+        json={"event_instance_id": world["scheduled_instance"], "reason_category": "overslept"},
+        headers=as_user(world["user"]),
     ).json()
 
     assert len(labels) == 7

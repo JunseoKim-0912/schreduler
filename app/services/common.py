@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TypeVar
+from typing import Any, Protocol, TypeVar
 
 from sqlalchemy.orm import Session
 
@@ -14,6 +14,21 @@ def require(db: Session, model: type[ModelT], pk: object, label: str) -> ModelT:
     """pk로 조회하고, 없으면 "{label} {pk} does not exist" NotFoundError(404)를 던진다."""
     obj = db.get(model, pk)
     if obj is None:
+        raise NotFoundError(f"{label} {pk} does not exist")
+    return obj
+
+
+class _Owned(Protocol):
+    user_id: Any
+
+
+OwnedT = TypeVar("OwnedT", bound=_Owned)
+
+
+def require_owned(db: Session, model: type[OwnedT], pk: object, user_id: int, label: str) -> OwnedT:
+    """Like require(), but someone else's row is also a 404 — saying "forbidden" would confirm that the id exists."""
+    obj = db.get(model, pk)
+    if obj is None or obj.user_id != user_id:
         raise NotFoundError(f"{label} {pk} does not exist")
     return obj
 

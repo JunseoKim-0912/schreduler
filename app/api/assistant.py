@@ -23,8 +23,7 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 def _session_read(db: Session, session: AssistantSession | None) -> AssistantSessionRead:
     if session is None:
         return AssistantSessionRead(session_id=None)
-    proposal = agent.active_proposal(db, session)
-    db.commit()
+    proposal = agent.visible_proposal(db, session)
     return AssistantSessionRead(
         session_id=session.id,
         messages=agent.display_messages(db, session),

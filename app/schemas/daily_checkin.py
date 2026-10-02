@@ -12,14 +12,12 @@ class DailyCheckinMessageRequest(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "user_id": 1,
                     "utterance": "오늘 너무 피곤해서 스터디를 못 했어"
                 }
             ]
         },
     )
 
-    user_id: int
     utterance: NonEmptyStr
     date: dt_date | None = None  # 생략하면 오늘 날짜
     conversation_id: int | None = None  # 생략하면 새 대화를 시작
