@@ -23,6 +23,14 @@ def test_app_path_serves_index_html() -> None:
     assert "user-id" not in response.text and "X-User-Id" not in response.text
 
 
+def test_bare_domain_redirects_to_the_app() -> None:
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/app/"
+    assert "/" not in app.openapi()["paths"]
+
+
 def test_app_without_trailing_slash_redirects_to_index() -> None:
     response = client.get("/app", follow_redirects=False)
 

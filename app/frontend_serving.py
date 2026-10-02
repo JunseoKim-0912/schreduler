@@ -12,7 +12,7 @@ import hashlib
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
@@ -38,6 +38,12 @@ def versioned_index(directory: Path = FRONTEND_DIR) -> str:
     for asset in VERSIONED_ASSETS:
         html = html.replace(f'="{asset}"', f'="v/{version}/{asset}"')
     return html
+
+
+@router.get("/")
+def get_root() -> RedirectResponse:
+    """The bare domain (the link people share) opens the web app."""
+    return RedirectResponse("/app/")
 
 
 @router.get("/app/")
