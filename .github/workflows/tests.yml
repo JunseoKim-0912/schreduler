@@ -1,0 +1,38 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # No API key on purpose: every LLM call in the tests goes to a scripted fake, so the suite must pass without
+      # one and can never reach OpenAI.
+      LLM_API_KEY: ""
+      OPENAI_API_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # same as the Docker image
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Front-end unit tests
+        run: node --test tests/frontend/*.test.mjs
+
+      - name: pytest
+        run: python -m pytest -q

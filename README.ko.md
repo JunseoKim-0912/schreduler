@@ -1,5 +1,7 @@
 # Schreduler
 
+[![tests](https://github.com/JunseoKim-0912/schreduler/actions/workflows/tests.yml/badge.svg)](https://github.com/JunseoKim-0912/schreduler/actions/workflows/tests.yml)
+
 **계획을 기록하는 데서 끝나지 않고 지키게 도와주는 일정 관리 앱 — 하고 싶은 걸 말로 하면 AI 어시스턴트가 변경안을 만들고, 확인한 뒤에만 저장합니다.**
 
 > 🚧 **초기 프로토타입입니다.** 앞으로 더 크게 개발할 일정 관리 앱의 프로토타입이며, 아직 완성되지 않은 기능이 있고 바뀔 수 있습니다.
@@ -241,7 +243,7 @@ docs/                    # 기획서, API 안내, Postman 컬렉션, 미디어
 | `python -m app.scripts.seed_personas` | JSON 파일의 페르소나를 DB에 upsert |
 | `python -m app.scripts.export_postman` | OpenAPI 스펙으로 Postman 컬렉션 재생성 (API 변경 후 실행) |
 | `python -m app.scripts.backup_db` | SQLite DB를 지금 백업 (sqlite3 backup API로 일관된 복사) |
-| `python -m app.scripts.smoke_ui` | 임시 DB로 서버를 띄워 설치된 Chrome(Playwright, `pip install -r requirements-dev.txt`)으로 로그인 → 모든 탭 → 프로토타입 안내·About 창 → 로그아웃 → 데모 경로, 콘솔 에러·실패한 요청이 있으면 실패. `--base-url https://…` + `SMOKE_EMAIL`/`SMOKE_PASSWORD`로 배포 서버 점검(`--with-demo`면 데모도). 프론트엔드를 고친 뒤에는 꼭 실행 |
+| `python -m app.scripts.smoke_ui` | 임시 DB로 서버를 띄워 설치된 Chrome(Playwright, `pip install -r requirements-dev.txt`)으로 로그인 → 모든 탭 → 프로토타입 안내·About 창 → 로그아웃 → 데모 경로, 콘솔 에러·실패한 요청이 있으면 실패. `--base-url https://…` + `SMOKE_EMAIL`/`SMOKE_PASSWORD`로 배포 서버 점검(`--with-demo`면 데모도, `--demo-only`면 계정 없이 데모 경로만). 프론트엔드를 고친 뒤에는 꼭 실행 |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | 프롬프트 캐싱 전후 입력 토큰 비교 (실제 LLM API 호출, 비용 발생) |
 | `python -m app.scripts.usage_report --days 7` | 날짜별·사용자별·기능별 LLM 비용 표 (`llm_usage_logs` 기준) |
 | `python -m app.scripts.eval_assistant --effort medium` | 일정 어시스턴트 평가 세트 실행 (실제 LLM API 호출, 비용 발생). 결과는 `tests/assistant_eval/results/` |

@@ -1,5 +1,7 @@
 # Schreduler
 
+[![tests](https://github.com/JunseoKim-0912/schreduler/actions/workflows/tests.yml/badge.svg)](https://github.com/JunseoKim-0912/schreduler/actions/workflows/tests.yml)
+
 **A scheduling app that helps you keep your plans, not just record them — tell it what you want in plain language, and an AI assistant drafts the change for you to confirm.**
 
 > 🚧 **Early prototype.** This is a work-in-progress prototype of a larger scheduling app I'm building; features are incomplete and may change.
@@ -204,7 +206,7 @@ Other scripts:
 | `python -m app.scripts.create_admin --email you@example.com --reset` | Set a new password for that account and sign it out everywhere |
 | `python -m app.scripts.create_admin --email you@example.com --new` | On an empty database (a fresh deployment), create the first admin account |
 | `python -m app.scripts.backup_db` | Back up the SQLite database now (consistent copy via the sqlite3 backup API) |
-| `python -m app.scripts.smoke_ui` | Open the web UI in an installed Chrome (Playwright, `pip install -r requirements-dev.txt`) on a throwaway database: log in, every tab, the prototype notice and About dialog, log out, then the demo path; fails on any console error or failed request. `--base-url https://…` with `SMOKE_EMAIL`/`SMOKE_PASSWORD` checks a deployment (add `--with-demo` to try the demo there too). Run it after every front-end change |
+| `python -m app.scripts.smoke_ui` | Open the web UI in an installed Chrome (Playwright, `pip install -r requirements-dev.txt`) on a throwaway database: log in, every tab, the prototype notice and About dialog, log out, then the demo path; fails on any console error or failed request. `--base-url https://…` with `SMOKE_EMAIL`/`SMOKE_PASSWORD` checks a deployment (add `--with-demo` to try the demo there too, or `--demo-only` to check just the demo path without credentials). Run it after every front-end change |
 | `python -m app.scripts.compare_prompt_cache --task daily_checkin --repeat 5` | Compare input tokens with and without prompt caching (real API calls) |
 | `python -m app.scripts.usage_report --days 7` | LLM cost table by day, user and feature (from `llm_usage_logs`) |
 
